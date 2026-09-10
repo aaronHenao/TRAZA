@@ -56,16 +56,33 @@ class SupabaseObjetivosRepository implements ObjetivosRepository {
   Future<void> guardar(Map<TipoObjetivo, num> objetivos) async {
     final usuarioId = _usuarioId();
 
-    // La tabla no tiene unique (usuario_id, tipo), así que en vez de un upsert
-    // se reemplaza el conjunto completo. Son dos filas como máximo.
-    await _cliente.from(_tabla).delete().eq('usuario_id', usuarioId);
+    // Primero se escribe y después se borra, nunca al revés: si el borrado
+    // falla el usuario acaba con un objetivo de más, pero jamás con ninguno.
+    // El upsert se apoya en la restricción unique (usuario_id, tipo) que crea
+    // la migración 0003.
+    if (objetivos.isNotEmpty) {
+      await _cliente
+          .from(_tabla)
+          .upsert([
+            for (final MapEntry(key: tipo, value: valor) in objetivos.entries)
+              {
+                'usuario_id': usuarioId,
+                'tipo': tipo.valorDb,
+                'valor_meta': valor,
+              },
+          ], onConflict: 'usuario_id,tipo');
+    }
 
-    if (objetivos.isEmpty) return;
-
-    await _cliente.from(_tabla).insert([
-      for (final MapEntry(key: tipo, value: valor) in objetivos.entries)
-        {'usuario_id': usuarioId, 'tipo': tipo.valorDb, 'valor_meta': valor},
-    ]);
+    // Los tipos que el usuario desmarcó. Son dos como máximo, así que se
+    // borran uno por uno en vez de armar un filtro `not in`.
+    for (final tipo in TipoObjetivo.values) {
+      if (objetivos.containsKey(tipo)) continue;
+      await _cliente
+          .from(_tabla)
+          .delete()
+          .eq('usuario_id', usuarioId)
+          .eq('tipo', tipo.valorDb);
+    }
   }
 
   String _usuarioId() {

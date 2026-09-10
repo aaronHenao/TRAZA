@@ -3,10 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/tipo_objetivo.dart';
 
-/// Repositorio de objetivos que usa la app. Las pruebas lo sustituyen con
-/// `overrideWithValue`.
+/// Repositorio de objetivos que usa la app. Las pruebas de la pantalla lo
+/// sustituyen con `overrideWithValue`.
 final objetivosRepositoryProvider = Provider<ObjetivosRepository>(
-  (ref) => const SupabaseObjetivosRepository(),
+  (ref) => SupabaseObjetivosRepository(),
 );
 
 /// Se lanza cuando se intenta leer o guardar sin una sesión abierta.
@@ -31,11 +31,23 @@ abstract interface class ObjetivosRepository {
 }
 
 class SupabaseObjetivosRepository implements ObjetivosRepository {
-  const SupabaseObjetivosRepository();
+  /// [cliente] y [usuarioActual] existen para las pruebas. En la app se dejan
+  /// vacíos: se usa el cliente global y el usuario de la sesión abierta.
+  SupabaseObjetivosRepository({
+    SupabaseClient? cliente,
+    String? Function()? usuarioActual,
+  }) : _clienteInyectado = cliente,
+       _usuarioActual = usuarioActual;
 
   static const _tabla = 'objetivos';
 
-  SupabaseClient get _cliente => Supabase.instance.client;
+  final SupabaseClient? _clienteInyectado;
+  final String? Function()? _usuarioActual;
+
+  // `Supabase.instance` se toca recién al usarlo, así que las pruebas de la
+  // pantalla, que nunca llegan a hablar con Supabase, no necesitan
+  // inicializarlo.
+  SupabaseClient get _cliente => _clienteInyectado ?? Supabase.instance.client;
 
   @override
   Future<Map<TipoObjetivo, num>> cargar() async {
@@ -43,7 +55,7 @@ class SupabaseObjetivosRepository implements ObjetivosRepository {
 
     final filas = await _cliente
         .from(_tabla)
-        .select('tipo, valor_meta')
+        .select('tipo,valor_meta')
         .eq('usuario_id', usuarioId);
 
     return {
@@ -86,7 +98,10 @@ class SupabaseObjetivosRepository implements ObjetivosRepository {
   }
 
   String _usuarioId() {
-    final id = _cliente.auth.currentUser?.id;
+    final usuarioActual = _usuarioActual;
+    final id = usuarioActual != null
+        ? usuarioActual()
+        : _cliente.auth.currentUser?.id;
     if (id == null) throw const SesionRequeridaException();
     return id;
   }

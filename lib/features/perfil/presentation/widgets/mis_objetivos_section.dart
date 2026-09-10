@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../domain/tipo_objetivo.dart';
 import '../perfil_controller.dart';
+import 'configuracion_valor_objetivo.dart';
 import 'objetivo_card.dart';
 
 /// Sección "Mis Objetivos" de la pantalla de perfil.
@@ -39,9 +40,14 @@ class MisObjetivosSection extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         for (final tipo in TipoObjetivo.values) ...[
           ObjetivoCard(
+            key: ValueKey(tipo),
             tipo: tipo,
             seleccionada: controlador.estaSeleccionado(tipo),
             onTap: () => controlador.alternar(tipo),
+            // La fila de frecuencia se conecta en SCRUM-88.
+            configuracion: tipo == TipoObjetivo.distancia
+                ? ConfiguracionValorObjetivo(tipo: tipo)
+                : null,
           ),
           const SizedBox(height: AppSpacing.md),
         ],

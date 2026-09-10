@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/router/rutas.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/widgets/traza_top_bar.dart';
+import 'perfil_controller.dart';
 import 'widgets/mis_objetivos_section.dart';
 
 /// Pantalla de perfil (`screen-profile`).
@@ -44,14 +46,31 @@ class PerfilScreen extends StatelessWidget {
                 AppSpacing.lg,
                 AppSpacing.lg,
               ),
-              child: FilledButton(
-                onPressed: () => context.go(Rutas.permisos),
-                child: const Text('Continuar'),
-              ),
+              child: const _BotonContinuar(),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Botón que lleva a la pantalla de permisos.
+///
+/// Se deshabilita mientras algún objetivo marcado tenga un valor inválido; la
+/// regla de "selecciona al menos un objetivo" corresponde a SCRUM-89.
+class _BotonContinuar extends StatelessWidget {
+  const _BotonContinuar();
+
+  @override
+  Widget build(BuildContext context) {
+    final bloqueado = context.select<PerfilController, bool>(
+      (controlador) => controlador.hayValoresInvalidos,
+    );
+
+    return FilledButton(
+      onPressed: bloqueado ? null : () => context.go(Rutas.permisos),
+      child: const Text('Continuar'),
     );
   }
 }

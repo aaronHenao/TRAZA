@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:traza/core/router/rutas.dart';
+import 'package:traza/features/perfil/domain/tipo_objetivo.dart';
 import 'package:traza/features/perfil/presentation/perfil_controller.dart';
 import 'package:traza/features/perfil/presentation/perfil_screen.dart';
 import 'package:traza/features/permisos/presentation/permisos_screen.dart';
@@ -59,7 +60,120 @@ void main() {
 
     expect(find.byType(PermisosScreen), findsOneWidget);
   });
+
+  group('configuración del objetivo de distancia', () {
+    testWidgets('el campo aparece al marcar el objetivo, con su valor por '
+        'defecto', (tester) async {
+      await _montarPerfil(tester);
+
+      expect(find.byType(TextField), findsNothing);
+
+      await _marcarDistancia(tester);
+
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('km por semana'), findsOneWidget);
+    });
+
+    testWidgets('conserva el valor escrito al desmarcar y volver a marcar', (
+      tester,
+    ) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '25');
+      await tester.pump();
+
+      // Desmarcar oculta el campo; volver a marcar debe recuperar el valor.
+      await _marcarDistancia(tester);
+      expect(find.byType(TextField), findsNothing);
+
+      await _marcarDistancia(tester);
+      expect(find.text('25'), findsOneWidget);
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 25);
+    });
+
+    testWidgets('con el campo vacío muestra error y bloquea Continuar', (
+      tester,
+    ) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pump();
+
+      expect(find.text('Ingresa la distancia'), findsOneWidget);
+      expect(_botonContinuar(tester).onPressed, isNull);
+    });
+
+    testWidgets('por debajo del mínimo muestra error', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '0');
+      await tester.pump();
+
+      expect(find.text('El mínimo es 0.1 km por semana'), findsOneWidget);
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), isNull);
+    });
+
+    testWidgets('admite una meta de 0.1 km', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '0.1');
+      await tester.pump();
+
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 0.1);
+      expect(_botonContinuar(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('acepta decimales', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '7.5');
+      await tester.pump();
+
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 7.5);
+      expect(_botonContinuar(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('no impone un tope superior', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '99999');
+      await tester.pump();
+
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 99999);
+      expect(_botonContinuar(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('un objetivo desmarcado con valor inválido no bloquea '
+        'Continuar', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarDistancia(tester);
+
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pump();
+      expect(_botonContinuar(tester).onPressed, isNull);
+
+      await _marcarDistancia(tester);
+      expect(_botonContinuar(tester).onPressed, isNotNull);
+    });
+  });
 }
+
+Future<void> _marcarDistancia(WidgetTester tester) async {
+  await tester.tap(find.text('Distancia semanal'));
+  await tester.pump();
+}
+
+FilledButton _botonContinuar(WidgetTester tester) =>
+    tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Continuar'),
+    );
 
 Future<void> _montarPerfil(WidgetTester tester) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);

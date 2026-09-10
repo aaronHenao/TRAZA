@@ -1,6 +1,13 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/tipo_objetivo.dart';
+
+/// Repositorio de objetivos que usa la app. Las pruebas lo sustituyen con
+/// `overrideWithValue`.
+final objetivosRepositoryProvider = Provider<ObjetivosRepository>(
+  (ref) => const SupabaseObjetivosRepository(),
+);
 
 /// Se lanza cuando se intenta guardar sin una sesión abierta.
 ///

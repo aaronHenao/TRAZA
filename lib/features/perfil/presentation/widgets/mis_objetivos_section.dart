@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../domain/tipo_objetivo.dart';
-import '../perfil_controller.dart';
+import '../perfil_notifier.dart';
 import 'configuracion_valor_objetivo.dart';
 import 'objetivo_card.dart';
 
@@ -12,12 +12,13 @@ import 'objetivo_card.dart';
 ///
 /// Permite marcar uno o varios objetivos deportivos y muestra un estado vacío
 /// mientras no haya ninguno seleccionado.
-class MisObjetivosSection extends StatelessWidget {
+class MisObjetivosSection extends ConsumerWidget {
   const MisObjetivosSection({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final controlador = context.watch<PerfilController>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final estado = ref.watch(perfilProvider);
+    final notifier = ref.read(perfilProvider.notifier);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42,13 +43,13 @@ class MisObjetivosSection extends StatelessWidget {
           ObjetivoCard(
             key: ValueKey(tipo),
             tipo: tipo,
-            seleccionada: controlador.estaSeleccionado(tipo),
-            onTap: () => controlador.alternar(tipo),
+            seleccionada: estado.estaSeleccionado(tipo),
+            onTap: () => notifier.alternar(tipo),
             configuracion: ConfiguracionValorObjetivo(tipo: tipo),
           ),
           const SizedBox(height: AppSpacing.md),
         ],
-        if (controlador.sinObjetivos) const _EstadoVacio(),
+        if (estado.sinObjetivos) const _EstadoVacio(),
       ],
     );
   }

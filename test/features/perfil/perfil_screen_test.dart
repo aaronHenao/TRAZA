@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:traza/core/router/rutas.dart';
 import 'package:traza/features/perfil/data/objetivos_repository.dart';
 import 'package:traza/features/perfil/domain/tipo_objetivo.dart';
-import 'package:traza/features/perfil/presentation/perfil_controller.dart';
+import 'package:traza/features/perfil/presentation/perfil_notifier.dart';
 import 'package:traza/features/perfil/presentation/perfil_screen.dart';
+import 'package:traza/features/perfil/presentation/perfil_state.dart';
 import 'package:traza/features/perfil/presentation/widgets/configuracion_valor_objetivo.dart';
 import 'package:traza/features/permisos/presentation/permisos_screen.dart';
 
@@ -37,8 +38,8 @@ void main() {
     await tester.tap(find.text('Frecuencia de entrenamiento'));
     await tester.pump();
 
-    final controlador = _controladorDe(tester);
-    expect(controlador.seleccionados, hasLength(2));
+    final estado = _estadoDe(tester);
+    expect(estado.seleccionados, hasLength(2));
   });
 
   testWidgets('al desmarcar el último objetivo vuelve el estado vacío', (
@@ -52,7 +53,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Aún no has elegido objetivos'), findsOneWidget);
-    expect(_controladorDe(tester).sinObjetivos, isTrue);
+    expect(_estadoDe(tester).sinObjetivos, isTrue);
   });
 
   testWidgets('sin objetivos marcados no se puede guardar', (tester) async {
@@ -90,7 +91,7 @@ void main() {
 
       await _marcarDistancia(tester);
       expect(find.text('25'), findsOneWidget);
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 25);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.distancia), 25);
     });
 
     testWidgets('con el campo vacío muestra error y bloquea el guardado', (
@@ -114,7 +115,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('El mínimo es 0.1 km por semana'), findsOneWidget);
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), isNull);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.distancia), isNull);
     });
 
     testWidgets('admite una meta de 0.1 km', (tester) async {
@@ -124,7 +125,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '0.1');
       await tester.pump();
 
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 0.1);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.distancia), 0.1);
       expect(_botonGuardar(tester).onPressed, isNotNull);
     });
 
@@ -135,7 +136,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '7.5');
       await tester.pump();
 
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 7.5);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.distancia), 7.5);
       expect(_botonGuardar(tester).onPressed, isNotNull);
     });
 
@@ -146,7 +147,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '99999');
       await tester.pump();
 
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 99999);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.distancia), 99999);
       expect(_botonGuardar(tester).onPressed, isNotNull);
     });
 
@@ -188,7 +189,7 @@ void main() {
         find.text('Debe estar entre 1 y 7 veces por semana'),
         findsOneWidget,
       );
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), isNull);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.frecuencia), isNull);
       expect(_botonGuardar(tester).onPressed, isNull);
     });
 
@@ -201,7 +202,7 @@ void main() {
         await tester.pump();
 
         expect(
-          _controladorDe(tester).valorDe(TipoObjetivo.frecuencia),
+          _estadoDe(tester).valorDe(TipoObjetivo.frecuencia),
           int.parse(valor),
         );
       }
@@ -216,7 +217,7 @@ void main() {
 
       // El campo rechaza la entrada y conserva el valor anterior.
       expect(find.text('3'), findsOneWidget);
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), 3);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.frecuencia), 3);
     });
 
     testWidgets('con el campo vacío muestra error y bloquea el guardado', (
@@ -245,7 +246,7 @@ void main() {
       await _marcarFrecuencia(tester);
 
       expect(find.text('5'), findsOneWidget);
-      expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), 5);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.frecuencia), 5);
     });
   });
 
@@ -260,9 +261,9 @@ void main() {
     await tester.enterText(_campoDe(TipoObjetivo.frecuencia), '4');
     await tester.pump();
 
-    final controlador = _controladorDe(tester);
-    expect(controlador.valorDe(TipoObjetivo.distancia), 12.5);
-    expect(controlador.valorDe(TipoObjetivo.frecuencia), 4);
+    final estado = _estadoDe(tester);
+    expect(estado.valorDe(TipoObjetivo.distancia), 12.5);
+    expect(estado.valorDe(TipoObjetivo.frecuencia), 4);
     expect(_botonGuardar(tester).onPressed, isNotNull);
   });
 
@@ -439,16 +440,18 @@ Future<void> _montarPerfil(
   );
 
   await tester.pumpWidget(
-    ChangeNotifierProvider(
-      create: (_) => PerfilController(repositorio: repositorio),
+    ProviderScope(
+      overrides: [
+        if (repositorio != null)
+          objetivosRepositoryProvider.overrideWithValue(repositorio),
+      ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
 }
 
-PerfilController _controladorDe(WidgetTester tester) =>
-    Provider.of<PerfilController>(
-      tester.element(find.byType(PerfilScreen)),
-      listen: false,
-    );
+/// Estado actual del perfil, leído del [ProviderScope] que monta la pantalla.
+PerfilState _estadoDe(WidgetTester tester) => ProviderScope.containerOf(
+  tester.element(find.byType(PerfilScreen)),
+).read(perfilProvider);

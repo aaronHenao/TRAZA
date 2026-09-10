@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/router/rutas.dart';
@@ -8,7 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/widgets/traza_toast.dart';
 import '../../../core/widgets/traza_top_bar.dart';
-import 'perfil_controller.dart';
+import 'perfil_notifier.dart';
 import 'widgets/mis_objetivos_section.dart';
 
 /// Pantalla de perfil (`screen-profile`).
@@ -40,14 +40,14 @@ class PerfilScreen extends StatelessWidget {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
                 AppSpacing.lg,
                 AppSpacing.sm,
                 AppSpacing.lg,
                 AppSpacing.lg,
               ),
-              child: const _BotonGuardar(),
+              child: _BotonGuardar(),
             ),
           ],
         ),
@@ -61,16 +61,16 @@ class PerfilScreen extends StatelessWidget {
 /// Queda deshabilitado mientras no haya ningún objetivo marcado, mientras algún
 /// valor sea inválido o mientras el guardado esté en curso. En los tres casos
 /// la pantalla ya explica el motivo (estado vacío o error bajo el campo).
-class _BotonGuardar extends StatelessWidget {
+class _BotonGuardar extends ConsumerWidget {
   const _BotonGuardar();
 
   @override
-  Widget build(BuildContext context) {
-    final controlador = context.watch<PerfilController>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final estado = ref.watch(perfilProvider);
 
     return FilledButton(
-      onPressed: controlador.puedeGuardar ? () => _guardar(context) : null,
-      child: controlador.guardando
+      onPressed: estado.puedeGuardar ? () => _guardar(context, ref) : null,
+      child: estado.guardando
           ? const SizedBox(
               width: 20,
               height: 20,
@@ -83,8 +83,8 @@ class _BotonGuardar extends StatelessWidget {
     );
   }
 
-  Future<void> _guardar(BuildContext context) async {
-    final error = await context.read<PerfilController>().guardarObjetivos();
+  Future<void> _guardar(BuildContext context, WidgetRef ref) async {
+    final error = await ref.read(perfilProvider.notifier).guardarObjetivos();
     if (!context.mounted) return;
 
     mostrarToast(context, error ?? 'Objetivos guardados');

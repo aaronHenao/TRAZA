@@ -1,37 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../domain/tipo_objetivo.dart';
-import '../perfil_controller.dart';
+import '../perfil_notifier.dart';
 
 /// Fila para escribir el valor de un objetivo (`.goal-input-row` del
 /// prototipo): campo numérico, unidad y mensaje de validación.
 ///
 /// Se dibuja dentro de [ObjetivoCard] solo cuando el objetivo está marcado.
-class ConfiguracionValorObjetivo extends StatefulWidget {
+/// Es un [ConsumerStatefulWidget] únicamente por el [TextEditingController]:
+/// el valor en sí vive en el estado del perfil, no aquí.
+class ConfiguracionValorObjetivo extends ConsumerStatefulWidget {
   const ConfiguracionValorObjetivo({required this.tipo, super.key});
 
   final TipoObjetivo tipo;
 
   @override
-  State<ConfiguracionValorObjetivo> createState() =>
+  ConsumerState<ConfiguracionValorObjetivo> createState() =>
       _ConfiguracionValorObjetivoState();
 }
 
 class _ConfiguracionValorObjetivoState
-    extends State<ConfiguracionValorObjetivo> {
+    extends ConsumerState<ConfiguracionValorObjetivo> {
   late final TextEditingController _texto;
 
   @override
   void initState() {
     super.initState();
-    // El texto vive en PerfilController, así que al volver a marcar el objetivo
-    // reaparece lo último que escribió el usuario.
+    // El texto vive en el estado del perfil, así que al volver a marcar el
+    // objetivo reaparece lo último que escribió el usuario.
     _texto = TextEditingController(
-      text: context.read<PerfilController>().textoDe(widget.tipo),
+      text: ref.read(perfilProvider).textoDe(widget.tipo),
     );
   }
 
@@ -43,8 +45,8 @@ class _ConfiguracionValorObjetivoState
 
   @override
   Widget build(BuildContext context) {
-    final error = context.select<PerfilController, String?>(
-      (c) => c.errorDe(widget.tipo),
+    final error = ref.watch(
+      perfilProvider.select((estado) => estado.errorDe(widget.tipo)),
     );
     final invalido = error != null;
 
@@ -72,8 +74,8 @@ class _ConfiguracionValorObjetivoState
                       maxCaracteres: widget.tipo.maxCaracteres,
                     ),
                   ],
-                  onChanged: (valor) => context
-                      .read<PerfilController>()
+                  onChanged: (valor) => ref
+                      .read(perfilProvider.notifier)
                       .actualizarValor(widget.tipo, valor),
                   style: const TextStyle(
                     fontSize: 15,

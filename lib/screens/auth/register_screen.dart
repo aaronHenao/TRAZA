@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../utils/validators.dart';
 
-
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -55,6 +54,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _passwordController,
+                validator: validarPassword,
                 obscureText: !_verPassword,
                 decoration: InputDecoration(
                   labelText: 'Contraseña',
@@ -84,7 +84,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
-
     );
   }
 }

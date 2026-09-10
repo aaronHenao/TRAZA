@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../utils/validators.dart';
+
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -41,6 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               TextFormField(
                 controller: _correoController,
+                validator: validarCorreo,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
                   labelText: 'Correo electrónico',

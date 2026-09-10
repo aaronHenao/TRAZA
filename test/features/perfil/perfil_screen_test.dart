@@ -1,16 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:traza/core/router/rutas.dart';
+import 'package:traza/features/perfil/data/objetivos_repository.dart';
 import 'package:traza/features/perfil/domain/tipo_objetivo.dart';
 import 'package:traza/features/perfil/presentation/perfil_controller.dart';
 import 'package:traza/features/perfil/presentation/perfil_screen.dart';
 import 'package:traza/features/perfil/presentation/widgets/configuracion_valor_objetivo.dart';
 import 'package:traza/features/permisos/presentation/permisos_screen.dart';
 
-/// Pruebas de la interfaz de perfil (SCRUM-86). La cobertura completa de la
-/// gestión de objetivos llega en SCRUM-128.
+/// Pruebas de la pantalla de perfil: selección de objetivos (SCRUM-86), sus
+/// valores (SCRUM-87 y SCRUM-88) y el guardado (SCRUM-89). La cobertura
+/// completa de la gestión de objetivos llega en SCRUM-128.
 void main() {
   testWidgets('muestra el estado vacío cuando no hay objetivos seleccionados', (
     tester,
@@ -51,15 +55,10 @@ void main() {
     expect(_controladorDe(tester).sinObjetivos, isTrue);
   });
 
-  testWidgets('el botón Continuar navega a la pantalla de permisos', (
-    tester,
-  ) async {
+  testWidgets('sin objetivos marcados no se puede guardar', (tester) async {
     await _montarPerfil(tester);
 
-    await tester.tap(find.text('Continuar'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(PermisosScreen), findsOneWidget);
+    expect(_botonGuardar(tester).onPressed, isNull);
   });
 
   group('configuración del objetivo de distancia', () {
@@ -94,7 +93,7 @@ void main() {
       expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 25);
     });
 
-    testWidgets('con el campo vacío muestra error y bloquea Continuar', (
+    testWidgets('con el campo vacío muestra error y bloquea el guardado', (
       tester,
     ) async {
       await _montarPerfil(tester);
@@ -104,7 +103,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Ingresa la distancia'), findsOneWidget);
-      expect(_botonContinuar(tester).onPressed, isNull);
+      expect(_botonGuardar(tester).onPressed, isNull);
     });
 
     testWidgets('por debajo del mínimo muestra error', (tester) async {
@@ -126,7 +125,7 @@ void main() {
       await tester.pump();
 
       expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 0.1);
-      expect(_botonContinuar(tester).onPressed, isNotNull);
+      expect(_botonGuardar(tester).onPressed, isNotNull);
     });
 
     testWidgets('acepta decimales', (tester) async {
@@ -137,7 +136,7 @@ void main() {
       await tester.pump();
 
       expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 7.5);
-      expect(_botonContinuar(tester).onPressed, isNotNull);
+      expect(_botonGuardar(tester).onPressed, isNotNull);
     });
 
     testWidgets('no impone un tope superior', (tester) async {
@@ -148,20 +147,22 @@ void main() {
       await tester.pump();
 
       expect(_controladorDe(tester).valorDe(TipoObjetivo.distancia), 99999);
-      expect(_botonContinuar(tester).onPressed, isNotNull);
+      expect(_botonGuardar(tester).onPressed, isNotNull);
     });
 
-    testWidgets('un objetivo desmarcado con valor inválido no bloquea '
-        'Continuar', (tester) async {
+    testWidgets('un objetivo desmarcado con valor inválido no bloquea el '
+        'guardado de los demás', (tester) async {
       await _montarPerfil(tester);
       await _marcarDistancia(tester);
+      await _marcarFrecuencia(tester);
 
-      await tester.enterText(find.byType(TextField), '');
+      await tester.enterText(_campoDe(TipoObjetivo.distancia), '');
       await tester.pump();
-      expect(_botonContinuar(tester).onPressed, isNull);
+      expect(_botonGuardar(tester).onPressed, isNull);
 
+      // Al desmarcar la distancia queda solo la frecuencia, que sí es válida.
       await _marcarDistancia(tester);
-      expect(_botonContinuar(tester).onPressed, isNotNull);
+      expect(_botonGuardar(tester).onPressed, isNotNull);
     });
   });
 
@@ -188,7 +189,7 @@ void main() {
         findsOneWidget,
       );
       expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), isNull);
-      expect(_botonContinuar(tester).onPressed, isNull);
+      expect(_botonGuardar(tester).onPressed, isNull);
     });
 
     testWidgets('acepta los extremos del rango', (tester) async {
@@ -218,7 +219,7 @@ void main() {
       expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), 3);
     });
 
-    testWidgets('con el campo vacío muestra error y bloquea Continuar', (
+    testWidgets('con el campo vacío muestra error y bloquea el guardado', (
       tester,
     ) async {
       await _montarPerfil(tester);
@@ -228,7 +229,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Ingresa la frecuencia'), findsOneWidget);
-      expect(_botonContinuar(tester).onPressed, isNull);
+      expect(_botonGuardar(tester).onPressed, isNull);
     });
 
     testWidgets('conserva el valor escrito al desmarcar y volver a marcar', (
@@ -262,8 +263,141 @@ void main() {
     final controlador = _controladorDe(tester);
     expect(controlador.valorDe(TipoObjetivo.distancia), 12.5);
     expect(controlador.valorDe(TipoObjetivo.frecuencia), 4);
-    expect(_botonContinuar(tester).onPressed, isNotNull);
+    expect(_botonGuardar(tester).onPressed, isNotNull);
   });
+
+  group('guardado de objetivos', () {
+    testWidgets('guarda los objetivos marcados y sigue hacia permisos', (
+      tester,
+    ) async {
+      final repositorio = _RepositorioFalso();
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await tester.enterText(_campoDe(TipoObjetivo.distancia), '12.5');
+      await tester.pump();
+
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {TipoObjetivo.distancia: 12.5});
+      expect(find.text('Objetivos guardados'), findsOneWidget);
+      expect(find.byType(PermisosScreen), findsOneWidget);
+    });
+
+    testWidgets('guarda los dos objetivos cuando ambos están marcados', (
+      tester,
+    ) async {
+      final repositorio = _RepositorioFalso();
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await _marcarFrecuencia(tester);
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {
+        TipoObjetivo.distancia: 10,
+        TipoObjetivo.frecuencia: 3,
+      });
+    });
+
+    testWidgets('un objetivo desmarcado no se guarda', (tester) async {
+      final repositorio = _RepositorioFalso();
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await _marcarFrecuencia(tester);
+      await _marcarDistancia(tester);
+
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {TipoObjetivo.frecuencia: 3});
+    });
+
+    testWidgets('sin sesión avisa y se queda en el perfil', (tester) async {
+      final repositorio = _RepositorioFalso()
+        ..errorALanzar = const SesionRequeridaException();
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Inicia sesión para guardar tus objetivos'),
+        findsOneWidget,
+      );
+      expect(find.byType(PermisosScreen), findsNothing);
+    });
+
+    testWidgets('si el guardado falla avisa y se queda en el perfil', (
+      tester,
+    ) async {
+      final repositorio = _RepositorioFalso()
+        ..errorALanzar = Exception('sin conexión');
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('No se pudieron guardar tus objetivos'),
+        findsOneWidget,
+      );
+      expect(find.byType(PermisosScreen), findsNothing);
+    });
+
+    testWidgets('muestra progreso mientras guarda', (tester) async {
+      final repositorio = _RepositorioFalso()..demorar = true;
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(_botonGuardar(tester).onPressed, isNull);
+
+      repositorio.completar();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('con un valor inválido no se puede guardar', (tester) async {
+      final repositorio = _RepositorioFalso();
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarDistancia(tester);
+      await tester.enterText(_campoDe(TipoObjetivo.distancia), '');
+      await tester.pump();
+
+      expect(_botonGuardar(tester).onPressed, isNull);
+      expect(repositorio.guardado, isNull);
+    });
+  });
+}
+
+/// Repositorio de mentira: recuerda lo último que se le pidió guardar y puede
+/// fingir un fallo o una espera.
+class _RepositorioFalso implements ObjetivosRepository {
+  Map<TipoObjetivo, num>? guardado;
+  Object? errorALanzar;
+  bool demorar = false;
+
+  final _espera = Completer<void>();
+
+  void completar() => _espera.complete();
+
+  @override
+  Future<void> guardar(Map<TipoObjetivo, num> objetivos) async {
+    if (demorar) await _espera.future;
+    if (errorALanzar case final error?) throw error;
+    guardado = objetivos;
+  }
 }
 
 Future<void> _marcarDistancia(WidgetTester tester) async {
@@ -284,12 +418,13 @@ Finder _campoDe(TipoObjetivo tipo) => find.descendant(
   matching: find.byType(TextField),
 );
 
-FilledButton _botonContinuar(WidgetTester tester) =>
-    tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Continuar'),
-    );
+FilledButton _botonGuardar(WidgetTester tester) =>
+    tester.widget<FilledButton>(find.byType(FilledButton));
 
-Future<void> _montarPerfil(WidgetTester tester) async {
+Future<void> _montarPerfil(
+  WidgetTester tester, {
+  ObjetivosRepository? repositorio,
+}) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.resetPhysicalSize);
@@ -305,7 +440,7 @@ Future<void> _montarPerfil(WidgetTester tester) async {
 
   await tester.pumpWidget(
     ChangeNotifierProvider(
-      create: (_) => PerfilController(),
+      create: (_) => PerfilController(repositorio: repositorio),
       child: MaterialApp.router(routerConfig: router),
     ),
   );

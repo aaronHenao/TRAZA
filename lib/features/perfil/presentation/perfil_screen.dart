@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/router/rutas.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
+import '../../../core/widgets/traza_toast.dart';
 import '../../../core/widgets/traza_top_bar.dart';
 import 'perfil_controller.dart';
 import 'widgets/mis_objetivos_section.dart';
@@ -46,7 +47,7 @@ class PerfilScreen extends StatelessWidget {
                 AppSpacing.lg,
                 AppSpacing.lg,
               ),
-              child: const _BotonContinuar(),
+              child: const _BotonGuardar(),
             ),
           ],
         ),
@@ -55,23 +56,41 @@ class PerfilScreen extends StatelessWidget {
   }
 }
 
-/// Botón que lleva a la pantalla de permisos.
+/// Guarda los objetivos y, si todo sale bien, sigue hacia permisos.
 ///
-/// Se deshabilita mientras algún objetivo marcado tenga un valor inválido; la
-/// regla de "selecciona al menos un objetivo" corresponde a SCRUM-89.
-class _BotonContinuar extends StatelessWidget {
-  const _BotonContinuar();
+/// Queda deshabilitado mientras no haya ningún objetivo marcado, mientras algún
+/// valor sea inválido o mientras el guardado esté en curso. En los tres casos
+/// la pantalla ya explica el motivo (estado vacío o error bajo el campo).
+class _BotonGuardar extends StatelessWidget {
+  const _BotonGuardar();
 
   @override
   Widget build(BuildContext context) {
-    final bloqueado = context.select<PerfilController, bool>(
-      (controlador) => controlador.hayValoresInvalidos,
-    );
+    final controlador = context.watch<PerfilController>();
 
     return FilledButton(
-      onPressed: bloqueado ? null : () => context.go(Rutas.permisos),
-      child: const Text('Continuar'),
+      onPressed: controlador.puedeGuardar ? () => _guardar(context) : null,
+      child: controlador.guardando
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Text('Guardar y continuar'),
     );
+  }
+
+  Future<void> _guardar(BuildContext context) async {
+    final error = await context.read<PerfilController>().guardarObjetivos();
+    if (!context.mounted) return;
+
+    mostrarToast(context, error ?? 'Objetivos guardados');
+    if (error == null) {
+      context.go(Rutas.permisos);
+    }
   }
 }
 

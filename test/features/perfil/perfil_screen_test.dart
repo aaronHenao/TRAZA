@@ -6,6 +6,7 @@ import 'package:traza/core/router/rutas.dart';
 import 'package:traza/features/perfil/domain/tipo_objetivo.dart';
 import 'package:traza/features/perfil/presentation/perfil_controller.dart';
 import 'package:traza/features/perfil/presentation/perfil_screen.dart';
+import 'package:traza/features/perfil/presentation/widgets/configuracion_valor_objetivo.dart';
 import 'package:traza/features/permisos/presentation/permisos_screen.dart';
 
 /// Pruebas de la interfaz de perfil (SCRUM-86). La cobertura completa de la
@@ -163,12 +164,125 @@ void main() {
       expect(_botonContinuar(tester).onPressed, isNotNull);
     });
   });
+
+  group('configuración del objetivo de frecuencia', () {
+    testWidgets('el campo aparece al marcar el objetivo, con su valor por '
+        'defecto', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarFrecuencia(tester);
+
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('veces por semana'), findsOneWidget);
+    });
+
+    testWidgets('rechaza más de 7 veces por semana', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarFrecuencia(tester);
+
+      await tester.enterText(find.byType(TextField), '8');
+      await tester.pump();
+
+      expect(
+        find.text('Debe estar entre 1 y 7 veces por semana'),
+        findsOneWidget,
+      );
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), isNull);
+      expect(_botonContinuar(tester).onPressed, isNull);
+    });
+
+    testWidgets('acepta los extremos del rango', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarFrecuencia(tester);
+
+      for (final valor in ['1', '7']) {
+        await tester.enterText(find.byType(TextField), valor);
+        await tester.pump();
+
+        expect(
+          _controladorDe(tester).valorDe(TipoObjetivo.frecuencia),
+          int.parse(valor),
+        );
+      }
+    });
+
+    testWidgets('no deja escribir decimales', (tester) async {
+      await _montarPerfil(tester);
+      await _marcarFrecuencia(tester);
+
+      await tester.enterText(find.byType(TextField), '3.5');
+      await tester.pump();
+
+      // El campo rechaza la entrada y conserva el valor anterior.
+      expect(find.text('3'), findsOneWidget);
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), 3);
+    });
+
+    testWidgets('con el campo vacío muestra error y bloquea Continuar', (
+      tester,
+    ) async {
+      await _montarPerfil(tester);
+      await _marcarFrecuencia(tester);
+
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pump();
+
+      expect(find.text('Ingresa la frecuencia'), findsOneWidget);
+      expect(_botonContinuar(tester).onPressed, isNull);
+    });
+
+    testWidgets('conserva el valor escrito al desmarcar y volver a marcar', (
+      tester,
+    ) async {
+      await _montarPerfil(tester);
+      await _marcarFrecuencia(tester);
+
+      await tester.enterText(find.byType(TextField), '5');
+      await tester.pump();
+
+      await _marcarFrecuencia(tester);
+      await _marcarFrecuencia(tester);
+
+      expect(find.text('5'), findsOneWidget);
+      expect(_controladorDe(tester).valorDe(TipoObjetivo.frecuencia), 5);
+    });
+  });
+
+  testWidgets('cada objetivo guarda su propio valor por separado', (
+    tester,
+  ) async {
+    await _montarPerfil(tester);
+    await _marcarDistancia(tester);
+    await _marcarFrecuencia(tester);
+
+    await tester.enterText(_campoDe(TipoObjetivo.distancia), '12.5');
+    await tester.enterText(_campoDe(TipoObjetivo.frecuencia), '4');
+    await tester.pump();
+
+    final controlador = _controladorDe(tester);
+    expect(controlador.valorDe(TipoObjetivo.distancia), 12.5);
+    expect(controlador.valorDe(TipoObjetivo.frecuencia), 4);
+    expect(_botonContinuar(tester).onPressed, isNotNull);
+  });
 }
 
 Future<void> _marcarDistancia(WidgetTester tester) async {
   await tester.tap(find.text('Distancia semanal'));
   await tester.pump();
 }
+
+Future<void> _marcarFrecuencia(WidgetTester tester) async {
+  await tester.tap(find.text('Frecuencia de entrenamiento'));
+  await tester.pump();
+}
+
+/// El campo de un objetivo concreto, para cuando hay varios en pantalla.
+Finder _campoDe(TipoObjetivo tipo) => find.descendant(
+  of: find.byWidgetPredicate(
+    (widget) => widget is ConfiguracionValorObjetivo && widget.tipo == tipo,
+  ),
+  matching: find.byType(TextField),
+);
 
 FilledButton _botonContinuar(WidgetTester tester) =>
     tester.widget<FilledButton>(

@@ -19,8 +19,7 @@ class ObjetivoCard extends StatelessWidget {
   final VoidCallback onTap;
 
   /// Fila para configurar el valor del objetivo. Se dibuja solo cuando la
-  /// tarjeta está seleccionada y llega en SCRUM-87 (distancia) y SCRUM-88
-  /// (frecuencia); mientras tanto la tarjeta funciona sin ella.
+  /// tarjeta está seleccionada.
   final Widget? configuracion;
 
   @override

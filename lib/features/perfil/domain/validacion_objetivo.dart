@@ -28,13 +28,15 @@ String? validarValorObjetivo(TipoObjetivo tipo, String texto) {
         : 'Usa solo números enteros';
   }
 
-  if (valor < tipo.minimo) {
-    return 'El mínimo es ${formatearValorObjetivo(tipo.minimo)} ${tipo.unidad}';
-  }
-
   final maximo = tipo.maximo;
-  if (maximo != null && valor > maximo) {
-    return 'El máximo es ${formatearValorObjetivo(maximo)} ${tipo.unidad}';
+  if (maximo == null) {
+    if (valor < tipo.minimo) {
+      return 'El mínimo es '
+          '${formatearValorObjetivo(tipo.minimo)} ${tipo.unidad}';
+    }
+  } else if (valor < tipo.minimo || valor > maximo) {
+    return 'Debe estar entre ${formatearValorObjetivo(tipo.minimo)} y '
+        '${formatearValorObjetivo(maximo)} ${tipo.unidad}';
   }
 
   return null;

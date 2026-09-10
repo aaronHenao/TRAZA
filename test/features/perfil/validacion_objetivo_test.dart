@@ -44,16 +44,11 @@ void main() {
     const tipo = TipoObjetivo.frecuencia;
 
     test('acepta de 1 a 7 veces por semana', () {
+      const mensaje = 'Debe estar entre 1 y 7 veces por semana';
       expect(validarValorObjetivo(tipo, '1'), isNull);
       expect(validarValorObjetivo(tipo, '7'), isNull);
-      expect(
-        validarValorObjetivo(tipo, '0'),
-        'El mínimo es 1 veces por semana',
-      );
-      expect(
-        validarValorObjetivo(tipo, '8'),
-        'El máximo es 7 veces por semana',
-      );
+      expect(validarValorObjetivo(tipo, '0'), mensaje);
+      expect(validarValorObjetivo(tipo, '8'), mensaje);
     });
 
     test('no admite decimales', () {

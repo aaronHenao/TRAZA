@@ -44,10 +44,7 @@ class MisObjetivosSection extends StatelessWidget {
             tipo: tipo,
             seleccionada: controlador.estaSeleccionado(tipo),
             onTap: () => controlador.alternar(tipo),
-            // La fila de frecuencia se conecta en SCRUM-88.
-            configuracion: tipo == TipoObjetivo.distancia
-                ? ConfiguracionValorObjetivo(tipo: tipo)
-                : null,
+            configuracion: ConfiguracionValorObjetivo(tipo: tipo),
           ),
           const SizedBox(height: AppSpacing.md),
         ],

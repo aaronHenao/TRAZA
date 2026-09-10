@@ -9,45 +9,127 @@ import '../../../core/theme/app_dimens.dart';
 import '../../../core/widgets/traza_toast.dart';
 import '../../../core/widgets/traza_top_bar.dart';
 import 'perfil_notifier.dart';
+import 'perfil_state.dart';
 import 'widgets/mis_objetivos_section.dart';
 
 /// Pantalla de perfil (`screen-profile`).
 ///
 /// Es el primer paso después del registro: el usuario configura sus objetivos
-/// y desde aquí continúa hacia la pantalla de permisos.
+/// y desde aquí continúa hacia la pantalla de permisos. Si ya los había
+/// configurado antes, la pantalla llega con sus valores precargados.
 class PerfilScreen extends StatelessWidget {
   const PerfilScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            const TrazaTopBar(titulo: 'Perfil'),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.xs,
-                  AppSpacing.lg,
-                  AppSpacing.xl,
-                ),
-                children: const [
-                  _CabeceraPerfil(),
-                  SizedBox(height: AppSpacing.xl),
-                  MisObjetivosSection(),
-                ],
+            TrazaTopBar(titulo: 'Perfil'),
+            Expanded(child: _Cuerpo()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Cuerpo extends ConsumerWidget {
+  const _Cuerpo();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final carga = ref.watch(perfilProvider.select((estado) => estado.carga));
+
+    return switch (carga) {
+      EstadoCarga.cargando => const Center(child: CircularProgressIndicator()),
+      EstadoCarga.error => const _ErrorDeCarga(),
+      EstadoCarga.listo => Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.xs,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
+              children: const [
+                _CabeceraPerfil(),
+                SizedBox(height: AppSpacing.xl),
+                MisObjetivosSection(),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
+            child: _BotonGuardar(),
+          ),
+        ],
+      ),
+    };
+  }
+}
+
+/// No se pudo leer lo que el usuario tenía guardado.
+///
+/// Se bloquea la edición a propósito: guardar reemplaza el conjunto completo de
+/// objetivos, así que hacerlo sin saber qué había los borraría.
+class _ErrorDeCarga extends ConsumerWidget {
+  const _ErrorDeCarga();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.bgAlt,
+              ),
+              child: const Icon(
+                Icons.cloud_off_outlined,
+                size: 26,
+                color: AppColors.ink3,
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.sm,
-                AppSpacing.lg,
-                AppSpacing.lg,
+            const SizedBox(height: 12),
+            const Text(
+              'No pudimos cargar tus objetivos',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink,
               ),
-              child: _BotonGuardar(),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            const Text(
+              'Revisa tu conexión e inténtalo de nuevo.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.ink2,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            OutlinedButton(
+              onPressed: () =>
+                  ref.read(perfilProvider.notifier).cargarObjetivos(),
+              child: const Text('Reintentar'),
             ),
           ],
         ),

@@ -14,8 +14,9 @@ import 'package:traza/features/perfil/presentation/widgets/configuracion_valor_o
 import 'package:traza/features/permisos/presentation/permisos_screen.dart';
 
 /// Pruebas de la pantalla de perfil: selección de objetivos (SCRUM-86), sus
-/// valores (SCRUM-87 y SCRUM-88) y el guardado (SCRUM-89). La cobertura
-/// completa de la gestión de objetivos llega en SCRUM-128.
+/// valores (SCRUM-87 y SCRUM-88), el guardado (SCRUM-89) y la edición de los
+/// que ya estaban configurados (SCRUM-90). La cobertura completa de la gestión
+/// de objetivos llega en SCRUM-128.
 void main() {
   testWidgets('muestra el estado vacío cuando no hay objetivos seleccionados', (
     tester,
@@ -319,7 +320,7 @@ void main() {
 
     testWidgets('sin sesión avisa y se queda en el perfil', (tester) async {
       final repositorio = _RepositorioFalso()
-        ..errorALanzar = const SesionRequeridaException();
+        ..errorAlGuardar = const SesionRequeridaException();
       await _montarPerfil(tester, repositorio: repositorio);
 
       await _marcarDistancia(tester);
@@ -337,7 +338,7 @@ void main() {
       tester,
     ) async {
       final repositorio = _RepositorioFalso()
-        ..errorALanzar = Exception('sin conexión');
+        ..errorAlGuardar = Exception('sin conexión');
       await _montarPerfil(tester, repositorio: repositorio);
 
       await _marcarDistancia(tester);
@@ -380,13 +381,156 @@ void main() {
       expect(repositorio.guardado, isNull);
     });
   });
+
+  group('edición de objetivos ya configurados', () {
+    testWidgets('precarga los objetivos guardados con sus valores', (
+      tester,
+    ) async {
+      await _montarPerfil(
+        tester,
+        repositorio: _RepositorioFalso(
+          existentes: {TipoObjetivo.distancia: 12.5},
+        ),
+      );
+
+      final estado = _estadoDe(tester);
+      expect(estado.seleccionados, {TipoObjetivo.distancia});
+      expect(estado.valorDe(TipoObjetivo.distancia), 12.5);
+
+      // La distancia llega marcada y con su valor; la frecuencia, sin marcar.
+      expect(find.text('12.5'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Aún no has elegido objetivos'), findsNothing);
+    });
+
+    testWidgets('precarga los dos objetivos cuando ambos estaban guardados', (
+      tester,
+    ) async {
+      await _montarPerfil(
+        tester,
+        repositorio: _RepositorioFalso(
+          existentes: {
+            TipoObjetivo.distancia: 20,
+            TipoObjetivo.frecuencia: 5,
+          },
+        ),
+      );
+
+      expect(find.text('20'), findsOneWidget);
+      expect(find.text('5'), findsOneWidget);
+      expect(_estadoDe(tester).seleccionados, hasLength(2));
+    });
+
+    testWidgets('sin nada guardado arranca con el estado vacío', (
+      tester,
+    ) async {
+      await _montarPerfil(tester, repositorio: _RepositorioFalso());
+
+      expect(find.text('Aún no has elegido objetivos'), findsOneWidget);
+      expect(_estadoDe(tester).sinObjetivos, isTrue);
+    });
+
+    testWidgets('permite modificar un valor precargado y guardarlo', (
+      tester,
+    ) async {
+      final repositorio = _RepositorioFalso(
+        existentes: {TipoObjetivo.distancia: 10},
+      );
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await tester.enterText(_campoDe(TipoObjetivo.distancia), '20');
+      await tester.pump();
+
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {TipoObjetivo.distancia: 20});
+    });
+
+    testWidgets('permite desmarcar un objetivo precargado', (tester) async {
+      final repositorio = _RepositorioFalso(
+        existentes: {TipoObjetivo.distancia: 10, TipoObjetivo.frecuencia: 5},
+      );
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarFrecuencia(tester);
+
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {TipoObjetivo.distancia: 10});
+    });
+
+    testWidgets('permite marcar un objetivo que no estaba guardado', (
+      tester,
+    ) async {
+      final repositorio = _RepositorioFalso(
+        existentes: {TipoObjetivo.distancia: 10},
+      );
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      await _marcarFrecuencia(tester);
+
+      await tester.tap(find.text('Guardar y continuar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {
+        TipoObjetivo.distancia: 10,
+        TipoObjetivo.frecuencia: 3,
+      });
+    });
+
+    testWidgets('sin sesión muestra los valores por defecto, no un error', (
+      tester,
+    ) async {
+      await _montarPerfil(
+        tester,
+        repositorio: _RepositorioFalso()
+          ..errorAlCargar = const SesionRequeridaException(),
+      );
+
+      expect(find.text('No pudimos cargar tus objetivos'), findsNothing);
+      expect(find.text('Distancia semanal'), findsOneWidget);
+      expect(_estadoDe(tester).carga, EstadoCarga.listo);
+    });
+
+    testWidgets('si la carga falla bloquea la edición y ofrece reintentar', (
+      tester,
+    ) async {
+      final repositorio = _RepositorioFalso(
+        existentes: {TipoObjetivo.distancia: 10},
+      )..errorAlCargar = Exception('sin conexión');
+      await _montarPerfil(tester, repositorio: repositorio);
+
+      expect(find.text('No pudimos cargar tus objetivos'), findsOneWidget);
+      // Nada de editar ni guardar mientras no sepamos qué había.
+      expect(find.text('Distancia semanal'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+
+      repositorio.errorAlCargar = null;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No pudimos cargar tus objetivos'), findsNothing);
+      expect(find.text('10'), findsOneWidget);
+      expect(_botonGuardar(tester).onPressed, isNotNull);
+    });
+  });
 }
 
-/// Repositorio de mentira: recuerda lo último que se le pidió guardar y puede
-/// fingir un fallo o una espera.
+/// Repositorio de mentira: devuelve los objetivos que se le configuren,
+/// recuerda lo último que se le pidió guardar y puede fingir fallos o esperas.
 class _RepositorioFalso implements ObjetivosRepository {
+  _RepositorioFalso({this.existentes = const {}});
+
+  /// Lo que el usuario ya tenía guardado.
+  Map<TipoObjetivo, num> existentes;
+
+  /// Lo último que se le pidió guardar.
   Map<TipoObjetivo, num>? guardado;
-  Object? errorALanzar;
+
+  Object? errorAlCargar;
+  Object? errorAlGuardar;
   bool demorar = false;
 
   final _espera = Completer<void>();
@@ -394,9 +538,15 @@ class _RepositorioFalso implements ObjetivosRepository {
   void completar() => _espera.complete();
 
   @override
+  Future<Map<TipoObjetivo, num>> cargar() async {
+    if (errorAlCargar case final error?) throw error;
+    return existentes;
+  }
+
+  @override
   Future<void> guardar(Map<TipoObjetivo, num> objetivos) async {
     if (demorar) await _espera.future;
-    if (errorALanzar case final error?) throw error;
+    if (errorAlGuardar case final error?) throw error;
     guardado = objetivos;
   }
 }
@@ -442,8 +592,9 @@ Future<void> _montarPerfil(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        if (repositorio != null)
-          objetivosRepositoryProvider.overrideWithValue(repositorio),
+        objetivosRepositoryProvider.overrideWithValue(
+          repositorio ?? _RepositorioFalso(),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

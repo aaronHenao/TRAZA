@@ -6,11 +6,37 @@ import '../domain/tipo_objetivo.dart';
 import 'perfil_state.dart';
 
 /// Maneja los objetivos del perfil: qué está marcado (SCRUM-86), el valor de
-/// cada uno (SCRUM-87 y SCRUM-88) y el guardado en la tabla `objetivos`
-/// (SCRUM-89).
+/// cada uno (SCRUM-87 y SCRUM-88), el guardado en la tabla `objetivos`
+/// (SCRUM-89) y la precarga de los que ya estaban guardados (SCRUM-90).
 class PerfilNotifier extends Notifier<PerfilState> {
   @override
-  PerfilState build() => PerfilState.inicial();
+  PerfilState build() {
+    // La carga arranca en cuanto el estado inicial queda listo.
+    Future.microtask(cargarObjetivos);
+    return PerfilState.inicial();
+  }
+
+  /// Trae los objetivos que el usuario ya tenía y precarga la pantalla.
+  Future<void> cargarObjetivos() async {
+    if (state.carga != EstadoCarga.cargando) {
+      state = state.copyWith(carga: EstadoCarga.cargando);
+    }
+
+    try {
+      final guardados = await ref.read(objetivosRepositoryProvider).cargar();
+      if (!ref.mounted) return;
+      state = state.conObjetivosGuardados(guardados);
+    } on SesionRequeridaException {
+      // Sin sesión no hay nada que precargar: se muestran los valores por
+      // defecto y el guardado ya avisa por su cuenta.
+      if (!ref.mounted) return;
+      state = state.copyWith(carga: EstadoCarga.listo);
+    } catch (error) {
+      debugPrint('No se pudieron cargar los objetivos: $error');
+      if (!ref.mounted) return;
+      state = state.copyWith(carga: EstadoCarga.error);
+    }
+  }
 
   /// Marca o desmarca un objetivo. Se pueden tener varios activos a la vez.
   void alternar(TipoObjetivo tipo) {
@@ -46,7 +72,9 @@ class PerfilNotifier extends Notifier<PerfilState> {
       return 'No se pudieron guardar tus objetivos. '
           'Revisa tu conexión e inténtalo de nuevo.';
     } finally {
-      state = state.copyWith(guardando: false);
+      if (ref.mounted) {
+        state = state.copyWith(guardando: false);
+      }
     }
   }
 }

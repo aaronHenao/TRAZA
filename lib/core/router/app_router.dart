@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../features/actividad/presentation/inicio_screen.dart';
 import '../../features/perfil/presentation/perfil_screen.dart';
 import '../../features/permisos/presentation/permisos_screen.dart';
 import 'rutas.dart';
@@ -18,6 +19,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: Rutas.permisos,
       builder: (context, state) => const PermisosScreen(),
+    ),
+    GoRoute(
+      path: Rutas.inicio,
+      builder: (context, state) => const InicioScreen(),
     ),
   ],
 );

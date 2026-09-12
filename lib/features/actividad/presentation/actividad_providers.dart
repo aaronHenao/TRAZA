@@ -6,11 +6,10 @@ import '../domain/tipo_actividad.dart';
 
 /// Catálogo de tipos de actividad para los chips del inicio.
 ///
-/// El reintento automático de Riverpod 3 está apagado a propósito: si la carga
-/// falla, la pantalla ofrece un botón "Reintentar", igual que el perfil.
+/// Si la carga falla, la pantalla ofrece un botón "Reintentar", igual que el
+/// perfil.
 final tiposActividadProvider = FutureProvider<List<TipoActividad>>(
   (ref) => ref.watch(tiposActividadRepositoryProvider).cargar(),
-  retry: (_, _) => null,
 );
 
 /// La actividad a realizar: la que el usuario eligió en los chips (SCRUM-92).
@@ -20,7 +19,9 @@ final tiposActividadProvider = FutureProvider<List<TipoActividad>>(
 class ActividadSeleccionadaNotifier extends Notifier<TipoActividad?> {
   @override
   TipoActividad? build() {
-    final tipos = ref.watch(tiposActividadProvider).value;
+    // `valueOrNull` y no `value`: en Riverpod 2, `value` relanza el error si
+    // la carga del catálogo falló, y aquí eso solo significa "sin actividad".
+    final tipos = ref.watch(tiposActividadProvider).valueOrNull;
     return tipos == null || tipos.isEmpty ? null : tipos.first;
   }
 

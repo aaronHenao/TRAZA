@@ -1,4 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ubicación durante la actividad (SCRUM-108). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Rastreo con la pantalla bloqueada: servicio en primer plano con
+         notificación persistente (lo levanta geolocator). No hace falta
+         ACCESS_BACKGROUND_LOCATION: la actividad la inicia el usuario con
+         la app abierta. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Android 13+: sin este permiso la notificación del servicio no se
+         ve en la bandeja (el rastreo funciona igual). Pedirlo en tiempo de
+         ejecución es de la HU de permisos. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Tiles del mapa y Supabase. Debug/profile ya lo traen; la release no. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="traza"
         android:name="${applicationName}"

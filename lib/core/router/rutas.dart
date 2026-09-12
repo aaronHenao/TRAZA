@@ -4,4 +4,5 @@ abstract final class Rutas {
   static const perfil = '/perfil';
   static const permisos = '/permisos';
   static const inicio = '/inicio';
+  static const tracking = '/tracking';
 }

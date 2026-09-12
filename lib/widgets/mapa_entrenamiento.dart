@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/ubicacion_provider.dart';
 import '../theme/traza_theme.dart';
+import 'mapa_recorrido.dart';
 
 /// Contenedor del mapa de la pantalla de entrenamiento (SCRUM-102).
 ///
-/// Es solo el marco visual: la ubicación en vivo y el trazado del
-/// recorrido los implementa SCRUM-41 sobre este mismo hueco, pasando su
-/// `GoogleMap` (u otro widget) por [contenido].
-class MapaEntrenamiento extends StatelessWidget {
+/// Observa la posición en vivo (SCRUM-108) para encender la píldora
+/// "Ubicación en vivo" y avisar mientras no haya señal. Dentro va
+/// [MapaRecorrido] (SCRUM-109), salvo que se pase otro [contenido].
+class MapaEntrenamiento extends ConsumerWidget {
   const MapaEntrenamiento({super.key, this.contenido});
 
-  /// Widget que dibuja el mapa. Mientras no exista, se muestra el
-  /// estado vacío.
+  /// Qué se dibuja en el hueco. Por defecto, el mapa real.
   final Widget? contenido;
 
+  static const Key claveNota = Key('mapa-nota');
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final posicion = ref.watch(posicionEnVivoProvider);
+    final enVivo = posicion.hasValue && !posicion.hasError;
+
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
@@ -28,8 +35,22 @@ class MapaEntrenamiento extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Positioned.fill(child: contenido ?? const _MapaVacio()),
-            const Positioned(top: 14, left: 18, child: _PildoraEnVivo()),
+            Positioned.fill(child: contenido ?? const MapaRecorrido()),
+            // Igual que `.track-perm-note` del prototipo: cubre el mapa
+            // mientras no se pueda mostrar la ubicación.
+            if (!enVivo)
+              Positioned.fill(
+                child: _NotaUbicacion(
+                  mensaje: posicion.hasError
+                      ? 'No se pudo obtener tu ubicación.'
+                      : 'Buscando tu ubicación...',
+                ),
+              ),
+            Positioned(
+              top: 14,
+              left: 18,
+              child: _PildoraEnVivo(activa: enVivo),
+            ),
           ],
         ),
       ),
@@ -37,8 +58,10 @@ class MapaEntrenamiento extends StatelessWidget {
   }
 }
 
-class _MapaVacio extends StatelessWidget {
-  const _MapaVacio();
+class _NotaUbicacion extends StatelessWidget {
+  const _NotaUbicacion({required this.mensaje});
+
+  final String mensaje;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +78,8 @@ class _MapaVacio extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Aquí se mostrará tu recorrido en el mapa.',
+              mensaje,
+              key: MapaEntrenamiento.claveNota,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 color: Colors.white.withValues(alpha: 0.7),
@@ -71,7 +95,10 @@ class _MapaVacio extends StatelessWidget {
 }
 
 class _PildoraEnVivo extends StatelessWidget {
-  const _PildoraEnVivo();
+  const _PildoraEnVivo({required this.activa});
+
+  /// Con posición recibida el punto se enciende en lima; si no, apagado.
+  final bool activa;
 
   @override
   Widget build(BuildContext context) {
@@ -87,8 +114,10 @@ class _PildoraEnVivo extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              color: TrazaColors.accent,
+            decoration: BoxDecoration(
+              color: activa
+                  ? TrazaColors.accent
+                  : Colors.white.withValues(alpha: 0.35),
               shape: BoxShape.circle,
             ),
           ),

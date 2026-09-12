@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/estado_cronometro.dart';
 import 'cronometro_service.dart';
+import 'reloj_provider.dart';
 
-/// Reloj del sistema. Las pruebas lo sobrescriben para avanzar el
-/// tiempo a voluntad.
-final relojProvider = Provider<Reloj>((ref) => DateTime.now);
+export 'reloj_provider.dart';
 
 /// Cada cuánto se refresca el cronómetro en pantalla (SCRUM-105).
 ///

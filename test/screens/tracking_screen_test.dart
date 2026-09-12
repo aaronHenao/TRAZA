@@ -3,21 +3,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
+import 'package:traza/services/mapa_provider.dart';
+import 'package:traza/services/recorrido_provider.dart';
+import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
 import 'package:traza/widgets/cronometro_entrenamiento.dart';
 import 'package:traza/widgets/estadisticas_entrenamiento.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
 
+import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
+import '../utiles/repositorio_puntos_gps_falso.dart';
 
 void main() {
   late RelojFalso reloj;
   late ProviderContainer container;
 
+  late FuenteUbicacionFalsa fuente;
+  late RepositorioPuntosGpsFalso repositorio;
+
   setUp(() {
     reloj = RelojFalso();
+    fuente = FuenteUbicacionFalsa();
+    repositorio = RepositorioPuntosGpsFalso();
+    addTearDown(() => fuente.cerrar());
     container = ProviderContainer(
-      overrides: [relojProvider.overrideWithValue(reloj.call)],
+      overrides: [
+        relojProvider.overrideWithValue(reloj.call),
+        fuenteUbicacionProvider.overrideWithValue(fuente),
+        proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        repositorioPuntosGpsProvider.overrideWithValue(repositorio),
+        entrenamientoActualProvider.overrideWithValue('e-123'),
+      ],
     );
     addTearDown(container.dispose);
   });
@@ -128,5 +146,48 @@ void main() {
     // Ya detenido, el tiempo mostrado no se mueve más.
     await correr(tester, const Duration(minutes: 5));
     expect(tiempoEnPantalla(tester), '00:32:17');
+  });
+
+  testWidgets('al finalizar sincroniza los puntos registrados en un lote',
+      (tester) async {
+    await montar(tester, onFinalizar: (_) {});
+
+    for (final punto in [
+      puntoDePrueba(latitud: 6.2311, longitud: -75.6105),
+      puntoDePrueba(latitud: 6.2312, longitud: -75.6106),
+      puntoDePrueba(latitud: 6.2313, longitud: -75.6107),
+    ]) {
+      fuente.emitir(punto);
+      await tester.pump();
+      await tester.pump();
+    }
+    expect(repositorio.lotes, isEmpty);
+
+    await tester.tap(find.byKey(ControlesEntrenamiento.claveFinalizar));
+    await tester.pump();
+    await tester.pump();
+
+    expect(repositorio.lotes.length, 1);
+    expect(repositorio.lotes.single.entrenamientoId, 'e-123');
+    expect(
+      repositorio.lotes.single.puntos.map((p) => p.latitud),
+      [6.2311, 6.2312, 6.2313],
+    );
+  });
+
+  testWidgets('si la sincronizacion falla lo avisa al finalizar',
+      (tester) async {
+    await montar(tester);
+    fuente.emitir(puntoDePrueba());
+    await tester.pump();
+    await tester.pump();
+    repositorio.fallar = true;
+
+    await tester.tap(find.byKey(ControlesEntrenamiento.claveFinalizar));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('no se pudo guardar'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'screens/tracking/tracking_screen.dart';
+import 'core/router/app_router.dart';
+import 'core/theme/app_theme.dart';
 import 'supabase_config.dart';
-import 'theme/traza_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,13 +20,11 @@ class TrazaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'TRAZA',
       debugShowCheckedModeBanner: false,
-      theme: buildTrazaTheme(),
-      // Mientras no exista la pantalla de inicio (SCRUM-45), la app
-      // abre directamente el entrenamiento en curso.
-      home: const TrackingScreen(nombreActividad: 'Correr'),
+      theme: AppTheme.light,
+      routerConfig: appRouter,
     );
   }
 }

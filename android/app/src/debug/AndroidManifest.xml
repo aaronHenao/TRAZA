@@ -4,4 +4,13 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Solo en debug: el emulador x86 emula OpenGL por software y con
+         Impeller el render se congela al pintar el mapa (flutter_map).
+         Con Skia funciona. La release conserva Impeller. -->
+    <application>
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+    </application>
 </manifest>

@@ -8,6 +8,7 @@ class SeccionIniciarEntrenamiento extends StatelessWidget {
   const SeccionIniciarEntrenamiento({
     required this.actividad,
     required this.onIniciar,
+    this.aviso,
     super.key,
   });
 
@@ -19,9 +20,14 @@ class SeccionIniciarEntrenamiento extends StatelessWidget {
   /// mientras no haya actividad, el botón queda deshabilitado.
   final VoidCallback? onIniciar;
 
+  /// Explica debajo del botón por qué todavía no se puede iniciar, cuando es
+  /// algo que el usuario puede resolver (por ejemplo, iniciar sesión).
+  final String? aviso;
+
   @override
   Widget build(BuildContext context) {
     final actividad = this.actividad;
+    final aviso = this.aviso;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -73,6 +79,18 @@ class SeccionIniciarEntrenamiento extends StatelessWidget {
           onPressed: actividad == null ? null : onIniciar,
           child: const Text('Iniciar actividad'),
         ),
+        if (aviso != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            aviso,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: AppColors.ink2,
+            ),
+          ),
+        ],
       ],
     );
   }

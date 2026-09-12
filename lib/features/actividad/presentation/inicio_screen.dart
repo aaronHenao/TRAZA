@@ -11,15 +11,17 @@ import 'widgets/seccion_iniciar_entrenamiento.dart';
 /// Pantalla de inicio (`screen-home` del prototipo): el usuario elige su
 /// actividad y arranca el entrenamiento.
 ///
-/// La estructura es de SCRUM-91 y los chips con la actividad elegida, de
-/// SCRUM-92. Falta a propósito la acción de "Iniciar actividad", que se
-/// conecta en SCRUM-96 y hoy se pasa en null.
+/// La estructura es de SCRUM-91, los chips con la actividad elegida de
+/// SCRUM-92 y la configuración de inicio de SCRUM-93. Falta a propósito la
+/// acción de "Iniciar actividad", que se conecta en SCRUM-96 y hoy se pasa en
+/// null.
 class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final actividad = ref.watch(actividadSeleccionadaProvider);
+    final configuracion = ref.watch(configuracionInicioProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -42,6 +44,12 @@ class InicioScreen extends ConsumerWidget {
                 child: SeccionIniciarEntrenamiento(
                   actividad: actividad?.nombre,
                   onIniciar: null,
+                  // Hay actividad elegida, pero viene del catálogo local
+                  // porque no hay sesión: sin id no se puede crear el
+                  // entrenamiento (ver ConfiguracionInicio.para).
+                  aviso: actividad != null && configuracion == null
+                      ? 'Inicia sesión para empezar a entrenar.'
+                      : null,
                 ),
               ),
             ],

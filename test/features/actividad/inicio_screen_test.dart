@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/features/actividad/data/tipos_actividad_repository.dart';
+import 'package:traza/features/actividad/domain/configuracion_inicio.dart';
 import 'package:traza/features/actividad/domain/tipo_actividad.dart';
 import 'package:traza/features/actividad/presentation/actividad_providers.dart';
 import 'package:traza/features/actividad/presentation/inicio_screen.dart';
 import 'package:traza/features/actividad/presentation/widgets/chips_tipo_actividad.dart';
 import 'package:traza/features/actividad/presentation/widgets/seccion_iniciar_entrenamiento.dart';
 
-/// Pruebas de la pantalla de inicio: su diseño (SCRUM-91) y los chips de tipo
-/// de actividad (SCRUM-92).
+/// Pruebas de la pantalla de inicio: su diseño (SCRUM-91), los chips de tipo
+/// de actividad (SCRUM-92) y la configuración de inicio (SCRUM-93).
 void main() {
   group('diseño de la pantalla', () {
     testWidgets('muestra la cabecera del prototipo', (tester) async {
@@ -142,6 +143,66 @@ void main() {
     });
   });
 
+  group('configuración de inicio', () {
+    testWidgets('toma el id y el nombre del tipo marcado por defecto', (
+      tester,
+    ) async {
+      await _montar(tester);
+
+      expect(
+        _configuracion(tester),
+        const ConfiguracionInicio(
+          tipoActividadId: 'id-correr',
+          nombreActividad: 'Correr',
+        ),
+      );
+    });
+
+    testWidgets('sigue al chip que el usuario elige', (tester) async {
+      await _montar(tester);
+
+      await tester.tap(_chip('Trote'));
+      await tester.pump();
+
+      expect(
+        _configuracion(tester),
+        const ConfiguracionInicio(
+          tipoActividadId: 'id-trote',
+          nombreActividad: 'Trote',
+        ),
+      );
+    });
+
+    testWidgets('sin sesión no hay configuración y la pantalla lo avisa', (
+      tester,
+    ) async {
+      // Sin sesión el repositorio devuelve el catálogo local, sin ids.
+      await _montar(
+        tester,
+        repositorio: _RepositorioFalso(TipoActividad.catalogoLocal),
+      );
+
+      expect(_seleccionada(tester)?.nombre, 'Correr');
+      expect(_configuracion(tester), isNull);
+      expect(find.text('Inicia sesión para empezar a entrenar.'), findsOneWidget);
+    });
+
+    testWidgets('con sesión no muestra el aviso', (tester) async {
+      await _montar(tester);
+
+      expect(find.text('Inicia sesión para empezar a entrenar.'), findsNothing);
+    });
+
+    testWidgets('sin actividad elegida no hay configuración ni aviso', (
+      tester,
+    ) async {
+      await _montar(tester, repositorio: _RepositorioFalso([]));
+
+      expect(_configuracion(tester), isNull);
+      expect(find.text('Inicia sesión para empezar a entrenar.'), findsNothing);
+    });
+  });
+
   group('sección para iniciar el entrenamiento', () {
     testWidgets('con una actividad la muestra y habilita el botón', (
       tester,
@@ -178,6 +239,23 @@ void main() {
       );
 
       expect(_botonIniciar(tester).onPressed, isNull);
+    });
+
+    testWidgets('muestra el aviso que se le pase debajo del botón', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        pantalla: const Scaffold(
+          body: SeccionIniciarEntrenamiento(
+            actividad: 'Correr',
+            onIniciar: null,
+            aviso: 'Un aviso de prueba',
+          ),
+        ),
+      );
+
+      expect(find.text('Un aviso de prueba'), findsOneWidget);
     });
   });
 }
@@ -236,10 +314,16 @@ Finder _enLaSeccion(String texto) => find.descendant(
   matching: find.text(texto),
 );
 
+ProviderContainer _contenedor(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(InicioScreen)));
+
 /// La actividad a realizar, leída del [ProviderScope] que monta la pantalla.
-TipoActividad? _seleccionada(WidgetTester tester) => ProviderScope.containerOf(
-  tester.element(find.byType(InicioScreen)),
-).read(actividadSeleccionadaProvider);
+TipoActividad? _seleccionada(WidgetTester tester) =>
+    _contenedor(tester).read(actividadSeleccionadaProvider);
+
+/// La configuración de inicio, leída del mismo [ProviderScope].
+ConfiguracionInicio? _configuracion(WidgetTester tester) =>
+    _contenedor(tester).read(configuracionInicioProvider);
 
 FilledButton _botonIniciar(WidgetTester tester) =>
     tester.widget<FilledButton>(find.byType(FilledButton));

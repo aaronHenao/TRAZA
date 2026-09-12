@@ -24,7 +24,14 @@ class ActividadSeleccionadaNotifier extends Notifier<TipoActividad?> {
     return tipos == null || tipos.isEmpty ? null : tipos.first;
   }
 
-  void seleccionar(TipoActividad tipo) => state = tipo;
+  /// Cambia la actividad a realizar, reemplazando la anterior.
+  ///
+  /// Solo se puede antes de iniciar (SCRUM-94): con un entrenamiento en curso
+  /// la actividad queda fija y la llamada no hace nada.
+  void seleccionar(TipoActividad tipo) {
+    if (ref.read(actividadIniciadaProvider)) return;
+    state = tipo;
+  }
 }
 
 final actividadSeleccionadaProvider =
@@ -56,3 +63,40 @@ final actividadSeleccionadaProvider =
 final configuracionInicioProvider = Provider<ConfiguracionInicio?>(
   (ref) => ConfiguracionInicio.para(ref.watch(actividadSeleccionadaProvider)),
 );
+
+/// Si ya empezó un entrenamiento con la actividad elegida (SCRUM-94).
+///
+/// Mientras sea true la actividad no se puede cambiar. El flujo de inicio la
+/// marca al arrancar y la libera cuando el entrenamiento termina:
+///
+/// ```dart
+/// // SCRUM-96, al pulsar "Iniciar actividad":
+/// ref.read(actividadIniciadaProvider.notifier).marcarIniciada();
+/// context.go(Rutas.tracking);
+///
+/// // Al finalizar o cancelar (`TrackingScreen.onFinalizar` y `onCancelar`):
+/// ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
+/// ```
+class ActividadIniciadaNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  /// Fija la actividad elegida para el entrenamiento que empieza.
+  ///
+  /// Lanza [StateError] si no hay configuración de inicio: sin ella no hay
+  /// entrenamiento posible, así que llamarla sería un error de quien la usa.
+  void marcarIniciada() {
+    if (ref.read(configuracionInicioProvider) == null) {
+      throw StateError('No se puede iniciar sin configuración de inicio');
+    }
+    state = true;
+  }
+
+  /// Libera la actividad: el entrenamiento terminó o se canceló.
+  void marcarTerminada() => state = false;
+}
+
+final actividadIniciadaProvider =
+    NotifierProvider<ActividadIniciadaNotifier, bool>(
+      ActividadIniciadaNotifier.new,
+    );

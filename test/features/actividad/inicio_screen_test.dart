@@ -10,7 +10,8 @@ import 'package:traza/features/actividad/presentation/widgets/chips_tipo_activid
 import 'package:traza/features/actividad/presentation/widgets/seccion_iniciar_entrenamiento.dart';
 
 /// Pruebas de la pantalla de inicio: su diseño (SCRUM-91), los chips de tipo
-/// de actividad (SCRUM-92) y la configuración de inicio (SCRUM-93).
+/// de actividad (SCRUM-92), la configuración de inicio (SCRUM-93) y el cambio
+/// de actividad solo antes de iniciar (SCRUM-94).
 void main() {
   group('diseño de la pantalla', () {
     testWidgets('muestra la cabecera del prototipo', (tester) async {
@@ -184,13 +185,13 @@ void main() {
 
       expect(_seleccionada(tester)?.nombre, 'Correr');
       expect(_configuracion(tester), isNull);
-      expect(find.text('Inicia sesión para empezar a entrenar.'), findsOneWidget);
+      expect(find.text(_avisoSinSesion), findsOneWidget);
     });
 
     testWidgets('con sesión no muestra el aviso', (tester) async {
       await _montar(tester);
 
-      expect(find.text('Inicia sesión para empezar a entrenar.'), findsNothing);
+      expect(find.text(_avisoSinSesion), findsNothing);
     });
 
     testWidgets('sin actividad elegida no hay configuración ni aviso', (
@@ -199,7 +200,76 @@ void main() {
       await _montar(tester, repositorio: _RepositorioFalso([]));
 
       expect(_configuracion(tester), isNull);
-      expect(find.text('Inicia sesión para empezar a entrenar.'), findsNothing);
+      expect(find.text(_avisoSinSesion), findsNothing);
+    });
+  });
+
+  group('cambio de actividad antes de iniciar', () {
+    testWidgets('antes de iniciar, otro chip reemplaza la actividad y la '
+        'configuración que se usará', (tester) async {
+      await _montar(tester);
+
+      await tester.tap(_chip('Trote'));
+      await tester.pump();
+
+      expect(_seleccionada(tester)?.nombre, 'Trote');
+      expect(_configuracion(tester)?.tipoActividadId, 'id-trote');
+    });
+
+    testWidgets('con el entrenamiento iniciado la actividad no cambia', (
+      tester,
+    ) async {
+      await _montar(tester);
+      _iniciada(tester).marcarIniciada();
+      await tester.pump();
+
+      await tester.tap(_chip('Caminar'));
+      await tester.pump();
+
+      expect(_seleccionada(tester)?.nombre, 'Correr');
+      expect(_configuracion(tester)?.tipoActividadId, 'id-correr');
+    });
+
+    testWidgets('con el entrenamiento iniciado los chips se deshabilitan y la '
+        'pantalla lo explica', (tester) async {
+      await _montar(tester);
+      _iniciada(tester).marcarIniciada();
+      await tester.pump();
+
+      expect(find.text(_avisoEnCurso), findsOneWidget);
+      for (final nombre in ['Correr', 'Trote', 'Caminar']) {
+        final chip = tester.widget<InkWell>(
+          find.ancestor(of: _chip(nombre), matching: find.byType(InkWell)),
+        );
+        expect(chip.onTap, isNull, reason: nombre);
+      }
+    });
+
+    testWidgets('al terminar el entrenamiento se puede volver a cambiar', (
+      tester,
+    ) async {
+      await _montar(tester);
+      _iniciada(tester).marcarIniciada();
+      await tester.pump();
+      _iniciada(tester).marcarTerminada();
+      await tester.pump();
+
+      await tester.tap(_chip('Caminar'));
+      await tester.pump();
+
+      expect(_seleccionada(tester)?.nombre, 'Caminar');
+      expect(find.text(_avisoEnCurso), findsNothing);
+    });
+
+    testWidgets('no se puede marcar como iniciada sin configuración de '
+        'inicio', (tester) async {
+      await _montar(
+        tester,
+        repositorio: _RepositorioFalso(TipoActividad.catalogoLocal),
+      );
+
+      expect(() => _iniciada(tester).marcarIniciada(), throwsStateError);
+      expect(_contenedor(tester).read(actividadIniciadaProvider), isFalse);
     });
   });
 
@@ -259,6 +329,10 @@ void main() {
     });
   });
 }
+
+const _avisoSinSesion = 'Inicia sesión para empezar a entrenar.';
+const _avisoEnCurso =
+    'Hay un entrenamiento en curso: no puedes cambiar la actividad.';
 
 const _catalogo = [
   TipoActividad(id: 'id-correr', nombre: 'Correr'),
@@ -324,6 +398,11 @@ TipoActividad? _seleccionada(WidgetTester tester) =>
 /// La configuración de inicio, leída del mismo [ProviderScope].
 ConfiguracionInicio? _configuracion(WidgetTester tester) =>
     _contenedor(tester).read(configuracionInicioProvider);
+
+/// Lo que usará el flujo de inicio (SCRUM-96) para marcar y liberar el
+/// entrenamiento en curso.
+ActividadIniciadaNotifier _iniciada(WidgetTester tester) =>
+    _contenedor(tester).read(actividadIniciadaProvider.notifier);
 
 FilledButton _botonIniciar(WidgetTester tester) =>
     tester.widget<FilledButton>(find.byType(FilledButton));

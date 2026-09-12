@@ -7,7 +7,8 @@ import '../../domain/tipo_actividad.dart';
 import '../actividad_providers.dart';
 
 /// Fila de chips para elegir el tipo de actividad (`.activity-chip-row` del
-/// prototipo). Solo puede haber uno marcado a la vez.
+/// prototipo). Solo puede haber uno marcado a la vez, y con un entrenamiento
+/// en curso no se pueden tocar (SCRUM-94).
 class ChipsTipoActividad extends ConsumerWidget {
   const ChipsTipoActividad({super.key});
 
@@ -15,6 +16,7 @@ class ChipsTipoActividad extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogo = ref.watch(tiposActividadProvider);
     final seleccionada = ref.watch(actividadSeleccionadaProvider);
+    final iniciada = ref.watch(actividadIniciadaProvider);
 
     return switch (catalogo) {
       AsyncData() when catalogo.requireValue.isEmpty => const _Aviso(
@@ -28,9 +30,11 @@ class ChipsTipoActividad extends ConsumerWidget {
               child: _Chip(
                 tipo: tipo,
                 seleccionado: tipo == seleccionada,
-                onTap: () => ref
-                    .read(actividadSeleccionadaProvider.notifier)
-                    .seleccionar(tipo),
+                onTap: iniciada
+                    ? null
+                    : () => ref
+                          .read(actividadSeleccionadaProvider.notifier)
+                          .seleccionar(tipo),
               ),
             ),
           ],
@@ -54,6 +58,9 @@ class ChipsTipoActividad extends ConsumerWidget {
 }
 
 /// Un chip (`.activity-chip`); marcado usa el estilo `.activity-chip.on`.
+///
+/// Sin [onTap] queda deshabilitado. El marcado conserva su color para que se
+/// vea con qué actividad se está entrenando.
 class _Chip extends StatelessWidget {
   const _Chip({
     required this.tipo,
@@ -63,12 +70,15 @@ class _Chip extends StatelessWidget {
 
   final TipoActividad tipo;
   final bool seleccionado;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final habilitado = onTap != null;
+
     return Semantics(
       button: true,
+      enabled: habilitado,
       selected: seleccionado,
       child: Material(
         color: seleccionado ? AppColors.primary : AppColors.bgAlt,
@@ -86,7 +96,11 @@ class _Chip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
-                color: seleccionado ? Colors.white : AppColors.ink2,
+                color: seleccionado
+                    ? Colors.white
+                    : habilitado
+                    ? AppColors.ink2
+                    : AppColors.ink3,
               ),
             ),
           ),

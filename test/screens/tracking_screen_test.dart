@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
+import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
 import 'package:traza/widgets/cronometro_entrenamiento.dart';
@@ -10,6 +11,7 @@ import 'package:traza/widgets/estadisticas_entrenamiento.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 
 void main() {
@@ -24,6 +26,7 @@ void main() {
       overrides: [
         relojProvider.overrideWithValue(reloj.call),
         fuenteUbicacionProvider.overrideWithValue(fuente),
+        proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
       ],
     );
     addTearDown(container.dispose);

@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/punto_gps.dart';
+import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
+import 'package:traza/widgets/mapa_recorrido.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/proveedor_tiles_falso.dart';
 
 void main() {
   late FuenteUbicacionFalsa fuente;
@@ -15,14 +18,17 @@ void main() {
     addTearDown(() => fuente.cerrar());
   });
 
-  Future<void> montar(WidgetTester tester) async {
+  Future<void> montar(WidgetTester tester, {Widget? contenido}) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [fuenteUbicacionProvider.overrideWithValue(fuente)],
-        child: const MaterialApp(
+        overrides: [
+          fuenteUbicacionProvider.overrideWithValue(fuente),
+          proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        ],
+        child: MaterialApp(
           home: Scaffold(
             backgroundColor: Colors.black,
-            body: Column(children: [MapaEntrenamiento()]),
+            body: Column(children: [MapaEntrenamiento(contenido: contenido)]),
           ),
         ),
       ),
@@ -54,37 +60,23 @@ void main() {
     expect(colorDelPunto(tester), isNot(const Color(0xFFD7F204)));
   });
 
-  testWidgets('con posición enseña las coordenadas y enciende la píldora',
+  testWidgets('con posición quita la nota y enciende la píldora',
       (tester) async {
     await montar(tester);
 
-    await emitir(tester, puntoDePrueba(latitud: 6.23112, longitud: -75.61051));
+    await emitir(tester, puntoDePrueba());
 
     expect(find.byKey(MapaEntrenamiento.claveNota), findsNothing);
-    expect(find.text('6.23112, -75.61051'), findsOneWidget);
-    expect(find.text('± 8 m'), findsOneWidget);
     expect(find.text('Ubicación en vivo'), findsOneWidget);
     expect(colorDelPunto(tester), const Color(0xFFD7F204));
   });
 
-  testWidgets('cada posición nueva reemplaza a la anterior', (tester) async {
+  testWidgets('por defecto dibuja el mapa del recorrido', (tester) async {
     await montar(tester);
+    await emitir(tester, puntoDePrueba());
 
-    await emitir(tester, puntoDePrueba(latitud: 6.23112, longitud: -75.61051));
-    await emitir(tester, puntoDePrueba(latitud: 6.23200, longitud: -75.61100));
-
-    expect(find.text('6.23112, -75.61051'), findsNothing);
-    expect(find.text('6.23200, -75.61100'), findsOneWidget);
-  });
-
-  testWidgets('sin precisión reportada solo muestra las coordenadas',
-      (tester) async {
-    await montar(tester);
-
-    await emitir(tester, puntoDePrueba(precisionMetros: null));
-
-    expect(find.byKey(MapaEntrenamiento.claveCoordenadas), findsOneWidget);
-    expect(find.textContaining(' m'), findsNothing);
+    expect(find.byType(MapaRecorrido), findsOneWidget);
+    expect(find.byKey(MapaRecorrido.claveMarcador), findsOneWidget);
   });
 
   testWidgets('si la fuente falla a mitad de la actividad lo avisa',
@@ -99,31 +91,15 @@ void main() {
     expect(find.text('No se pudo obtener tu ubicación.'), findsOneWidget);
   });
 
-  testWidgets('el mapa que le pasen ocupa el hueco en lugar del texto',
-      (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [fuenteUbicacionProvider.overrideWithValue(fuente)],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: Column(
-              children: [
-                MapaEntrenamiento(
-                  contenido: ColoredBox(
-                    key: Key('mapa-real'),
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+  testWidgets('el contenido que le pasen reemplaza al mapa', (tester) async {
+    await montar(
+      tester,
+      contenido: const ColoredBox(key: Key('otro-mapa'), color: Colors.green),
     );
     await emitir(tester, puntoDePrueba());
 
-    expect(find.byKey(const Key('mapa-real')), findsOneWidget);
-    expect(find.byKey(MapaEntrenamiento.claveCoordenadas), findsNothing);
+    expect(find.byKey(const Key('otro-mapa')), findsOneWidget);
+    expect(find.byType(MapaRecorrido), findsNothing);
   });
 
   testWidgets('al salir de la pantalla cierra la captura', (tester) async {

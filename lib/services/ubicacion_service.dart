@@ -37,7 +37,7 @@ class UbicacionGeolocator implements FuenteUbicacion {
   const UbicacionGeolocator();
 
   @override
-  Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion) {
+  Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion) async* {
     final ajustes = LocationSettings(
       accuracy: configuracion.altaPrecision
           ? LocationAccuracy.best
@@ -45,13 +45,24 @@ class UbicacionGeolocator implements FuenteUbicacion {
       distanceFilter: configuracion.distanciaMinimaMetros,
     );
 
-    return Geolocator.getPositionStream(locationSettings: ajustes).map(
-      (posicion) => PuntoGps(
+    // Primero una lectura puntual y después el stream continuo.
+    //
+    // No es solo por entregar el primer fix cuanto antes: geolocator en
+    // Android descarta en silencio un getPositionStream que se abra
+    // antes de que el plugin termine de enlazar su servicio (ocurre en
+    // los primeros ~3 s tras arrancar la app; el stream se queda mudo,
+    // sin datos ni error). getCurrentPosition no depende de ese servicio,
+    // y cuando resuelve el servicio ya está enlazado.
+    yield _aPunto(
+      await Geolocator.getCurrentPosition(locationSettings: ajustes),
+    );
+    yield* Geolocator.getPositionStream(locationSettings: ajustes).map(_aPunto);
+  }
+
+  static PuntoGps _aPunto(Position posicion) => PuntoGps(
         latitud: posicion.latitude,
         longitud: posicion.longitude,
         capturadoEn: posicion.timestamp,
         precisionMetros: posicion.accuracy,
-      ),
-    );
-  }
+      );
 }

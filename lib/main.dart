@@ -12,6 +12,33 @@ Future<void> main() async {
   runApp(MyApp());
 }
 
+const _morado = Color(0xFF5F3DC4);
+const _bordeCampo = Color(0xFFE3E3E8);
+const _error = Color(0xFFD93025);
+
+OutlineInputBorder _borde(Color color, [double grosor = 1]) {
+  return OutlineInputBorder(
+    borderRadius: BorderRadius.circular(10),
+    borderSide: BorderSide(color: color, width: grosor),
+  );
+}
+
+// Tema global: todo TextFormField y botón de la app hereda estos estilos,
+// así login y registro se ven iguales sin repetir decoración en cada pantalla.
+final _tema = ThemeData(
+  colorScheme: .fromSeed(seedColor: _morado, primary: _morado, error: _error),
+  scaffoldBackgroundColor: Colors.white,
+  inputDecorationTheme: InputDecorationTheme(
+    hintStyle: const TextStyle(color: Color(0xFF9A9AA2), fontSize: 15),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: _borde(_bordeCampo),
+    enabledBorder: _borde(_bordeCampo),
+    focusedBorder: _borde(_morado, 1.5),
+    errorBorder: _borde(_error),
+    focusedErrorBorder: _borde(_error, 1.5),
+  ),
+);
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -19,25 +46,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
+      title: 'TRAZA',
+      theme: _tema,
       home: const RegisterScreen(),
     );
   }

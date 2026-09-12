@@ -44,23 +44,10 @@ final actividadSeleccionadaProvider =
 /// (SCRUM-93): la del tipo elegido en los chips, o null si con lo elegido no
 /// se puede iniciar (ver [ConfiguracionInicio.para]).
 ///
-/// La consume la pantalla del entrenamiento en curso de Aaron
-/// (`TrackingScreen`, que hoy solo existe en `develop`). Al traer `develop` a
-/// esta rama falta registrar la ruta en `app_router.dart`:
-///
-/// ```dart
-/// GoRoute(
-///   path: Rutas.tracking,
-///   builder: (context, state) => Consumer(
-///     builder: (context, ref, _) => TrackingScreen(
-///       nombreActividad: ref.watch(configuracionInicioProvider)!.nombreActividad,
-///     ),
-///   ),
-/// ),
-/// ```
-///
-/// El `!` es seguro porque el botón "Iniciar actividad" (SCRUM-96) solo debe
-/// navegar a esa ruta cuando este provider no es null.
+/// La usan la ruta `/tracking` (`TrackingConActividadElegida`), que muestra la
+/// actividad en la pantalla del entrenamiento en curso de Aaron, y el flujo de
+/// inicio (SCRUM-99), que crea el entrenamiento con `tipoActividadId` y guarda
+/// el id nuevo en `entrenamientoActualProvider`.
 final configuracionInicioProvider = Provider<ConfiguracionInicio?>(
   (ref) => ConfiguracionInicio.para(ref.watch(actividadSeleccionadaProvider)),
 );
@@ -71,9 +58,10 @@ final configuracionInicioProvider = Provider<ConfiguracionInicio?>(
 /// marca al arrancar y la libera cuando el entrenamiento termina:
 ///
 /// ```dart
-/// // SCRUM-96, al pulsar "Iniciar actividad":
+/// // SCRUM-96, al pulsar "Iniciar actividad". Con `push`, y no `go`, la
+/// // pantalla vuelve al inicio al finalizar o cancelar (usa `maybePop`):
 /// ref.read(actividadIniciadaProvider.notifier).marcarIniciada();
-/// context.go(Rutas.tracking);
+/// context.push(Rutas.tracking);
 ///
 /// // Al finalizar o cancelar (`TrackingScreen.onFinalizar` y `onCancelar`):
 /// ref.read(actividadIniciadaProvider.notifier).marcarTerminada();

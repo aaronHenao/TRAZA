@@ -273,6 +273,72 @@ void main() {
     });
   });
 
+  group('validación del flujo de selección (SCRUM-95)', () {
+    // Recorren la selección tal como la vive el usuario, de principio a fin.
+    //
+    // Pendiente al traer `develop` (parte B de SCRUM-93): comprobar también
+    // que la pantalla del entrenamiento en curso (`TrackingScreen`, de Aaron)
+    // muestre la actividad elegida. Hoy esa pantalla no existe en esta rama.
+
+    testWidgets('se elige, se cambia antes de iniciar y al iniciar se aplica '
+        'la configuración elegida', (tester) async {
+      await _montar(tester);
+
+      // 1. La actividad seleccionada se registra: Correr viene marcado.
+      expect(_seleccionada(tester)?.nombre, 'Correr');
+      expect(_enLaSeccion('Correr'), findsOneWidget);
+
+      // 2. El cambio antes de iniciar actualiza la selección.
+      await tester.tap(_chip('Trote'));
+      await tester.pump();
+      expect(_seleccionada(tester)?.nombre, 'Trote');
+      expect(_enLaSeccion('Trote'), findsOneWidget);
+
+      // 3. Al iniciar se aplica la configuración de lo elegido...
+      _iniciada(tester).marcarIniciada();
+      await tester.pump();
+      const trote = ConfiguracionInicio(
+        tipoActividadId: 'id-trote',
+        nombreActividad: 'Trote',
+      );
+      expect(_configuracion(tester), trote);
+
+      // ...y no cambia mientras dura el entrenamiento.
+      await tester.tap(_chip('Caminar'));
+      await tester.pump();
+      expect(_seleccionada(tester)?.nombre, 'Trote');
+      expect(_configuracion(tester), trote);
+      expect(_enLaSeccion('Trote'), findsOneWidget);
+
+      // Al terminar, la actividad se puede volver a cambiar.
+      _iniciada(tester).marcarTerminada();
+      await tester.pump();
+      await tester.tap(_chip('Caminar'));
+      await tester.pump();
+      expect(_seleccionada(tester)?.nombre, 'Caminar');
+    });
+
+    testWidgets('al iniciar se aplica la configuración del último chip '
+        'elegido', (tester) async {
+      await _montar(tester);
+
+      await tester.tap(_chip('Trote'));
+      await tester.pump();
+      await tester.tap(_chip('Caminar'));
+      await tester.pump();
+      _iniciada(tester).marcarIniciada();
+      await tester.pump();
+
+      expect(
+        _configuracion(tester),
+        const ConfiguracionInicio(
+          tipoActividadId: 'id-caminar',
+          nombreActividad: 'Caminar',
+        ),
+      );
+    });
+  });
+
   group('sección para iniciar el entrenamiento', () {
     testWidgets('con una actividad la muestra y habilita el botón', (
       tester,

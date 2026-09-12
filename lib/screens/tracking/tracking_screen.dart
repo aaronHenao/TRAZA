@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/cronometro_provider.dart';
+import '../../services/recorrido_provider.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/controles_entrenamiento.dart';
 import '../../widgets/cronometro_entrenamiento.dart';
@@ -77,16 +78,26 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     _mostrarAviso(pausado ? 'Actividad en pausa' : 'Actividad reanudada');
   }
 
-  void _finalizar() {
+  Future<void> _finalizar() async {
     ref.read(cronometroProvider.notifier).detener();
     final estado = ref.read(cronometroProvider);
+
+    // Los puntos se acumularon en local durante la actividad; ahora se
+    // envían todos de una vez (SCRUM-110).
+    final sincronizado =
+        await ref.read(recorridoProvider.notifier).sincronizar();
+    if (!mounted) return;
 
     final onFinalizar = widget.onFinalizar;
     if (onFinalizar != null) {
       onFinalizar(estado.transcurrido);
       return;
     }
-    _mostrarAviso('Entrenamiento finalizado · ${estado.tiempoFormateado}');
+    _mostrarAviso(
+      sincronizado
+          ? 'Entrenamiento finalizado · ${estado.tiempoFormateado}'
+          : 'Entrenamiento finalizado · no se pudo guardar el recorrido',
+    );
   }
 
   Future<void> _cancelar() async {
@@ -141,6 +152,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Mantiene vivo el registro de puntos mientras la pantalla exista,
+    // aunque nadie más lo observe (por ejemplo, con un mapa inyectado).
+    ref.listen(recorridoProvider, (_, _) {});
+
     final pausado = ref.watch(
       cronometroProvider.select((estado) => estado.estaPausado),
     );

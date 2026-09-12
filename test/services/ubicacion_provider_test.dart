@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/punto_gps.dart';
+import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/services/ubicacion_service.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/reloj_falso.dart';
 
 void main() {
   late FuenteUbicacionFalsa fuente;
@@ -14,7 +16,10 @@ void main() {
     fuente = FuenteUbicacionFalsa();
     addTearDown(() => fuente.cerrar());
     container = ProviderContainer(
-      overrides: [fuenteUbicacionProvider.overrideWithValue(fuente)],
+      overrides: [
+        fuenteUbicacionProvider.overrideWithValue(fuente),
+        relojProvider.overrideWithValue(RelojFalso().call),
+      ],
     );
     addTearDown(container.dispose);
   });
@@ -45,6 +50,34 @@ void main() {
       fuente.emitir(segundo);
       await pumpEventQueue();
       expect(container.read(posicionEnVivoProvider).value, segundo);
+    });
+
+    test('descarta las lecturas más imprecisas que el tope configurado',
+        () async {
+      observar();
+
+      fuente.emitir(puntoDePrueba(latitud: 6.9, precisionMetros: 200));
+      await pumpEventQueue();
+      expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
+
+      fuente.emitir(puntoDePrueba(latitud: 6.2311, precisionMetros: 12));
+      await pumpEventQueue();
+      expect(container.read(posicionEnVivoProvider).value!.latitud, 6.2311);
+    });
+
+    test('descarta la ultima posicion conocida si es vieja', () async {
+      observar();
+
+      fuente.emitir(puntoDePrueba(
+        latitud: 6.9,
+        capturadoEn: DateTime(2026, 1, 1, 7, 30),
+      ));
+      await pumpEventQueue();
+      expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
+
+      fuente.emitir(puntoDePrueba(latitud: 6.2311));
+      await pumpEventQueue();
+      expect(container.read(posicionEnVivoProvider).value!.latitud, 6.2311);
     });
 
     test('si la fuente falla expone el error', () async {
@@ -90,6 +123,7 @@ void main() {
         overrides: [
           fuenteUbicacionProvider.overrideWithValue(fuente),
           configuracionRastreoProvider.overrideWithValue(configuracion),
+          relojProvider.overrideWithValue(RelojFalso().call),
         ],
       );
       addTearDown(otro.dispose);

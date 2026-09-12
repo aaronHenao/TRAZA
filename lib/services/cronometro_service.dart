@@ -1,8 +1,7 @@
 import '../models/estado_cronometro.dart';
+import 'reloj_provider.dart';
 
-/// Firma del reloj que usa el cronómetro. Se inyecta para poder
-/// controlar el tiempo desde las pruebas.
-typedef Reloj = DateTime Function();
+export 'reloj_provider.dart' show Reloj;
 
 /// Lógica del cronómetro de un entrenamiento (SCRUM-104).
 ///

@@ -13,8 +13,8 @@ import '../theme/traza_theme.dart';
 ///
 /// Se dibuja cuando llega la primera lectura de [posicionEnVivoProvider]
 /// y, a partir de ahí, mueve el marcador y centra la cámara en cada
-/// lectura nueva. El trazo del recorrido llega con SCRUM-110, cuando
-/// existan los puntos acumulados.
+/// lectura nueva. El trazo del recorrido es de otra HU: los puntos
+/// registrados están en `recorridoProvider`.
 class MapaRecorrido extends ConsumerStatefulWidget {
   const MapaRecorrido({super.key});
 

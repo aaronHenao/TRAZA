@@ -5,11 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/services/mapa_provider.dart';
+import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/mapa_recorrido.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
+import '../utiles/reloj_falso.dart';
 
 void main() {
   late FuenteUbicacionFalsa fuente;
@@ -21,13 +23,20 @@ void main() {
     addTearDown(() => fuente.cerrar());
   });
 
+  late ProviderContainer container;
+
   Future<void> montar(WidgetTester tester) async {
+    container = ProviderContainer(
+      overrides: [
+        fuenteUbicacionProvider.overrideWithValue(fuente),
+        proveedorTilesProvider.overrideWithValue(tiles),
+        relojProvider.overrideWithValue(RelojFalso().call),
+      ],
+    );
+    addTearDown(container.dispose);
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          fuenteUbicacionProvider.overrideWithValue(fuente),
-          proveedorTilesProvider.overrideWithValue(tiles),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: const MaterialApp(
           home: Scaffold(
             body: SizedBox(width: 375, height: 500, child: MapaRecorrido()),

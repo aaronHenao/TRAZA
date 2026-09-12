@@ -2,15 +2,18 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/punto_gps.dart';
 
-/// Parámetros con los que se abre el stream de posiciones.
+/// Frecuencia y calidad con las que se procesa la ubicación (SCRUM-110).
 ///
-/// Los valores definitivos (cada cuántos metros se procesa una lectura,
-/// con qué precisión) son tema de SCRUM-110; aquí solo se deja el punto
-/// de configuración con un valor provisional.
+/// Se filtra por distancia, no por tiempo: corriendo a 12 km/h (~3 m/s)
+/// llega una lectura cada 1-2 s, y parado no llega ninguna. Sin ese
+/// filtro el GPS "baila" 2-3 m en reposo y el recorrido acumula puntos
+/// fantasma.
 class ConfiguracionRastreo {
   const ConfiguracionRastreo({
-    this.distanciaMinimaMetros = 0,
+    this.distanciaMinimaMetros = 5,
     this.altaPrecision = true,
+    this.precisionMaximaMetros = 50,
+    this.antiguedadMaxima = const Duration(seconds: 30),
   });
 
   /// Desplazamiento mínimo entre dos lecturas para que el sistema
@@ -19,6 +22,36 @@ class ConfiguracionRastreo {
 
   /// `true` pide la mejor precisión disponible (más batería).
   final bool altaPrecision;
+
+  /// Radio de error máximo aceptado. Una lectura peor que esto (típico
+  /// al arrancar bajo techo) pondría el punto a cuadras de distancia,
+  /// así que se descarta. `null` = aceptar todo.
+  final double? precisionMaximaMetros;
+
+  /// Edad máxima de una lectura. Al abrir el stream, Android entrega
+  /// primero la última posición conocida — que puede ser de hace media
+  /// hora y a kilómetros de donde arranca la actividad. `null` = aceptar
+  /// todo.
+  final Duration? antiguedadMaxima;
+
+  /// `true` si la lectura es lo bastante precisa y reciente para usarla.
+  bool acepta(PuntoGps punto, {required DateTime ahora}) {
+    return _precisionAceptable(punto) && _recienteA(punto, ahora);
+  }
+
+  bool _precisionAceptable(PuntoGps punto) {
+    final maxima = precisionMaximaMetros;
+    final precision = punto.precisionMetros;
+    if (maxima == null || precision == null) return true;
+    return precision <= maxima;
+  }
+
+  bool _recienteA(PuntoGps punto, DateTime ahora) {
+    final maxima = antiguedadMaxima;
+    if (maxima == null) return true;
+    // Una marca "en el futuro" (relojes desfasados) no es una lectura vieja.
+    return ahora.difference(punto.capturadoEn) <= maxima;
+  }
 }
 
 /// De dónde salen las posiciones del usuario.

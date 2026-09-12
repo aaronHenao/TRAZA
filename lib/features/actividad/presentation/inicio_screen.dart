@@ -1,28 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/widgets/traza_top_bar.dart';
+import 'actividad_providers.dart';
+import 'widgets/chips_tipo_actividad.dart';
 import 'widgets/seccion_iniciar_entrenamiento.dart';
 
 /// Pantalla de inicio (`screen-home` del prototipo): el usuario elige su
 /// actividad y arranca el entrenamiento.
 ///
-/// SCRUM-91 arma la estructura. Faltan, a propósito:
-/// - los chips de tipo de actividad, que llegan en SCRUM-92 entre la cabecera
-///   y la sección de inicio;
-/// - la actividad elegida (SCRUM-92) y la acción de "Iniciar actividad"
-///   (SCRUM-96), que hoy se pasan en null.
-class InicioScreen extends StatelessWidget {
+/// La estructura es de SCRUM-91 y los chips con la actividad elegida, de
+/// SCRUM-92. Falta a propósito la acción de "Iniciar actividad", que se
+/// conecta en SCRUM-96 y hoy se pasa en null.
+class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final actividad = ref.watch(actividadSeleccionadaProvider);
+
+    return Scaffold(
       body: SafeArea(
         child: Padding(
           // `.home-wrap` del prototipo.
-          padding: EdgeInsets.fromLTRB(
+          padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
             AppSpacing.sm,
             AppSpacing.lg,
@@ -31,11 +34,13 @@ class InicioScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Cabecera(),
-              SizedBox(height: 24),
+              const _Cabecera(),
+              const SizedBox(height: 24),
+              const ChipsTipoActividad(),
+              const SizedBox(height: 24),
               Expanded(
                 child: SeccionIniciarEntrenamiento(
-                  actividad: null,
+                  actividad: actividad?.nombre,
                   onIniciar: null,
                 ),
               ),

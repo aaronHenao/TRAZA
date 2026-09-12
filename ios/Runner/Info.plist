@@ -68,5 +68,11 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>TRAZA usa tu ubicación para mostrar tu recorrido y calcular la distancia mientras entrenas.</string>
+	<!-- Rastreo con la pantalla bloqueada durante una actividad iniciada
+	     con la app abierta. No requiere el permiso "Siempre". -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 </dict>
 </plist>

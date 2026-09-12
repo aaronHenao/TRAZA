@@ -9,8 +9,15 @@ import 'perfil_state.dart';
 /// cada uno (SCRUM-87 y SCRUM-88), el guardado en la tabla `objetivos`
 /// (SCRUM-89) y la precarga de los que ya estaban guardados (SCRUM-90).
 class PerfilNotifier extends Notifier<PerfilState> {
+  /// Si el provider sigue vivo. Riverpod 2 no trae `ref.mounted`, así que se
+  /// lleva a mano: evita tocar el estado si el provider se destruyó mientras
+  /// se esperaba a Supabase.
+  bool _activo = false;
+
   @override
   PerfilState build() {
+    _activo = true;
+    ref.onDispose(() => _activo = false);
     // La carga arranca en cuanto el estado inicial queda listo.
     Future.microtask(cargarObjetivos);
     return PerfilState.inicial();
@@ -18,22 +25,23 @@ class PerfilNotifier extends Notifier<PerfilState> {
 
   /// Trae los objetivos que el usuario ya tenía y precarga la pantalla.
   Future<void> cargarObjetivos() async {
+    if (!_activo) return;
     if (state.carga != EstadoCarga.cargando) {
       state = state.copyWith(carga: EstadoCarga.cargando);
     }
 
     try {
       final guardados = await ref.read(objetivosRepositoryProvider).cargar();
-      if (!ref.mounted) return;
+      if (!_activo) return;
       state = state.conObjetivosGuardados(guardados);
     } on SesionRequeridaException {
       // Sin sesión no hay nada que precargar: se muestran los valores por
       // defecto y el guardado ya avisa por su cuenta.
-      if (!ref.mounted) return;
+      if (!_activo) return;
       state = state.copyWith(carga: EstadoCarga.listo);
     } catch (error) {
       debugPrint('No se pudieron cargar los objetivos: $error');
-      if (!ref.mounted) return;
+      if (!_activo) return;
       state = state.copyWith(carga: EstadoCarga.error);
     }
   }
@@ -72,7 +80,7 @@ class PerfilNotifier extends Notifier<PerfilState> {
       return 'No se pudieron guardar tus objetivos. '
           'Revisa tu conexión e inténtalo de nuevo.';
     } finally {
-      if (ref.mounted) {
+      if (_activo) {
         state = state.copyWith(guardando: false);
       }
     }

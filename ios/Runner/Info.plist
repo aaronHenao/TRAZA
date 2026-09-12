@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TRAZA usa tu ubicación para mostrar tu recorrido y calcular la distancia mientras entrenas.</string>
 </dict>
 </plist>

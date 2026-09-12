@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ubicación durante la actividad (SCRUM-108). Solo "mientras la app
+         está en uso": rastrear con la pantalla apagada requeriría
+         ACCESS_BACKGROUND_LOCATION y un servicio en primer plano. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:label="traza"
         android:name="${applicationName}"

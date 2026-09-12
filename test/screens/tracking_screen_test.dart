@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
+import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
 import 'package:traza/widgets/cronometro_entrenamiento.dart';
 import 'package:traza/widgets/estadisticas_entrenamiento.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
 
+import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/reloj_falso.dart';
 
 void main() {
@@ -16,8 +18,13 @@ void main() {
 
   setUp(() {
     reloj = RelojFalso();
+    final fuente = FuenteUbicacionFalsa();
+    addTearDown(() => fuente.cerrar());
     container = ProviderContainer(
-      overrides: [relojProvider.overrideWithValue(reloj.call)],
+      overrides: [
+        relojProvider.overrideWithValue(reloj.call),
+        fuenteUbicacionProvider.overrideWithValue(fuente),
+      ],
     );
     addTearDown(container.dispose);
   });

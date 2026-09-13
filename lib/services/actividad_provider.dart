@@ -59,11 +59,12 @@ final configuracionInicioProvider = Provider<ConfiguracionInicio?>(
 ///
 /// ```dart
 /// // SCRUM-96, al pulsar "Iniciar actividad". Con `push`, y no `go`, la
-/// // pantalla vuelve al inicio al finalizar o cancelar (usa `maybePop`):
+/// // pantalla vuelve al inicio al cancelar (usa `maybePop`):
 /// ref.read(actividadIniciadaProvider.notifier).marcarIniciada();
 /// context.push('/tracking');
 ///
-/// // Al finalizar o cancelar (`TrackingScreen.onFinalizar` y `onCancelar`):
+/// // Al cancelar (`TrackingScreen.onCancelar`). Al finalizar ya la libera el
+/// // cierre del entrenamiento (SCRUM-121):
 /// ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
 /// ```
 class ActividadIniciadaNotifier extends Notifier<bool> {

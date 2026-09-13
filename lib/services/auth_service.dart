@@ -12,7 +12,12 @@ class RegistroException implements Exception {
 }
 
 class AuthService {
-  final SupabaseClient _client = Supabase.instance.client;
+  /// En la app se usa el cliente real. Las pruebas pasan uno simulado, porque
+  /// ahí Supabase no está inicializado.
+  AuthService({GoTrueClient? auth})
+    : _auth = auth ?? Supabase.instance.client.auth;
+
+  final GoTrueClient _auth;
 
   /// Crea la cuenta en Supabase Auth. Devuelve `true` si el usuario tiene que
   /// confirmar el correo antes de poder iniciar sesión.
@@ -26,7 +31,7 @@ class AuthService {
     required String password,
   }) async {
     try {
-      final respuesta = await _client.auth.signUp(
+      final respuesta = await _auth.signUp(
         email: correo,
         password: password,
         data: {'full_name': nombre},

@@ -4,21 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/estado_registro.dart';
 import '../../services/registro_provider.dart';
 import '../../utils/validators.dart';
+import '../../widgets/auth_widgets.dart';
 import '../../widgets/google_logo.dart';
 import 'login_screen.dart';
-
-const _textoPrincipal = Color(0xFF16161A);
-const _textoSecundario = Color(0xFF6B6B73);
-const _verde = Color(0xFF1E9E5A);
-const _fondoPantallaGrande = Color(0xFFF0F0F3);
-const _bordeTarjeta = Color(0xFFE8E8EC);
-
-/// Ancho máximo del formulario: más ancho, los campos se vuelven incómodos.
-const _anchoFormulario = 400.0;
-
-/// Desde este tamaño se usa la tarjeta centrada en vez del diseño de celular.
-const _breakpointAncho = 600.0;
-const _breakpointAlto = 600.0;
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -111,56 +99,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     // Es el lugar para efectos de una sola vez, como alertas y navegación.
     ref.listen(registroProvider, _alCambiarRegistro);
 
-    // MediaQuery es el equivalente de las media queries de CSS: el tamaño real
-    // de la pantalla. Exige ancho Y alto para que un celular acostado (ancho
-    // pero bajito) siga usando el diseño de celular.
-    final pantalla = MediaQuery.sizeOf(context);
-    final esPantallaGrande =
-        pantalla.width >= _breakpointAncho &&
-        pantalla.height >= _breakpointAlto;
-
-    if (!esPantallaGrande) {
-      // Celular: fondo blanco de borde a borde, contenido pegado arriba.
-      return Scaffold(
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _anchoFormulario),
-                child: _formulario(context),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Tablet y computador: tarjeta blanca centrada sobre fondo gris.
-    return Scaffold(
-      backgroundColor: _fondoPantallaGrande,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Container(
-              constraints: const BoxConstraints(
-                maxWidth: _anchoFormulario + 80,
-              ),
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: _bordeTarjeta),
-              ),
-              child: _formulario(context),
-            ),
-          ),
-        ),
-      ),
-    );
+    return AuthLayout(child: _formulario(context));
   }
 
   Widget _formulario(BuildContext context) {
@@ -174,14 +113,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _Marca(),
+          const MarcaTraza(),
           const SizedBox(height: 36),
           const Text(
             'Crea tu cuenta',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w800,
-              color: _textoPrincipal,
+              color: colorTextoPrincipal,
             ),
           ),
           const SizedBox(height: 8),
@@ -190,12 +129,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             style: TextStyle(
               fontSize: 14,
               height: 1.4,
-              color: _textoSecundario,
+              color: colorTextoSecundario,
             ),
           ),
           const SizedBox(height: 28),
 
-          const _Etiqueta('Nombre completo'),
+          const EtiquetaCampo('Nombre completo'),
           TextFormField(
             controller: _nombreController,
             validator: validarNombre,
@@ -205,7 +144,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
           const SizedBox(height: 18),
 
-          const _Etiqueta('Correo electrónico'),
+          const EtiquetaCampo('Correo electrónico'),
           TextFormField(
             controller: _correoController,
             validator: validarCorreo,
@@ -215,7 +154,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
           const SizedBox(height: 18),
 
-          const _Etiqueta('Contraseña'),
+          const EtiquetaCampo('Contraseña'),
           TextFormField(
             controller: _passwordController,
             validator: validarPassword,
@@ -227,7 +166,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   _verPassword
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: _textoSecundario,
+                  color: colorTextoSecundario,
                 ),
                 onPressed: () => setState(() => _verPassword = !_verPassword),
               ),
@@ -264,7 +203,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
           const SizedBox(height: 18),
 
-          const _DivisorO(),
+          const DivisorO(),
           const SizedBox(height: 18),
 
           OutlinedButton.icon(
@@ -277,7 +216,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               minimumSize: const Size.fromHeight(48),
               shape: const StadiumBorder(),
               side: const BorderSide(color: Color(0xFFE3E3E8)),
-              foregroundColor: _textoPrincipal,
+              foregroundColor: colorTextoPrincipal,
               textStyle: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -294,7 +233,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             children: [
               const Text(
                 '¿Ya tienes cuenta? ',
-                style: TextStyle(fontSize: 14, color: _textoSecundario),
+                style: TextStyle(fontSize: 14, color: colorTextoSecundario),
               ),
               GestureDetector(
                 onTap: () => Navigator.of(context).pushReplacement(
@@ -312,58 +251,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Marca extends StatelessWidget {
-  const _Marca();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.map_outlined, color: Colors.white, size: 18),
-        ),
-        const SizedBox(width: 10),
-        const Text(
-          'TRAZA',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.4,
-            color: _textoPrincipal,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Etiqueta extends StatelessWidget {
-  const _Etiqueta(this.texto);
-
-  final String texto;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        texto,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: _textoPrincipal,
-        ),
       ),
     );
   }
@@ -397,7 +284,7 @@ class _ItemRegla extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = cumplida ? _verde : const Color(0xFF9A9AA2);
+    final color = cumplida ? colorExito : colorTextoSuave;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -415,26 +302,6 @@ class _ItemRegla extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DivisorO extends StatelessWidget {
-  const _DivisorO();
-
-  @override
-  Widget build(BuildContext context) {
-    const linea = Expanded(child: Divider(color: Color(0xFFE3E3E8)));
-
-    return const Row(
-      children: [
-        linea,
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text('o', style: TextStyle(color: Color(0xFF9A9AA2))),
-        ),
-        linea,
-      ],
     );
   }
 }

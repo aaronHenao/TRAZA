@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/google_logo.dart';
 import 'register_screen.dart';
@@ -27,6 +28,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _mostrarMensaje(String texto) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
+  }
+
+  void _onIniciarSesion() {
+    // Pinta en rojo los campos vacíos y detiene el envío (criterio 4).
+    if (!_formKey.currentState!.validate()) return;
+
+    // TODO(SCRUM-64): iniciar sesión con Supabase.
   }
 
   @override
@@ -63,6 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const EtiquetaCampo('Correo electrónico'),
               TextFormField(
                 controller: _correoController,
+                validator: validarCorreo,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
                 autofillHints: const [AutofillHints.email],
@@ -75,8 +84,11 @@ class _LoginScreenState extends State<LoginScreen> {
               const EtiquetaCampo('Contraseña'),
               TextFormField(
                 controller: _passwordController,
+                validator: validarPasswordIngreso,
                 obscureText: !_verPassword,
                 textInputAction: TextInputAction.done,
+                // Tocar "listo" en el teclado equivale a tocar el botón.
+                onFieldSubmitted: (_) => _onIniciarSesion(),
                 autofillHints: const [AutofillHints.password],
                 decoration: InputDecoration(
                   hintText: 'Tu contraseña',
@@ -105,8 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 12),
 
               FilledButton(
-                // TODO(SCRUM-63 y SCRUM-64): validar e iniciar sesión.
-                onPressed: () {},
+                onPressed: _onIniciarSesion,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   shape: const StadiumBorder(),

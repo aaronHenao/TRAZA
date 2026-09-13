@@ -96,3 +96,14 @@ String? validarPassword(String? valor) {
 
   return null;
 }
+
+/// Contraseña en el inicio de sesión: solo se exige que no esté vacía.
+///
+/// No aplica las reglas del registro: bloquearían contraseñas creadas con
+/// reglas anteriores y le darían pistas a quien intenta adivinar.
+String? validarPasswordIngreso(String? valor) {
+  if (valor == null || valor.isEmpty) {
+    return 'Ingresa tu contraseña';
+  }
+  return null;
+}

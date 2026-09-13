@@ -92,4 +92,15 @@ void main() {
       expect(validarNombre('Ana'), isNull);
     });
   });
+
+  group('Login criterio 4 — validarPasswordIngreso', () {
+    test('rechaza el campo vacío', () {
+      expect(validarPasswordIngreso(''), 'Ingresa tu contraseña');
+    });
+
+    // Decisión: el login no aplica las reglas de complejidad del registro.
+    test('no exige las reglas del registro', () {
+      expect(validarPasswordIngreso('abc'), isNull);
+    });
+  });
 }

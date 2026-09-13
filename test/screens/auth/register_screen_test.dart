@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/screens/auth/login_screen.dart';
@@ -39,8 +40,12 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
+    // El ProviderScope entrega el service falso a quien pida authServiceProvider.
     await tester.pumpWidget(
-      MaterialApp(home: RegisterScreen(authService: auth)),
+      ProviderScope(
+        overrides: [authServiceProvider.overrideWithValue(auth)],
+        child: const MaterialApp(home: RegisterScreen()),
+      ),
     );
   }
 
@@ -62,11 +67,9 @@ void main() {
     await tester.pump();
     await tester.tap(boton);
 
-    // No se usa pumpAndSettle: tras un registro exitoso el spinner del botón
-    // sigue girando detrás de la alerta y nunca "se asienta".
-    await tester.pump(); // _cargando = true
-    await tester.pump(); // responde el service
-    await tester.pump(const Duration(milliseconds: 300)); // anima la alerta
+    // Avanza hasta que no quede nada animándose. Si el spinner del botón
+    // siguiera girando detrás de la alerta, esto nunca terminaría.
+    await tester.pumpAndSettle();
   }
 
   group('Criterio 1 — registro exitoso', () {
@@ -83,8 +86,7 @@ void main() {
       expect(find.byType(LoginScreen), findsNothing);
 
       await tester.tap(find.text('Entendido'));
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
 
       expect(find.byType(LoginScreen), findsOneWidget);
     });

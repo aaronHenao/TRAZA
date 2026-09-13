@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// El correo ya pertenece a otra cuenta.
@@ -10,6 +11,10 @@ class RegistroException implements Exception {
   final String titulo;
   final String mensaje;
 }
+
+/// Cómo obtiene la app el servicio de autenticación. Las pruebas lo
+/// reemplazan con `overrideWithValue`.
+final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
 class AuthService {
   /// En la app se usa el cliente real. Las pruebas pasan uno simulado, porque

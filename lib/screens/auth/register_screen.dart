@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../services/auth_service.dart';
+import '../../models/estado_registro.dart';
+import '../../services/registro_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/google_logo.dart';
 import 'login_screen.dart';
@@ -18,24 +20,21 @@ const _anchoFormulario = 400.0;
 const _breakpointAncho = 600.0;
 const _breakpointAlto = 600.0;
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key, this.authService});
-
-  /// Solo lo pasan las pruebas. En la app queda nulo y se usa el real.
-  final AuthService? authService;
+class RegisterScreen extends ConsumerStatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _correoController = TextEditingController();
   final _passwordController = TextEditingController();
-  late final _authService = widget.authService ?? AuthService();
 
-  bool _cargando = false;
+  // Estado solo visual, que no le importa a nadie fuera de esta pantalla:
+  // se queda aquí con setState en vez de ir al notifier.
   bool _verPassword = false;
 
   @override
@@ -46,51 +45,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _onRegistrar() async {
+  void _onRegistrar() {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _cargando = true);
+    // ref.read y no ref.watch: es una acción, se ejecuta una vez al tocar.
+    ref
+        .read(registroProvider.notifier)
+        .registrar(
+          nombre: _nombreController.text.trim(),
+          correo: _correoController.text.trim(),
+          password: _passwordController.text,
+        );
+  }
 
-    try {
-      final requiereConfirmacion = await _authService.registrar(
-        nombre: _nombreController.text.trim(),
-        correo: _correoController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      if (!mounted) return;
-      await _mostrarAlerta(
-        'Cuenta creada',
-        requiereConfirmacion
-            ? 'Te enviamos un correo a ${_correoController.text.trim()}. '
-                  'Ábrelo para confirmar tu cuenta antes de iniciar sesión.'
-            : 'Ya puedes iniciar sesión con tu correo y contraseña.',
-      );
-
-      if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
-    } on CorreoYaRegistradoException {
-      if (!mounted) return;
-      _mostrarAlerta(
-        'Correo en uso',
-        'El correo ingresado ya está asociado a una cuenta',
-      );
-    } on RegistroException catch (e) {
-      if (!mounted) return;
-      _mostrarAlerta(e.titulo, e.mensaje);
-    } catch (e) {
-      // Cualquier error que no venga de Supabase. Se imprime para depurarlo.
-      debugPrint('Error inesperado al registrar: $e');
-      if (!mounted) return;
-      _mostrarAlerta(
-        'Algo salió mal',
-        'Ocurrió un error inesperado. Inténtalo de nuevo.',
-      );
-    } finally {
-      if (mounted) setState(() => _cargando = false);
+  /// Reacciona a cada cambio de fase. Se registra con `ref.listen` en build.
+  void _alCambiarRegistro(EstadoRegistro? anterior, EstadoRegistro actual) {
+    switch (actual.fase) {
+      case FaseRegistro.exito:
+        _mostrarExitoYRedirigir(actual);
+      case FaseRegistro.error:
+        _mostrarAlerta(actual.tituloError!, actual.mensajeError!);
+      case FaseRegistro.inicial || FaseRegistro.enviando:
+        break;
     }
+  }
+
+  Future<void> _mostrarExitoYRedirigir(EstadoRegistro estado) async {
+    await _mostrarAlerta(
+      'Cuenta creada',
+      estado.requiereConfirmacion
+          ? 'Te enviamos un correo a ${estado.correo}. '
+                'Ábrelo para confirmar tu cuenta antes de iniciar sesión.'
+          : 'Ya puedes iniciar sesión con tu correo y contraseña.',
+    );
+
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
   void _mostrarMensaje(String texto) {
@@ -115,6 +107,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ref.listen no redibuja: ejecuta la función cada vez que cambia el estado.
+    // Es el lugar para efectos de una sola vez, como alertas y navegación.
+    ref.listen(registroProvider, _alCambiarRegistro);
+
     // MediaQuery es el equivalente de las media queries de CSS: el tamaño real
     // de la pantalla. Exige ancho Y alto para que un celular acostado (ancho
     // pero bajito) siga usando el diseño de celular.
@@ -169,6 +165,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Widget _formulario(BuildContext context) {
     final morado = Theme.of(context).colorScheme.primary;
+    // ref.watch sí redibuja: el botón cambia a spinner mientras se envía.
+    final enviando = ref.watch(registroProvider).enviando;
 
     return Form(
       key: _formKey,
@@ -245,7 +243,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 22),
 
           FilledButton(
-            onPressed: _cargando ? null : _onRegistrar,
+            onPressed: enviando ? null : _onRegistrar,
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(48),
               shape: const StadiumBorder(),
@@ -254,7 +252,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            child: _cargando
+            child: enviando
                 ? const SizedBox.square(
                     dimension: 20,
                     child: CircularProgressIndicator(

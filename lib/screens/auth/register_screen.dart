@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../utils/validators.dart';
 import '../../widgets/google_logo.dart';
+import 'login_screen.dart';
 
 const _textoPrincipal = Color(0xFF16161A);
 const _textoSecundario = Color(0xFF6B6B73);
@@ -18,7 +19,10 @@ const _breakpointAncho = 600.0;
 const _breakpointAlto = 600.0;
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.authService});
+
+  /// Solo lo pasan las pruebas. En la app queda nulo y se usa el real.
+  final AuthService? authService;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -29,7 +33,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nombreController = TextEditingController();
   final _correoController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  late final _authService = widget.authService ?? AuthService();
 
   bool _cargando = false;
   bool _verPassword = false;
@@ -55,13 +59,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (!mounted) return;
-      _mostrarAlerta(
+      await _mostrarAlerta(
         'Cuenta creada',
         requiereConfirmacion
             ? 'Te enviamos un correo a ${_correoController.text.trim()}. '
                   'Ábrelo para confirmar tu cuenta antes de iniciar sesión.'
             : 'Ya puedes iniciar sesión con tu correo y contraseña.',
       );
+
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
     } on CorreoYaRegistradoException {
       if (!mounted) return;
       _mostrarAlerta(
@@ -290,8 +299,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 style: TextStyle(fontSize: 14, color: _textoSecundario),
               ),
               GestureDetector(
-                // TODO(SCRUM-53): navegar a la pantalla de login.
-                onTap: () => _mostrarMensaje('Pantalla de login: pendiente'),
+                onTap: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                ),
                 child: Text(
                   'Inicia sesión',
                   style: TextStyle(

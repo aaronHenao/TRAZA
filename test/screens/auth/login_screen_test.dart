@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:traza/screens/auth/forgot_password_screen.dart';
 import 'package:traza/screens/auth/login_screen.dart';
 import 'package:traza/services/auth_service.dart';
 
@@ -93,7 +94,7 @@ void main() {
       expect(find.text('Recuperar contraseña'), findsOneWidget);
     });
 
-    testWidgets('"Recuperar contraseña" cierra la alerta y lleva a recuperar', (
+    testWidgets('"Recuperar contraseña" cierra la alerta y abre la pantalla', (
       tester,
     ) async {
       cuandoIniciarSesion().thenThrow(CredencialesInvalidasException());
@@ -105,9 +106,38 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Credenciales no válidas'), findsNothing);
-      expect(find.text('Recuperar contraseña: próximamente'), findsOneWidget);
+      expect(find.byType(ForgotPasswordScreen), findsOneWidget);
+    });
+  });
 
-      await esperarSnackBar(tester);
+  group('SCRUM-65 — acceso a recuperación de contraseña', () {
+    testWidgets('el enlace abre la pantalla con el correo ya escrito', (
+      tester,
+    ) async {
+      await abrirPantalla(tester);
+
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'ana@correo.com',
+      );
+      await tester.tap(find.text('¿Olvidaste tu contraseña?'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ForgotPasswordScreen), findsOneWidget);
+      expect(find.textContaining('ana@correo.com'), findsOneWidget);
+    });
+
+    // Demuestra el push: después de volver, el login sigue en la pila.
+    testWidgets('"Volver a iniciar sesión" regresa al login', (tester) async {
+      await abrirPantalla(tester);
+
+      await tester.tap(find.text('¿Olvidaste tu contraseña?'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Volver a iniciar sesión'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ForgotPasswordScreen), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
     });
   });
 

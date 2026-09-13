@@ -6,6 +6,7 @@ import '../../services/login_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/google_logo.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -86,9 +87,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _irARecuperarPassword();
   }
 
+  /// push y no pushReplacement: desde la recuperación se puede volver al login.
   void _irARecuperarPassword() {
-    // TODO(SCRUM-65): abrir la recuperación de contraseña.
-    _mostrarMensaje('Recuperar contraseña: próximamente');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ForgotPasswordScreen(correoInicial: _correoController.text.trim()),
+      ),
+    );
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {

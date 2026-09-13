@@ -1,15 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:traza/screens/auth/login_screen.dart';
+import 'package:traza/services/auth_service.dart';
+
+/// Service falso: la pantalla cree que habla con Supabase, pero no hay red.
+class _MockAuthService extends Mock implements AuthService {}
 
 void main() {
+  late _MockAuthService auth;
+
+  setUp(() => auth = _MockAuthService());
+
+  When<Future<void>> cuandoIniciarSesion() {
+    return when(
+      () => auth.iniciarSesion(
+        correo: any(named: 'correo'),
+        password: any(named: 'password'),
+      ),
+    );
+  }
+
   Future<void> abrirPantalla(WidgetTester tester) async {
     // Tamaño de un celular: 390 x 844 puntos.
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authServiceProvider.overrideWithValue(auth)],
+        child: const MaterialApp(home: LoginScreen()),
+      ),
+    );
+  }
+
+  Future<void> llenarFormulario(WidgetTester tester) async {
+    final campos = find.byType(TextFormField);
+    await tester.enterText(campos.at(0), '  ana@correo.com  ');
+    await tester.enterText(campos.at(1), 'clave mala');
   }
 
   Future<void> tocarIniciarSesion(WidgetTester tester) async {
@@ -20,14 +50,81 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Deja que el SnackBar termine de mostrarse. Si su temporizador queda
+  /// pendiente al final, la prueba falla.
+  Future<void> esperarSnackBar(WidgetTester tester) async {
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  }
+
+  group('Criterio 1 — inicio de sesión exitoso', () {
+    testWidgets('envía el correo sin espacios y avisa que entró', (
+      tester,
+    ) async {
+      cuandoIniciarSesion().thenAnswer((_) async {});
+      await abrirPantalla(tester);
+
+      await llenarFormulario(tester);
+      await tocarIniciarSesion(tester);
+
+      verify(
+        () => auth.iniciarSesion(
+          correo: 'ana@correo.com',
+          password: 'clave mala',
+        ),
+      ).called(1);
+      expect(find.text('Sesión iniciada'), findsOneWidget);
+
+      await esperarSnackBar(tester);
+    });
+  });
+
+  group('Criterios 2 y 3 — credenciales no válidas', () {
+    testWidgets('muestra la alerta con el botón de recuperar contraseña', (
+      tester,
+    ) async {
+      cuandoIniciarSesion().thenThrow(CredencialesInvalidasException());
+      await abrirPantalla(tester);
+
+      await llenarFormulario(tester);
+      await tocarIniciarSesion(tester);
+
+      expect(find.text('Credenciales no válidas'), findsOneWidget);
+      expect(find.text('Recuperar contraseña'), findsOneWidget);
+    });
+
+    testWidgets('"Recuperar contraseña" cierra la alerta y lleva a recuperar', (
+      tester,
+    ) async {
+      cuandoIniciarSesion().thenThrow(CredencialesInvalidasException());
+      await abrirPantalla(tester);
+
+      await llenarFormulario(tester);
+      await tocarIniciarSesion(tester);
+      await tester.tap(find.text('Recuperar contraseña'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Credenciales no válidas'), findsNothing);
+      expect(find.text('Recuperar contraseña: próximamente'), findsOneWidget);
+
+      await esperarSnackBar(tester);
+    });
+  });
+
   group('Criterio 4 — campos vacíos', () {
-    testWidgets('marca los dos campos si están vacíos', (tester) async {
+    testWidgets('marca los dos campos y no llama al service', (tester) async {
       await abrirPantalla(tester);
 
       await tocarIniciarSesion(tester);
 
       expect(find.text('Ingresa tu correo electrónico'), findsOneWidget);
       expect(find.text('Ingresa tu contraseña'), findsOneWidget);
+      verifyNever(
+        () => auth.iniciarSesion(
+          correo: any(named: 'correo'),
+          password: any(named: 'password'),
+        ),
+      );
     });
 
     testWidgets('marca solo la contraseña si el correo está lleno', (
@@ -43,6 +140,26 @@ void main() {
 
       expect(find.text('Ingresa tu correo electrónico'), findsNothing);
       expect(find.text('Ingresa tu contraseña'), findsOneWidget);
+    });
+  });
+
+  group('Otros errores', () {
+    testWidgets('muestra el título y mensaje que manda el service', (
+      tester,
+    ) async {
+      cuandoIniciarSesion().thenThrow(
+        const InicioSesionException(
+          titulo: 'Confirma tu correo',
+          mensaje: 'Abre el enlace que te enviamos.',
+        ),
+      );
+      await abrirPantalla(tester);
+
+      await llenarFormulario(tester);
+      await tocarIniciarSesion(tester);
+
+      expect(find.text('Confirma tu correo'), findsOneWidget);
+      expect(find.text('Abre el enlace que te enviamos.'), findsOneWidget);
     });
   });
 }

@@ -179,4 +179,97 @@ void main() {
       );
     });
   });
+
+  group('iniciarSesion (SCRUM-64)', () {
+    When<Future<AuthResponse>> cuandoSignIn() {
+      return when(
+        () => auth.signInWithPassword(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+        ),
+      );
+    }
+
+    Future<void> iniciarSesion() {
+      return servicio.iniciarSesion(
+        correo: 'ana@correo.com',
+        password: 'Abcdefg1!',
+      );
+    }
+
+    Matcher lanzaInicioSesionException(String titulo) {
+      return throwsA(
+        isA<InicioSesionException>().having((e) => e.titulo, 'titulo', titulo),
+      );
+    }
+
+    test(
+      'criterio 1: completa cuando las credenciales son correctas',
+      () async {
+        cuandoSignIn().thenAnswer((_) async => AuthResponse());
+
+        await iniciarSesion();
+
+        verify(
+          () => auth.signInWithPassword(
+            email: 'ana@correo.com',
+            password: 'Abcdefg1!',
+          ),
+        ).called(1);
+      },
+    );
+
+    test('criterios 2 y 3: código invalid_credentials', () async {
+      cuandoSignIn().thenThrow(
+        const AuthApiException('invalid', code: 'invalid_credentials'),
+      );
+
+      await expectLater(
+        iniciarSesion(),
+        throwsA(isA<CredencialesInvalidasException>()),
+      );
+    });
+
+    test('criterios 2 y 3: servidor que solo manda el texto', () async {
+      cuandoSignIn().thenThrow(
+        const AuthApiException('Invalid login credentials'),
+      );
+
+      await expectLater(
+        iniciarSesion(),
+        throwsA(isA<CredencialesInvalidasException>()),
+      );
+    });
+
+    test('correo sin confirmar', () async {
+      cuandoSignIn().thenThrow(
+        const AuthApiException('not confirmed', code: 'email_not_confirmed'),
+      );
+
+      await expectLater(
+        iniciarSesion(),
+        lanzaInicioSesionException('Confirma tu correo'),
+      );
+    });
+
+    test('sin conexión', () async {
+      cuandoSignIn().thenThrow(AuthRetryableFetchException());
+
+      await expectLater(
+        iniciarSesion(),
+        lanzaInicioSesionException('Sin conexión'),
+      );
+    });
+
+    test('código desconocido cae en el mensaje genérico', () async {
+      cuandoSignIn().thenThrow(
+        const AuthApiException('???', code: 'codigo_que_no_existe'),
+      );
+
+      await expectLater(
+        iniciarSesion(),
+        lanzaInicioSesionException('No pudimos iniciar sesión'),
+      );
+    });
+  });
 }

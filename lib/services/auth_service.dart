@@ -12,6 +12,19 @@ class RegistroException implements Exception {
   final String mensaje;
 }
 
+/// Correo no registrado o contraseña incorrecta. Supabase no distingue entre
+/// los dos a propósito, para que nadie averigüe qué correos tienen cuenta.
+class CredencialesInvalidasException implements Exception {}
+
+/// Cualquier otro fallo al iniciar sesión. Trae los textos listos para una
+/// alerta.
+class InicioSesionException implements Exception {
+  const InicioSesionException({required this.titulo, required this.mensaje});
+
+  final String titulo;
+  final String mensaje;
+}
+
 /// Cómo obtiene la app el servicio de autenticación. Las pruebas lo
 /// reemplazan con `overrideWithValue`.
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
@@ -93,6 +106,51 @@ class AuthService {
         ),
         _ => const RegistroException(
           titulo: 'No pudimos crear tu cuenta',
+          mensaje: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
+        ),
+      };
+    }
+  }
+
+  /// Inicia sesión con correo y contraseña. Si sale bien, Supabase guarda la
+  /// sesión en el dispositivo: la próxima vez que se abra la app sigue abierta.
+  Future<void> iniciarSesion({
+    required String correo,
+    required String password,
+  }) async {
+    try {
+      await _auth.signInWithPassword(email: correo, password: password);
+    } on AuthRetryableFetchException {
+      throw const InicioSesionException(
+        titulo: 'Sin conexión',
+        mensaje:
+            'No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo.',
+      );
+    } on AuthException catch (e) {
+      // "invalid_credentials" no está en el enum de esta versión del paquete;
+      // servidores más viejos solo mandan el texto, sin código.
+      if (e.code == 'invalid_credentials' ||
+          e.message == 'Invalid login credentials') {
+        throw CredencialesInvalidasException();
+      }
+
+      throw switch (e.code) {
+        'email_not_confirmed' => const InicioSesionException(
+          titulo: 'Confirma tu correo',
+          mensaje:
+              'Abre el enlace que te enviamos al registrarte y vuelve a '
+              'intentarlo.',
+        ),
+        'user_banned' => const InicioSesionException(
+          titulo: 'Cuenta suspendida',
+          mensaje: 'Tu cuenta está suspendida. Contacta al equipo de TRAZA.',
+        ),
+        'over_request_rate_limit' => const InicioSesionException(
+          titulo: 'Demasiados intentos',
+          mensaje: 'Espera unos minutos y vuelve a intentarlo.',
+        ),
+        _ => const InicioSesionException(
+          titulo: 'No pudimos iniciar sesión',
           mensaje: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
         ),
       };

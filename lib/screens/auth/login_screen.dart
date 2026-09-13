@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/estado_login.dart';
+import '../../services/login_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/google_logo.dart';
 import 'register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _correoController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -34,11 +37,82 @@ class _LoginScreenState extends State<LoginScreen> {
     // Pinta en rojo los campos vacíos y detiene el envío (criterio 4).
     if (!_formKey.currentState!.validate()) return;
 
-    // TODO(SCRUM-64): iniciar sesión con Supabase.
+    ref
+        .read(loginProvider.notifier)
+        .iniciarSesion(
+          correo: _correoController.text.trim(),
+          password: _passwordController.text,
+        );
+  }
+
+  /// Reacciona a cada cambio de fase. Se registra con `ref.listen` en build.
+  void _alCambiarLogin(EstadoLogin? anterior, EstadoLogin actual) {
+    switch (actual.fase) {
+      case FaseLogin.exito:
+        // TODO(SCRUM-66): redirigir a la pantalla Inicio.
+        _mostrarMensaje('Sesión iniciada');
+      case FaseLogin.credencialesInvalidas:
+        _mostrarCredencialesInvalidas();
+      case FaseLogin.error:
+        _mostrarAlerta(actual.tituloError!, actual.mensajeError!);
+      case FaseLogin.inicial || FaseLogin.enviando:
+        break;
+    }
+  }
+
+  /// Criterios 2 y 3: mismo mensaje para correo no registrado y contraseña
+  /// incorrecta, con acceso directo a recuperar la contraseña.
+  Future<void> _mostrarCredencialesInvalidas() async {
+    final quiereRecuperar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Credenciales no válidas'),
+        content: const Text('El correo o la contraseña no son correctos.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Recuperar contraseña'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+
+    // Nulo si el diálogo se cerró tocando fuera de él.
+    if (quiereRecuperar != true || !mounted) return;
+    _irARecuperarPassword();
+  }
+
+  void _irARecuperarPassword() {
+    // TODO(SCRUM-65): abrir la recuperación de contraseña.
+    _mostrarMensaje('Recuperar contraseña: próximamente');
+  }
+
+  Future<void> _mostrarAlerta(String titulo, String mensaje) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: Text(mensaje),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // listen: alertas, una vez por cambio. watch: el spinner, que redibuja.
+    ref.listen(loginProvider, _alCambiarLogin);
+    final enviando = ref.watch(loginProvider).enviando;
+
     return AuthLayout(
       child: Form(
         key: _formKey,
@@ -88,7 +162,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscureText: !_verPassword,
                 textInputAction: TextInputAction.done,
                 // Tocar "listo" en el teclado equivale a tocar el botón.
-                onFieldSubmitted: (_) => _onIniciarSesion(),
+                onFieldSubmitted: (_) {
+                  if (!enviando) _onIniciarSesion();
+                },
                 autofillHints: const [AutofillHints.password],
                 decoration: InputDecoration(
                   hintText: 'Tu contraseña',
@@ -108,16 +184,14 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  // TODO(SCRUM-65): abrir la recuperación de contraseña.
-                  onPressed: () =>
-                      _mostrarMensaje('Recuperar contraseña: próximamente'),
+                  onPressed: _irARecuperarPassword,
                   child: const Text('¿Olvidaste tu contraseña?'),
                 ),
               ),
               const SizedBox(height: 12),
 
               FilledButton(
-                onPressed: _onIniciarSesion,
+                onPressed: enviando ? null : _onIniciarSesion,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   shape: const StadiumBorder(),
@@ -126,7 +200,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                child: const Text('Iniciar sesión'),
+                child: enviando
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Iniciar sesión'),
               ),
               const SizedBox(height: 18),
 

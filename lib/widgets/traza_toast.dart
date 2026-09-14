@@ -7,7 +7,14 @@ import '../theme/app_dimens.dart';
 ///
 /// Se apoya en el [ScaffoldMessenger] raíz de la app, así que el mensaje sigue
 /// visible aunque justo después se cambie de pantalla.
-void mostrarToast(BuildContext context, String mensaje) {
+///
+/// [separacionInferior] sube el aviso cuando al pie hay botones que no debe
+/// tapar.
+void mostrarToast(
+  BuildContext context,
+  String mensaje, {
+  double separacionInferior = 24,
+}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -24,11 +31,11 @@ void mostrarToast(BuildContext context, String mensaje) {
         backgroundColor: AppColors.ink,
         behavior: SnackBarBehavior.floating,
         shape: const StadiumBorder(),
-        margin: const EdgeInsets.fromLTRB(
+        margin: EdgeInsets.fromLTRB(
           AppSpacing.lg,
           0,
           AppSpacing.lg,
-          24,
+          separacionInferior,
         ),
         duration: const Duration(milliseconds: 2400),
       ),

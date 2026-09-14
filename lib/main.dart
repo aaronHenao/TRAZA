@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
+import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'theme/app_theme.dart';
 import 'supabase_config.dart';
@@ -59,6 +60,19 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/tracking',
       builder: (context, state) => const TrackingConActividadElegida(),
+    ),
+    // Resumen de la sesión recién finalizada (SCRUM-43). El id del
+    // entrenamiento viaja en la ruta (SCRUM-122); sin sesión no hay id y se
+    // usa `/resumen` a secas.
+    GoRoute(
+      path: '/resumen',
+      builder: (context, state) => ResumenScreen.desdeRuta(state),
+      routes: [
+        GoRoute(
+          path: ':entrenamientoId',
+          builder: (context, state) => ResumenScreen.desdeRuta(state),
+        ),
+      ],
     ),
   ],
 );

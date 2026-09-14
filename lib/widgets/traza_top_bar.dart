@@ -4,16 +4,25 @@ import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
 
 /// Barra superior del prototipo (`.topbar`): botón opcional a la izquierda,
-/// título centrado y un espacio equivalente a la derecha para que el título
-/// quede realmente centrado.
+/// título centrado y a la derecha una acción opcional o un espacio del mismo
+/// ancho, para que el título quede realmente centrado.
 class TrazaTopBar extends StatelessWidget {
-  const TrazaTopBar({required this.titulo, this.onAtras, super.key});
+  const TrazaTopBar({
+    required this.titulo,
+    this.onAtras,
+    this.accion,
+    super.key,
+  });
 
   final String titulo;
 
   /// Si es null no se dibuja el botón de retroceso (pantallas de onboarding
   /// donde no se puede volver, como Perfil o Permisos).
   final VoidCallback? onAtras;
+
+  /// Botón de la derecha, como el de cerrar del resumen. Debe medir 36 px,
+  /// igual que [TrazaIconButton].
+  final Widget? accion;
 
   static const _anchoBoton = 36.0;
 
@@ -45,7 +54,7 @@ class TrazaTopBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: _anchoBoton),
+          SizedBox(width: _anchoBoton, child: accion),
         ],
       ),
     );

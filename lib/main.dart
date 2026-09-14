@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'models/resumen_entrenamiento.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
@@ -61,10 +62,17 @@ final _navegacion = GoRouter(
       path: '/tracking',
       builder: (context, state) => const TrackingConActividadElegida(),
     ),
-    // Resumen de la sesión recién finalizada (SCRUM-43).
+    // Resumen de la sesión recién finalizada (SCRUM-43). Los datos llegan
+    // del cierre de la actividad; sin ellos, la pantalla muestra un estado
+    // vacío.
     GoRoute(
       path: '/resumen',
-      builder: (context, state) => const ResumenScreen(),
+      builder: (context, state) {
+        final resumen = state.extra;
+        return ResumenScreen(
+          resumen: resumen is ResumenEntrenamiento ? resumen : null,
+        );
+      },
     ),
   ],
 );

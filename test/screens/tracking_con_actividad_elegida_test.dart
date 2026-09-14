@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
+import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
@@ -79,6 +80,10 @@ void main() {
       expect(find.byType(ResumenScreen), findsOneWidget);
       expect(find.byType(TrackingScreen), findsNothing);
       expect(entorno.container.read(actividadIniciadaProvider), isFalse);
+
+      // El resumen es el de la sesión que acaba de terminar (SCRUM-117).
+      expect(find.text('Trote · hoy'), findsOneWidget);
+      expect(find.text('00:32:17'), findsOneWidget);
     });
 
     testWidgets('guarda los puntos GPS y también cierra el entrenamiento', (
@@ -294,7 +299,11 @@ Future<_Entorno> _montar(
         path: '/tracking',
         builder: (_, _) => const TrackingConActividadElegida(),
       ),
-      GoRoute(path: '/resumen', builder: (_, _) => const ResumenScreen()),
+      GoRoute(
+        path: '/resumen',
+        builder: (_, estado) =>
+            ResumenScreen(resumen: estado.extra as ResumenEntrenamiento?),
+      ),
     ],
   );
   addTearDown(router.dispose);

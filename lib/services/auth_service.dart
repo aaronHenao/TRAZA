@@ -24,6 +24,14 @@ class InicioSesionException implements Exception {
   final String titulo;
   final String mensaje;
 }
+/// Fallo al pedir o usar el código de recuperación. Trae los textos listos
+/// para una alerta.
+class RecuperacionException implements Exception {
+  const RecuperacionException({required this.titulo, required this.mensaje});
+
+  final String titulo;
+  final String mensaje;
+}
 
 /// Cómo obtiene la app el servicio de autenticación. Las pruebas lo
 /// reemplazan con `overrideWithValue`.
@@ -156,4 +164,31 @@ class AuthService {
       };
     }
   }
+    /// Pide a Supabase que envíe el código de recuperación al correo. Supabase
+  /// responde igual exista o no la cuenta, para no revelar qué correos están
+  /// registrados.
+  Future<void> solicitarRecuperacion({required String correo}) async {
+    try {
+      await _auth.resetPasswordForEmail(correo);
+    } on AuthRetryableFetchException {
+      throw const RecuperacionException(
+        titulo: 'Sin conexión',
+        mensaje:
+            'No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo.',
+      );
+    } on AuthException catch (e) {
+      throw switch (e.code) {
+        'over_email_send_rate_limit' ||
+        'over_request_rate_limit' => const RecuperacionException(
+          titulo: 'Demasiados intentos',
+          mensaje: 'Espera un minuto y vuelve a intentarlo.',
+        ),
+        _ => const RecuperacionException(
+          titulo: 'No pudimos enviar el código',
+          mensaje: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
+        ),
+      };
+    }
+  }
+
 }

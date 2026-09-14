@@ -9,6 +9,7 @@ void main() {
     DateTime? fechaFin,
   }) {
     return ResumenEntrenamiento(
+      entrenamientoId: 'e-123',
       nombreActividad: 'Trote',
       fechaFin: fechaFin ?? DateTime(2026, 9, 13, 18, 30),
       duracion: duracion,
@@ -86,6 +87,26 @@ void main() {
         resumen(fechaFin: fechaFin).subtitulo(ahora),
         'Trote · 31 dic 2025',
       );
+    });
+  });
+
+  group('a qué entrenamiento corresponde (SCRUM-122)', () {
+    test('coincide solo con su propio id', () {
+      expect(resumen().correspondeA('e-123'), isTrue);
+      expect(resumen().correspondeA('e-999'), isFalse);
+      expect(resumen().correspondeA(null), isFalse);
+    });
+
+    test('sin sesión coincide solo con la ruta sin id', () {
+      final local = ResumenEntrenamiento(
+        entrenamientoId: null,
+        nombreActividad: 'Correr',
+        fechaFin: DateTime(2026, 9, 13, 8),
+        duracion: const Duration(minutes: 5),
+      );
+
+      expect(local.correspondeA(null), isTrue);
+      expect(local.correspondeA('e-123'), isFalse);
     });
   });
 }

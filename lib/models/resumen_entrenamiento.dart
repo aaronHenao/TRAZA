@@ -8,6 +8,7 @@ import 'punto_gps.dart';
 @immutable
 class ResumenEntrenamiento {
   const ResumenEntrenamiento({
+    required this.entrenamientoId,
     required this.nombreActividad,
     required this.fechaFin,
     required this.duracion,
@@ -23,6 +24,10 @@ class ResumenEntrenamiento {
   /// metros de ruido del GPS saldrían ritmos de horas por kilómetro.
   static const distanciaMinimaParaRitmoMetros = 10.0;
 
+  /// `id` de la fila de `entrenamientos` de esta sesión, o null si se entrenó
+  /// sin sesión y no hay fila (hasta que exista SCRUM-99).
+  final String? entrenamientoId;
+
   final String nombreActividad;
   final DateTime fechaFin;
 
@@ -34,6 +39,11 @@ class ResumenEntrenamiento {
 
   /// Puntos GPS del recorrido, en orden de captura. Los dibuja SCRUM-120.
   final List<PuntoGps> puntos;
+
+  /// Si este es el resumen del entrenamiento [entrenamientoId] que pide la
+  /// navegación (SCRUM-122). Sin sesión ambos son null y también coinciden.
+  bool correspondeA(String? entrenamientoId) =>
+      this.entrenamientoId == entrenamientoId;
 
   /// `HH:MM:SS`, igual que el cronómetro de la actividad.
   String get tiempo => formatearTiempoEntrenamiento(duracion);

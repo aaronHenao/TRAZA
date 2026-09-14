@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
-import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
@@ -84,6 +83,8 @@ void main() {
       // El resumen es el de la sesión que acaba de terminar (SCRUM-117).
       expect(find.text('Trote · hoy'), findsOneWidget);
       expect(find.text('00:32:17'), findsOneWidget);
+      // El id del entrenamiento viaja en la ruta (SCRUM-122).
+      expect(entorno.ubicacion, '/resumen/e-123');
     });
 
     testWidgets('guarda los puntos GPS y también cierra el entrenamiento', (
@@ -118,6 +119,10 @@ void main() {
 
       expect(entorno.entrenamientos.cierres, isEmpty);
       expect(find.byType(ResumenScreen), findsOneWidget);
+      // Sin sesión no hay id: el resumen va a `/resumen` con los datos de la
+      // sesión local.
+      expect(entorno.ubicacion, '/resumen');
+      expect(find.text('Correr · hoy'), findsOneWidget);
     });
 
     testWidgets('si no se pudo cerrar el entrenamiento se queda en la '
@@ -172,6 +177,30 @@ void main() {
       expect(find.byType(ResumenScreen), findsNothing);
       await tester.pump(const Duration(seconds: 3));
     });
+
+    testWidgets(
+      'al descartar la actividad no se muestra ningún resumen (SCRUM-122)',
+      (tester) async {
+        final entorno = await _montar(
+          tester,
+          catalogo: _catalogo,
+          elegir: 'Correr',
+        );
+
+        // El cronómetro sigue en marcha, así que se avanza a mano en vez de
+        // esperar a que la pantalla quede quieta.
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('Descartar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(find.byType(ResumenScreen), findsNothing);
+        expect(entorno.entrenamientos.cierres, isEmpty);
+        expect(entorno.ubicacion, '/tracking');
+      },
+    );
   });
 }
 
@@ -230,13 +259,19 @@ class _Entorno {
     required this.fuente,
     required this.puntos,
     required this.entrenamientos,
+    required this.router,
   });
 
   final ProviderContainer container;
+  final GoRouter router;
   final RelojFalso reloj;
   final FuenteUbicacionFalsa fuente;
   final RepositorioPuntosGpsFalso puntos;
   final _EntrenamientosFalso entrenamientos;
+
+  /// Ruta en la que está la app ahora.
+  String get ubicacion =>
+      router.routerDelegate.currentConfiguration.uri.toString();
 
   /// Hace correr el tiempo de la actividad, igual que en las pruebas de Aaron.
   Future<void> correr(WidgetTester tester, Duration cuanto) async {
@@ -299,10 +334,16 @@ Future<_Entorno> _montar(
         path: '/tracking',
         builder: (_, _) => const TrackingConActividadElegida(),
       ),
+      // Las mismas rutas del resumen que en main.dart.
       GoRoute(
         path: '/resumen',
-        builder: (_, estado) =>
-            ResumenScreen(resumen: estado.extra as ResumenEntrenamiento?),
+        builder: (_, estado) => ResumenScreen.desdeRuta(estado),
+        routes: [
+          GoRoute(
+            path: ':entrenamientoId',
+            builder: (_, estado) => ResumenScreen.desdeRuta(estado),
+          ),
+        ],
       ),
     ],
   );
@@ -323,6 +364,7 @@ Future<_Entorno> _montar(
     fuente: fuente,
     puntos: puntos,
     entrenamientos: entrenamientos,
+    router: router,
   );
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'tracking_screen.dart';
+import '../summary/resumen_screen.dart';
 import '../../models/resumen_entrenamiento.dart';
 import '../../services/actividad_provider.dart';
 import '../../services/entrenamiento_provider.dart';
@@ -48,6 +49,8 @@ class TrackingConActividadElegida extends ConsumerWidget {
     // Se lee antes de esperar: al salir de esta pantalla el recorrido se
     // descarta.
     final recorrido = ref.read(recorridoProvider);
+    // El mismo entrenamiento que cierra `CierreEntrenamiento`.
+    final entrenamientoId = ref.read(entrenamientoActualProvider);
     final error = await ref
         .read(cierreEntrenamientoProvider)
         .finalizar(duracion: duracion, recorrido: recorrido);
@@ -61,13 +64,15 @@ class TrackingConActividadElegida extends ConsumerWidget {
     }
 
     final resumen = ResumenEntrenamiento(
+      entrenamientoId: entrenamientoId,
       nombreActividad: nombreActividad,
       fechaFin: ref.read(relojProvider)(),
       duracion: duracion,
       puntos: recorrido.puntos,
     );
-    // `go` y no `push`: desde el resumen no se vuelve a una actividad que ya
-    // terminó.
-    context.go('/resumen', extra: resumen);
+    // El id va en la ruta para que el resumen sea siempre el de esta sesión
+    // (SCRUM-122). `go` y no `push`: desde el resumen no se vuelve a una
+    // actividad que ya terminó.
+    context.go(ResumenScreen.rutaPara(entrenamientoId), extra: resumen);
   }
 }

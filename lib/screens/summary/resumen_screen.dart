@@ -12,17 +12,48 @@ import '../../widgets/traza_top_bar.dart';
 /// Resumen del entrenamiento recién finalizado (`screen-summary`, SCRUM-117).
 ///
 /// Muestra el tiempo, la distancia, el ritmo promedio y el recorrido de la
-/// sesión. Los datos llegan del cierre de la actividad (SCRUM-121); si la
-/// pantalla se abre sin ellos, por ejemplo entrando a `/resumen` a mano,
-/// muestra un estado vacío.
+/// sesión. Los datos llegan del cierre de la actividad (SCRUM-121) y el id
+/// del entrenamiento, en la ruta (SCRUM-122).
 class ResumenScreen extends ConsumerWidget {
-  const ResumenScreen({required this.resumen, super.key});
+  const ResumenScreen({
+    required this.entrenamientoId,
+    required this.resumen,
+    super.key,
+  });
 
+  /// Arma la pantalla con los argumentos de la navegación: el id del
+  /// entrenamiento en la ruta (`/resumen/<id>`) y los datos de la sesión en
+  /// `extra`.
+  factory ResumenScreen.desdeRuta(GoRouterState estado) {
+    final extra = estado.extra;
+    return ResumenScreen(
+      entrenamientoId: estado.pathParameters['entrenamientoId'],
+      resumen: extra is ResumenEntrenamiento ? extra : null,
+    );
+  }
+
+  /// Ruta del resumen de [entrenamientoId]: `/resumen/<id>`, o `/resumen` a
+  /// secas si se entrenó sin sesión y no hay id.
+  static String rutaPara(String? entrenamientoId) => entrenamientoId == null
+      ? '/resumen'
+      : '/resumen/${Uri.encodeComponent(entrenamientoId)}';
+
+  /// Entrenamiento que pide la navegación, o null si no hay sesión.
+  final String? entrenamientoId;
+
+  /// Datos de la sesión que acaba de terminar, tal como los dejó el cierre.
   final ResumenEntrenamiento? resumen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final resumen = this.resumen;
+    // SCRUM-122: solo se muestra el resumen del entrenamiento que indica la
+    // ruta. Si los datos no llegaron (la ruta se abrió a mano o se recargó la
+    // página) o son de otra sesión, no se busca "el último" de ninguna lista:
+    // se muestra el estado vacío.
+    final datos = this.resumen;
+    final resumen = datos != null && datos.correspondeA(entrenamientoId)
+        ? datos
+        : null;
     // Igual que en el prototipo (`closeSummary`), cerrar lleva al inicio.
     void volverAlInicio() => context.go('/inicio');
 

@@ -2,10 +2,23 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/recorrido.dart';
+import '../models/resumen_entrenamiento.dart';
 import 'actividad_provider.dart';
 import 'entrenamiento_service.dart';
 import 'recorrido_provider.dart';
 import 'reloj_provider.dart';
+
+/// Datos de un entrenamiento finalizado, leídos de Supabase por su id
+/// (SCRUM-118).
+///
+/// `autoDispose`: al salir del resumen se descartan, así que nunca se
+/// reutilizan los de una sesión anterior.
+final entrenamientoFinalizadoProvider = FutureProvider.autoDispose
+    .family<ResumenEntrenamiento?, String>(
+      (ref, entrenamientoId) => ref
+          .watch(entrenamientoRepositoryProvider)
+          .cargarFinalizado(entrenamientoId),
+    );
 
 /// Cierre del entrenamiento en curso (SCRUM-121).
 final cierreEntrenamientoProvider = Provider<CierreEntrenamiento>(

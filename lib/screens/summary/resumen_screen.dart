@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/resumen_entrenamiento.dart';
+import '../../services/entrenamiento_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -12,8 +13,9 @@ import '../../widgets/traza_top_bar.dart';
 /// Resumen del entrenamiento recién finalizado (`screen-summary`, SCRUM-117).
 ///
 /// Muestra el tiempo, la distancia, el ritmo promedio y el recorrido de la
-/// sesión. Los datos llegan del cierre de la actividad (SCRUM-121) y el id
-/// del entrenamiento, en la ruta (SCRUM-122).
+/// sesión. El id del entrenamiento llega en la ruta (SCRUM-122) y los datos,
+/// del cierre de la actividad (SCRUM-121) o, si no llegaron, de Supabase
+/// (SCRUM-118).
 class ResumenScreen extends ConsumerWidget {
   const ResumenScreen({
     required this.entrenamientoId,
@@ -46,14 +48,6 @@ class ResumenScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // SCRUM-122: solo se muestra el resumen del entrenamiento que indica la
-    // ruta. Si los datos no llegaron (la ruta se abrió a mano o se recargó la
-    // página) o son de otra sesión, no se busca "el último" de ninguna lista:
-    // se muestra el estado vacío.
-    final datos = this.resumen;
-    final resumen = datos != null && datos.correspondeA(entrenamientoId)
-        ? datos
-        : null;
     // Igual que en el prototipo (`closeSummary`), cerrar lleva al inicio.
     void volverAlInicio() => context.go('/inicio');
 
@@ -69,61 +63,94 @@ class ResumenScreen extends ConsumerWidget {
                 tooltip: 'Cerrar',
               ),
             ),
-            Expanded(
-              child: resumen == null
-                  ? _SinResumen(onVolver: volverAlInicio)
-                  : ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        _Cabecera(
-                          subtitulo: resumen.subtitulo(
-                            ref.read(relojProvider)(),
-                          ),
-                        ),
-                        Padding(
-                          // `.summary-body`: 20 px y 18 px entre bloques.
-                          padding: const EdgeInsets.all(AppSpacing.lg),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _Metrica(
-                                      valor: resumen.tiempo,
-                                      etiqueta: 'Tiempo',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: _Metrica(
-                                      valor: resumen.distancia,
-                                      etiqueta: 'Distancia',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              _Ritmo(valor: resumen.ritmo),
-                              const SizedBox(height: 18),
-                              const _Recorrido(),
-                              const SizedBox(height: 18),
-                              // El entrenamiento ya quedó guardado al tocar
-                              // "Finalizar" (SCRUM-121), así que este botón
-                              // solo cierra el resumen.
-                              FilledButton(
-                                onPressed: volverAlInicio,
-                                child: const Text('Volver al inicio'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
+            Expanded(child: _cuerpo(ref, volverAlInicio)),
           ],
         ),
       ),
+    );
+  }
+
+  /// Qué mostrar: solo el resumen del entrenamiento que indica la ruta
+  /// (SCRUM-122), nunca "el último" de una lista.
+  Widget _cuerpo(WidgetRef ref, VoidCallback volverAlInicio) {
+    // Recién terminada la actividad, los datos llegan con la navegación y no
+    // hace falta consultar nada.
+    final datos = resumen;
+    if (datos != null && datos.correspondeA(entrenamientoId)) {
+      return _ContenidoResumen(resumen: datos, onVolver: volverAlInicio);
+    }
+
+    // Sin esos datos (se recargó la página, se abrió la ruta a mano o son de
+    // otra sesión) se lee de Supabase el entrenamiento de la ruta, solo si
+    // está finalizado (SCRUM-118). Sin sesión no hay id que buscar.
+    final id = entrenamientoId;
+    if (id == null) return _SinResumen(onVolver: volverAlInicio);
+
+    return ref
+        .watch(entrenamientoFinalizadoProvider(id))
+        .when(
+          // Al reintentar también se ve el indicador de carga.
+          skipLoadingOnRefresh: false,
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, _) => _ErrorAlCargar(
+            onReintentar: () =>
+                ref.invalidate(entrenamientoFinalizadoProvider(id)),
+          ),
+          data: (guardado) => guardado == null
+              ? _SinResumen(onVolver: volverAlInicio)
+              : _ContenidoResumen(resumen: guardado, onVolver: volverAlInicio),
+        );
+  }
+}
+
+/// El resumen de la sesión, como en `screen-summary`.
+class _ContenidoResumen extends ConsumerWidget {
+  const _ContenidoResumen({required this.resumen, required this.onVolver});
+
+  final ResumenEntrenamiento resumen;
+  final VoidCallback onVolver;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        _Cabecera(subtitulo: resumen.subtitulo(ref.read(relojProvider)())),
+        Padding(
+          // `.summary-body`: 20 px y 18 px entre bloques.
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _Metrica(valor: resumen.tiempo, etiqueta: 'Tiempo'),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _Metrica(
+                      valor: resumen.distancia,
+                      etiqueta: 'Distancia',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _Ritmo(valor: resumen.ritmo),
+              const SizedBox(height: 18),
+              const _Recorrido(),
+              const SizedBox(height: 18),
+              // El entrenamiento ya quedó guardado al tocar "Finalizar"
+              // (SCRUM-121), así que este botón solo cierra el resumen.
+              FilledButton(
+                onPressed: onVolver,
+                child: const Text('Volver al inicio'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -289,11 +316,60 @@ class _Recorrido extends StatelessWidget {
   }
 }
 
-/// Se abrió el resumen sin un entrenamiento que mostrar.
+/// No hay un entrenamiento finalizado que mostrar.
 class _SinResumen extends StatelessWidget {
   const _SinResumen({required this.onVolver});
 
   final VoidCallback onVolver;
+
+  @override
+  Widget build(BuildContext context) {
+    return _EstadoCentrado(
+      icono: Icons.insights_outlined,
+      titulo: 'No hay un entrenamiento para mostrar',
+      detalle: 'El resumen aparece al finalizar una actividad.',
+      accion: OutlinedButton(
+        onPressed: onVolver,
+        child: const Text('Volver al inicio'),
+      ),
+    );
+  }
+}
+
+/// No se pudo leer el entrenamiento de Supabase, igual que el error de carga
+/// del perfil.
+class _ErrorAlCargar extends StatelessWidget {
+  const _ErrorAlCargar({required this.onReintentar});
+
+  final VoidCallback onReintentar;
+
+  @override
+  Widget build(BuildContext context) {
+    return _EstadoCentrado(
+      icono: Icons.cloud_off_outlined,
+      titulo: 'No pudimos cargar el resumen',
+      detalle: 'Revisa tu conexión e inténtalo de nuevo.',
+      accion: OutlinedButton(
+        onPressed: onReintentar,
+        child: const Text('Reintentar'),
+      ),
+    );
+  }
+}
+
+/// Icono en círculo gris, título, detalle y una acción, centrados.
+class _EstadoCentrado extends StatelessWidget {
+  const _EstadoCentrado({
+    required this.icono,
+    required this.titulo,
+    required this.detalle,
+    required this.accion,
+  });
+
+  final IconData icono;
+  final String titulo;
+  final String detalle;
+  final Widget accion;
 
   @override
   Widget build(BuildContext context) {
@@ -310,37 +386,30 @@ class _SinResumen extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: AppColors.bgAlt,
               ),
-              child: const Icon(
-                Icons.insights_outlined,
-                size: 26,
-                color: AppColors.ink3,
-              ),
+              child: Icon(icono, size: 26, color: AppColors.ink3),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'No hay un entrenamiento para mostrar',
+            Text(
+              titulo,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: AppColors.ink,
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            const Text(
-              'El resumen aparece al finalizar una actividad.',
+            Text(
+              detalle,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12.5,
                 color: AppColors.ink2,
                 height: 1.5,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(
-              onPressed: onVolver,
-              child: const Text('Volver al inicio'),
-            ),
+            accion,
           ],
         ),
       ),

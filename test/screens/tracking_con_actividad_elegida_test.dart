@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
+import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
@@ -233,6 +234,10 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   final cierres = <_Cierre>[];
 
   bool fallar = false;
+
+  @override
+  Future<ResumenEntrenamiento?> cargarFinalizado(String entrenamientoId) =>
+      throw UnimplementedError('Al finalizar, el resumen llega sin consultar');
 
   @override
   Future<void> finalizar({

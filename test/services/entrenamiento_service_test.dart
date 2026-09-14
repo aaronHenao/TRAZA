@@ -6,11 +6,12 @@ import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 
-/// Pruebas del repositorio real de entrenamientos (SCRUM-121).
+/// Pruebas del repositorio real de entrenamientos: el cierre (SCRUM-121) y la
+/// lectura del entrenamiento finalizado para el resumen (SCRUM-118).
 ///
 /// Igual que en las de objetivos, no hay base de datos: un cliente HTTP falso
 /// intercepta la petición que el repositorio le manda a PostgREST y responde lo
-/// que la prueba necesita. Así se verifica la actualización que de verdad sale
+/// que la prueba necesita. Así se verifican las consultas que de verdad salen
 /// hacia Supabase.
 void main() {
   test('cierra el entrenamiento con fecha_fin, duración, distancia y estado '
@@ -84,12 +85,104 @@ void main() {
       ),
     );
   });
+
+  group('cargarFinalizado (SCRUM-118)', () {
+    test('pide el entrenamiento por id, solo si está finalizado, con su '
+        'actividad y sus puntos en orden', () async {
+      final supabase = _SupabaseFalso(filasLeidas: [_filaGuardada]);
+      addTearDown(supabase.cerrar);
+
+      final resumen = await supabase.repositorio.cargarFinalizado('e-123');
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'GET');
+      expect(peticion.url.path, '/rest/v1/entrenamientos');
+      final parametros = peticion.url.queryParameters;
+      expect(parametros['id'], 'eq.e-123');
+      expect(parametros['estado'], 'eq.finalizado');
+      expect(parametros['select'], contains('tipos_actividad(nombre)'));
+      expect(parametros['select'], contains('puntos_gps('));
+      expect(parametros['puntos_gps.order'], 'orden_secuencia.asc.nullslast');
+
+      expect(resumen, isNotNull);
+      expect(resumen!.entrenamientoId, 'e-123');
+      expect(resumen.nombreActividad, 'Trote');
+      expect(resumen.fechaFin, DateTime.utc(2026, 1, 1, 13, 32, 17));
+      expect(resumen.duracion, const Duration(seconds: 1937));
+      expect(resumen.distanciaMetros, 5230.5);
+      expect(resumen.puntos.map((punto) => punto.latitud), [6.2311, 6.0]);
+      expect(resumen.puntos.first.capturadoEn, DateTime.utc(2026, 1, 1, 13));
+    });
+
+    test('si no existe, no es del usuario o no está finalizado devuelve '
+        'null', () async {
+      // PostgREST responde bien, pero sin filas.
+      final supabase = _SupabaseFalso(filasLeidas: []);
+      addTearDown(supabase.cerrar);
+
+      expect(await supabase.repositorio.cargarFinalizado('e-123'), isNull);
+    });
+
+    test('sin distancia guardada la deja vacía', () async {
+      final supabase = _SupabaseFalso(
+        filasLeidas: [
+          {..._filaGuardada, 'distancia_total_m': null},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final resumen = await supabase.repositorio.cargarFinalizado('e-123');
+
+      expect(resumen!.distanciaMetros, isNull);
+    });
+
+    test('si Supabase responde con error lo lanza', () async {
+      final supabase = _SupabaseFalso(codigoError: 400);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.cargarFinalizado('e-123'),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+  });
 }
 
+/// Un entrenamiento finalizado tal como lo devuelve PostgREST, con su tipo de
+/// actividad y sus puntos.
+const _filaGuardada = <String, Object?>{
+  'id': 'e-123',
+  'fecha_fin': '2026-01-01T13:32:17+00:00',
+  'duracion_segundos': 1937,
+  // `numeric` puede llegar como texto.
+  'distancia_total_m': '5230.5',
+  'tipos_actividad': {'nombre': 'Trote'},
+  'puntos_gps': [
+    {
+      'latitud': 6.2311,
+      'longitud': -75.6105,
+      'capturado_en': '2026-01-01T13:00:00+00:00',
+      'orden_secuencia': 0,
+    },
+    // Un número entero en JSON también es una coordenada válida.
+    {
+      'latitud': 6,
+      'longitud': -75.61,
+      'capturado_en': '2026-01-01T13:00:05+00:00',
+      'orden_secuencia': 1,
+    },
+  ],
+};
+
 /// Cliente de Supabase que no sale a la red: anota cada petición y responde
-/// [filasActualizadas] como resultado de la actualización.
+/// [filasLeidas] a las lecturas y [filasActualizadas] a las actualizaciones, o
+/// un error si se indica [codigoError].
 class _SupabaseFalso {
-  _SupabaseFalso({required this.filasActualizadas}) {
+  _SupabaseFalso({
+    this.filasActualizadas = const [],
+    this.filasLeidas = const [],
+    this.codigoError,
+  }) {
     cliente = SupabaseClient(
       'https://proyecto-de-prueba.supabase.co',
       'clave-de-prueba',
@@ -99,6 +192,10 @@ class _SupabaseFalso {
   }
 
   final List<Map<String, Object?>> filasActualizadas;
+  final List<Map<String, Object?>> filasLeidas;
+
+  /// Un código que PostgREST no reintenta (solo reintenta 503 y 520).
+  final int? codigoError;
 
   final peticiones = <http.Request>[];
 
@@ -109,12 +206,24 @@ class _SupabaseFalso {
 
   Future<http.Response> _responder(http.Request peticion) async {
     peticiones.add(peticion);
+    const encabezados = {'content-type': 'application/json'};
+
     // PostgREST lee `response.request` al procesar la respuesta, así que el
     // falso la devuelve atada a su petición, igual que la red real.
+    final codigoError = this.codigoError;
+    if (codigoError != null) {
+      return http.Response(
+        jsonEncode({'message': 'Error de prueba', 'code': 'PGRST000'}),
+        codigoError,
+        headers: encabezados,
+        request: peticion,
+      );
+    }
+    final filas = peticion.method == 'GET' ? filasLeidas : filasActualizadas;
     return http.Response(
-      jsonEncode(filasActualizadas),
+      jsonEncode(filas),
       200,
-      headers: {'content-type': 'application/json'},
+      headers: encabezados,
       request: peticion,
     );
   }

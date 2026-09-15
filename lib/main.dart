@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/auth/rutas_auth.dart';
+import 'screens/history/historial_screen.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
@@ -61,6 +62,11 @@ final _navegacion = GoRouter(
       builder: (context, state) => const PermisosScreen(),
     ),
     GoRoute(path: '/inicio', builder: (context, state) => const InicioScreen()),
+    // Entrenamientos anteriores (SCRUM-44).
+    GoRoute(
+      path: '/historial',
+      builder: (context, state) => const HistorialScreen(),
+    ),
     // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
     // usuario eligió en los chips del inicio (SCRUM-93).
     GoRoute(

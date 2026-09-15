@@ -39,8 +39,7 @@ void main() {
       );
     });
 
-    testWidgets('el historial queda deshabilitado hasta que exista su '
-        'pantalla', (tester) async {
+    testWidgets('el historial está disponible (SCRUM-125)', (tester) async {
       await _montar(tester);
 
       expect(find.byTooltip('Historial'), findsOneWidget);
@@ -50,7 +49,7 @@ void main() {
               find.widgetWithIcon(IconButton, Icons.schedule),
             )
             .onPressed,
-        isNull,
+        isNotNull,
       );
     });
 

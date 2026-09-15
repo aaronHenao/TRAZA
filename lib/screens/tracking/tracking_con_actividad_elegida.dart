@@ -8,6 +8,7 @@ import 'tracking_screen.dart';
 import '../summary/resumen_screen.dart';
 import '../../models/resumen_entrenamiento.dart';
 import '../../services/actividad_provider.dart';
+import '../../services/distancia_provider.dart';
 import '../../services/entrenamiento_provider.dart';
 import '../../services/recorrido_provider.dart';
 import '../../services/reloj_provider.dart';
@@ -66,11 +67,16 @@ class TrackingConActividadElegida extends ConsumerWidget {
     // Se lee antes de esperar: al salir de esta pantalla el recorrido se
     // descarta.
     final recorrido = ref.read(recorridoProvider);
+    final distanciaMetros = ref.read(distanciaProvider).metros;
     // El mismo entrenamiento que cierra `CierreEntrenamiento`.
     final entrenamientoId = ref.read(entrenamientoActualProvider);
     final error = await ref
         .read(cierreEntrenamientoProvider)
-        .finalizar(duracion: duracion, recorrido: recorrido);
+        .finalizar(
+          duracion: duracion,
+          recorrido: recorrido,
+          distanciaMetros: distanciaMetros,
+        );
     if (!context.mounted) return;
 
     if (error != null) {
@@ -85,6 +91,7 @@ class TrackingConActividadElegida extends ConsumerWidget {
       nombreActividad: nombreActividad,
       fechaFin: ref.read(relojProvider)(),
       duracion: duracion,
+      distanciaMetros: distanciaMetros,
       puntos: recorrido.puntos,
     );
     // El id va en la ruta para que el resumen sea siempre el de esta sesión

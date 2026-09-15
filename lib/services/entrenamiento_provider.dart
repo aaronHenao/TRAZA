@@ -136,6 +136,7 @@ class CierreEntrenamiento {
   Future<String?> finalizar({
     required Duration duracion,
     required Recorrido recorrido,
+    double? distanciaMetros,
   }) async {
     // Sin los puntos guardados el resumen no tendría recorrido, así que el
     // entrenamiento no se da por finalizado.
@@ -154,8 +155,7 @@ class CierreEntrenamiento {
               entrenamientoId: entrenamientoId,
               fechaFin: _ref.read(relojProvider)(),
               duracion: duracion,
-              // La distancia la calculan y exponen SCRUM-111 y SCRUM-112;
-              // mientras no existan, `distancia_total_m` queda vacía.
+              distanciaMetros: distanciaMetros,
             );
       } catch (error) {
         debugPrint('No se pudo cerrar el entrenamiento: $error');

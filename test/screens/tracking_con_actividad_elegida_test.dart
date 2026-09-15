@@ -74,8 +74,8 @@ void main() {
       expect(cierre.entrenamientoId, 'e-123');
       expect(cierre.duracion, const Duration(minutes: 32, seconds: 17));
       expect(cierre.fechaFin, DateTime(2026, 1, 1, 8, 32, 17));
-      // Todavía no hay cálculo de distancia (SCRUM-111 y SCRUM-112).
-      expect(cierre.distanciaMetros, isNull);
+      // Sin puntos GPS la distancia recorrida es 0 (SCRUM-111).
+      expect(cierre.distanciaMetros, 0);
 
       expect(find.byType(ResumenScreen), findsOneWidget);
       expect(find.byType(TrackingScreen), findsNothing);

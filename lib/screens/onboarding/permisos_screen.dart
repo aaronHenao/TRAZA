@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/estado_permisos.dart';
+import '../../services/auth_service.dart';
 import '../../services/permisos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -30,6 +31,9 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
   /// ajustes del teléfono, para mostrar el permiso como quedó allá.
   late final AppLifecycleListener _ciclo;
 
+  /// Mientras se marca el onboarding en Supabase, para evitar un doble toque.
+  bool _continuando = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +46,15 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
   void dispose() {
     _ciclo.dispose();
     super.dispose();
+  }
+
+  /// SCRUM-81: último paso del onboarding. Queda marcado para que el próximo
+  /// ingreso vaya directo a Inicio.
+  Future<void> _continuar() async {
+    setState(() => _continuando = true);
+    await ref.read(authServiceProvider).completarOnboarding();
+    if (!mounted) return;
+    context.go('/inicio');
   }
 
   /// SCRUM-77: pide la ubicación y explica qué pasa según la respuesta.
@@ -228,7 +241,7 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => context.go('/inicio'),
+                  onPressed: _continuando ? null : _continuar,
                   child: const Text('Continuar'),
                 ),
               ),

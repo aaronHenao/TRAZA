@@ -5,10 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/screens/onboarding/permisos_screen.dart';
+import 'package:traza/services/auth_service.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
 
 class _MockPermisosService extends Mock implements PermisosService {}
+
+class _MockAuthService extends Mock implements AuthService {}
 
 /// La pantalla no prueba el guardado (eso está en permisos_provider_test):
 /// solo evita que intente hablar con Supabase.
@@ -21,8 +24,11 @@ class _RepositorioFalso implements PermisosUsuarioRepository {
 /// (SCRUM-77).
 void main() {
   late _MockPermisosService servicio;
+  late _MockAuthService auth;
 
   setUp(() {
+    auth = _MockAuthService();
+    when(() => auth.completarOnboarding()).thenAnswer((_) async {});
     servicio = _MockPermisosService();
     when(
       () => servicio.estadoUbicacion(),
@@ -53,6 +59,7 @@ void main() {
       ProviderScope(
         overrides: [
           permisosServiceProvider.overrideWithValue(servicio),
+          authServiceProvider.overrideWithValue(auth),
           permisosUsuarioRepositoryProvider.overrideWithValue(
             _RepositorioFalso(),
           ),
@@ -92,12 +99,15 @@ void main() {
     await esperarAviso(tester);
   });
 
-  testWidgets('"Continuar" lleva a Inicio', (tester) async {
+  testWidgets('"Continuar" termina el onboarding y lleva a Inicio', (
+    tester,
+  ) async {
     await montar(tester);
 
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
 
+    verify(() => auth.completarOnboarding()).called(1);
     expect(find.text('Pantalla Inicio'), findsOneWidget);
   });
 

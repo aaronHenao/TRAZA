@@ -35,12 +35,21 @@ const rutasSinSesion = {'/login', '/registro', '/recuperar', '/restablecer'};
 ///
 /// - Sin sesión, cualquier pantalla de la app lleva al login: sin sesión, RLS
 ///   no deja leer ni guardar nada.
-/// - Con sesión, abrir el login o el registro lleva directo a Inicio.
+/// - Con sesión, abrir el login o el registro lleva directo a Inicio, o a
+///   Perfil si [requiereOnboarding] (SCRUM-81). Solo esas dos rutas: si se
+///   forzara en todas, un fallo al marcar el onboarding dejaría a la persona
+///   atrapada en Perfil.
 ///
 /// La recuperación de contraseña queda abierta aunque haya sesión: verificar el
 /// código abre una sesión temporal y la persona tiene que poder terminar.
-String? redireccionPorSesion({required bool haySesion, required String ruta}) {
+String? redireccionPorSesion({
+  required bool haySesion,
+  required String ruta,
+  bool requiereOnboarding = false,
+}) {
   if (!haySesion && !rutasSinSesion.contains(ruta)) return '/login';
-  if (haySesion && (ruta == '/login' || ruta == '/registro')) return '/inicio';
+  if (haySesion && (ruta == '/login' || ruta == '/registro')) {
+    return requiereOnboarding ? '/perfil' : '/inicio';
+  }
   return null;
 }

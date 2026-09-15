@@ -38,6 +38,13 @@ const _rutaInicial = String.fromEnvironment(
 /// Supabase).
 final _navegacion = GoRouter(
   initialLocation: _rutaInicial,
+  // Se evalúa en cada cambio de pantalla. Supabase guarda la sesión en el
+  // dispositivo y la restaura en `Supabase.initialize`, así que al abrir la
+  // app ya se sabe si hay alguien con sesión iniciada.
+  redirect: (context, state) => redireccionPorSesion(
+    haySesion: Supabase.instance.client.auth.currentSession != null,
+    ruta: state.matchedLocation,
+  ),
   routes: [
     // Login, registro y recuperación de contraseña (SCRUM-32 a SCRUM-36).
     ...rutasAuth,

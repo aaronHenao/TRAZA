@@ -26,3 +26,21 @@ final rutasAuth = <GoRoute>[
         ResetPasswordScreen(correo: state.extra as String? ?? ''),
   ),
 ];
+
+/// Rutas que se pueden abrir sin haber iniciado sesión.
+const rutasSinSesion = {'/login', '/registro', '/recuperar', '/restablecer'};
+
+/// A dónde mandar a la persona según si tiene sesión guardada. `null` deja
+/// seguir a [ruta].
+///
+/// - Sin sesión, cualquier pantalla de la app lleva al login: sin sesión, RLS
+///   no deja leer ni guardar nada.
+/// - Con sesión, abrir el login o el registro lleva directo a Inicio.
+///
+/// La recuperación de contraseña queda abierta aunque haya sesión: verificar el
+/// código abre una sesión temporal y la persona tiene que poder terminar.
+String? redireccionPorSesion({required bool haySesion, required String ruta}) {
+  if (!haySesion && !rutasSinSesion.contains(ruta)) return '/login';
+  if (haySesion && (ruta == '/login' || ruta == '/registro')) return '/inicio';
+  return null;
+}

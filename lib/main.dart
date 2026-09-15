@@ -12,6 +12,7 @@ import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
+import 'widgets/ofrece_permiso_salud.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 
 Future<void> main() async {
@@ -65,9 +66,10 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/tracking',
       // Sin permiso de ubicación no se abre: explica por qué y lo pide
-      // (SCRUM-82).
-      builder: (context, state) =>
-          const RequierePermisoUbicacion(child: TrackingConActividadElegida()),
+      // (SCRUM-82). Después ofrece el de salud, que es opcional (SCRUM-83).
+      builder: (context, state) => const RequierePermisoUbicacion(
+        child: OfrecePermisoSalud(child: TrackingConActividadElegida()),
+      ),
     ),
     // Resumen de la sesión recién finalizada (SCRUM-43). El id del
     // entrenamiento viaja en la ruta (SCRUM-122); sin sesión no hay id y se

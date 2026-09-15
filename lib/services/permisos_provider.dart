@@ -98,6 +98,10 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
     return resultado;
   }
 
+  /// Entrenar sin datos de salud (SCRUM-83): no se vuelve a ofrecer el
+  /// permiso hasta que la app se cierre.
+  void omitirSalud() => state = state.copyWith(saludOmitida: true);
+
   Future<void> instalarProveedorSalud() => _servicio.instalarProveedorSalud();
 
   Future<void> abrirAjustes() => _servicio.abrirAjustes();

@@ -36,6 +36,7 @@ class EstadoPermisos {
     this.solicitandoUbicacion = false,
     this.solicitandoSalud = false,
     this.consultado = false,
+    this.saludOmitida = false,
   });
 
   final EstadoPermiso ubicacion;
@@ -50,12 +51,17 @@ class EstadoPermisos {
   /// "falta el permiso" durante el instante que tarda la consulta.
   final bool consultado;
 
+  /// El usuario eligió entrenar sin datos de salud (SCRUM-83). Dura mientras
+  /// la app esté abierta: no se le vuelve a preguntar en cada entrenamiento.
+  final bool saludOmitida;
+
   EstadoPermisos copyWith({
     EstadoPermiso? ubicacion,
     EstadoPermiso? salud,
     bool? solicitandoUbicacion,
     bool? solicitandoSalud,
     bool? consultado,
+    bool? saludOmitida,
   }) {
     return EstadoPermisos(
       ubicacion: ubicacion ?? this.ubicacion,
@@ -63,6 +69,7 @@ class EstadoPermisos {
       solicitandoUbicacion: solicitandoUbicacion ?? this.solicitandoUbicacion,
       solicitandoSalud: solicitandoSalud ?? this.solicitandoSalud,
       consultado: consultado ?? this.consultado,
+      saludOmitida: saludOmitida ?? this.saludOmitida,
     );
   }
 }

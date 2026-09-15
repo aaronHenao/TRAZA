@@ -66,6 +66,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Datos de salud desde Apple Health (SCRUM-78). Falta activar la
+	     capacidad HealthKit en Xcode (requiere Mac). -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>TRAZA lee tu frecuencia cardiaca, calorías y pasos para mostrarlos en el resumen de tus entrenamientos.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>TRAZA no modifica tus datos de salud; solo los lee para mostrarlos en el resumen de tus entrenamientos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>TRAZA usa tu ubicación para mostrar tu recorrido y calcular la distancia mientras entrenas.</string>
 	<!-- Rastreo con la pantalla bloqueada durante una actividad iniciada

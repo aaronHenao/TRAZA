@@ -13,6 +13,8 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
   /// se destruyó mientras se esperaba al sistema.
   bool _activo = false;
 
+  PermisosService get _servicio => ref.read(permisosServiceProvider);
+
   @override
   EstadoPermisos build() {
     _activo = true;
@@ -22,20 +24,13 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
   }
 
   /// Vuelve a consultar al sistema. Se llama al abrir la app y al volver de
-  /// los ajustes del teléfono, donde el usuario pudo cambiar el permiso.
+  /// los ajustes del teléfono, donde el usuario pudo cambiar los permisos.
   Future<void> actualizar() async {
     if (!_activo) return;
-    try {
-      final ubicacion = await ref
-          .read(permisosServiceProvider)
-          .estadoUbicacion();
-      if (!_activo) return;
-      state = state.copyWith(ubicacion: ubicacion);
-    } catch (error) {
-      // Por ejemplo, una plataforma sin el plugin. Se deja como desconocido y
-      // el botón sigue disponible para intentarlo.
-      debugPrint('No se pudo consultar el permiso de ubicación: $error');
-    }
+    final ubicacion = await _consultar('ubicación', _servicio.estadoUbicacion);
+    final salud = await _consultar('salud', _servicio.estadoSalud);
+    if (!_activo) return;
+    state = state.copyWith(ubicacion: ubicacion, salud: salud);
   }
 
   /// Pide el permiso de ubicación (SCRUM-77) y devuelve cómo quedó, para que
@@ -44,12 +39,7 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
     if (state.solicitandoUbicacion) return state.ubicacion;
     state = state.copyWith(solicitandoUbicacion: true);
 
-    var resultado = EstadoPermiso.denegado;
-    try {
-      resultado = await ref.read(permisosServiceProvider).solicitarUbicacion();
-    } catch (error) {
-      debugPrint('No se pudo pedir el permiso de ubicación: $error');
-    }
+    final resultado = await _pedir('ubicación', _servicio.solicitarUbicacion);
 
     if (_activo) {
       state = state.copyWith(ubicacion: resultado, solicitandoUbicacion: false);
@@ -57,8 +47,49 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
     return resultado;
   }
 
-  Future<void> abrirAjustes() =>
-      ref.read(permisosServiceProvider).abrirAjustes();
+  /// Pide acceso a los datos de salud (SCRUM-78).
+  Future<EstadoPermiso> solicitarSalud() async {
+    if (state.solicitandoSalud) return state.salud;
+    state = state.copyWith(solicitandoSalud: true);
+
+    final resultado = await _pedir('salud', _servicio.solicitarSalud);
+
+    if (_activo) {
+      state = state.copyWith(salud: resultado, solicitandoSalud: false);
+    }
+    return resultado;
+  }
+
+  Future<void> instalarProveedorSalud() => _servicio.instalarProveedorSalud();
+
+  Future<void> abrirAjustes() => _servicio.abrirAjustes();
+
+  /// Un error del plugin (por ejemplo, una plataforma sin él) deja el permiso
+  /// como desconocido y el botón sigue disponible para intentarlo.
+  static Future<EstadoPermiso> _consultar(
+    String permiso,
+    Future<EstadoPermiso> Function() consulta,
+  ) async {
+    try {
+      return await consulta();
+    } catch (error) {
+      debugPrint('No se pudo consultar el permiso de $permiso: $error');
+      return EstadoPermiso.desconocido;
+    }
+  }
+
+  /// Si pedirlo falla, para el usuario es lo mismo que no tenerlo.
+  static Future<EstadoPermiso> _pedir(
+    String permiso,
+    Future<EstadoPermiso> Function() solicitud,
+  ) async {
+    try {
+      return await solicitud();
+    } catch (error) {
+      debugPrint('No se pudo pedir el permiso de $permiso: $error');
+      return EstadoPermiso.denegado;
+    }
+  }
 }
 
 final permisosProvider = NotifierProvider<PermisosNotifier, EstadoPermisos>(

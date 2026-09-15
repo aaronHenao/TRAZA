@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -56,6 +57,8 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
         break;
       case EstadoPermiso.denegado:
       case EstadoPermiso.desconocido:
+      // geolocator no lo devuelve; si llegara, para el usuario es igual.
+      case EstadoPermiso.noDisponible:
         mostrarToast(
           context,
           'Sin ubicación no podrás registrar tus recorridos',
@@ -63,6 +66,69 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
         );
       case EstadoPermiso.bloqueado:
         await _explicarAjustes();
+    }
+  }
+
+  /// SCRUM-78: abre Health Connect o Apple Health para elegir qué datos
+  /// comparte. Negarlo no bloquea nada: el resumen sale sin esas métricas.
+  Future<void> _permitirSalud() async {
+    final resultado = await ref
+        .read(permisosProvider.notifier)
+        .solicitarSalud();
+    if (!mounted) return;
+
+    switch (resultado) {
+      case EstadoPermiso.concedido:
+        break;
+      case EstadoPermiso.noDisponible:
+        await _explicarSaludNoDisponible();
+      case EstadoPermiso.denegado:
+      case EstadoPermiso.bloqueado:
+      case EstadoPermiso.desconocido:
+        mostrarToast(
+          context,
+          'Tu resumen no mostrará métricas de salud',
+          separacionInferior: 90,
+        );
+    }
+  }
+
+  /// En Android los datos llegan por Health Connect; si falta, se ofrece
+  /// instalarlo. En web o escritorio no hay de dónde leerlos.
+  Future<void> _explicarSaludNoDisponible() async {
+    final esAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    if (!esAndroid) {
+      mostrarToast(
+        context,
+        'Este dispositivo no permite compartir datos de salud',
+        separacionInferior: 90,
+      );
+      return;
+    }
+
+    final instalar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Falta Health Connect'),
+        content: const Text(
+          'TRAZA lee tus datos de salud a través de Health Connect, la app de '
+          'Google que los reúne. Instálala y vuelve a intentarlo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Ahora no'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Instalar'),
+          ),
+        ],
+      ),
+    );
+    if (instalar == true) {
+      await ref.read(permisosProvider.notifier).instalarProveedorSalud();
     }
   }
 
@@ -143,8 +209,10 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
                         'durante tus entrenamientos y las mostrará en tu '
                         'resumen.',
                     textoBoton: 'Permitir acceso',
-                    // Se conecta con el permiso real en SCRUM-78.
-                    onPermitir: null,
+                    concedido: permisos.salud == EstadoPermiso.concedido,
+                    onPermitir: permisos.solicitandoSalud
+                        ? null
+                        : _permitirSalud,
                     onAhoraNo: () => mostrarToast(context, _mensajeAhoraNo),
                   ),
                 ],

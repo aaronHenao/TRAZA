@@ -16,6 +16,9 @@ void main() {
     when(
       () => servicio.estadoUbicacion(),
     ).thenAnswer((_) async => EstadoPermiso.denegado);
+    when(
+      () => servicio.estadoSalud(),
+    ).thenAnswer((_) async => EstadoPermiso.desconocido);
     container = ProviderContainer(
       overrides: [permisosServiceProvider.overrideWithValue(servicio)],
     );
@@ -77,5 +80,57 @@ void main() {
     await container.read(permisosProvider.notifier).actualizar();
 
     expect(container.read(permisosProvider).ubicacion, EstadoPermiso.concedido);
+  });
+
+  group('Datos de salud', () {
+    test('al crearse consulta también el de salud', () async {
+      when(
+        () => servicio.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+
+      container.read(permisosProvider);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(container.read(permisosProvider).salud, EstadoPermiso.concedido);
+      verifyNever(() => servicio.solicitarSalud());
+    });
+
+    test('si el usuario acepta, queda concedido', () async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+
+      final resultado = await container
+          .read(permisosProvider.notifier)
+          .solicitarSalud();
+
+      expect(resultado, EstadoPermiso.concedido);
+      expect(container.read(permisosProvider).salud, EstadoPermiso.concedido);
+      expect(container.read(permisosProvider).solicitandoSalud, isFalse);
+    });
+
+    test('sin Health Connect informa que no está disponible', () async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.noDisponible);
+
+      final resultado = await container
+          .read(permisosProvider.notifier)
+          .solicitarSalud();
+
+      expect(resultado, EstadoPermiso.noDisponible);
+    });
+
+    test('un error al consultar no tumba el de ubicación', () async {
+      when(() => servicio.estadoSalud()).thenThrow(Exception('plugin'));
+
+      container.read(permisosProvider);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      final estado = container.read(permisosProvider);
+      expect(estado.ubicacion, EstadoPermiso.denegado);
+      expect(estado.salud, EstadoPermiso.desconocido);
+    });
   });
 }

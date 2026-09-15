@@ -1,6 +1,7 @@
 /// En qué punto está un permiso del sistema.
 enum EstadoPermiso {
-  /// Todavía no se ha consultado al sistema.
+  /// Todavía no se sabe. iOS, además, nunca revela si se negó la lectura de
+  /// datos de salud: ahí se queda en este valor.
   desconocido,
 
   concedido,
@@ -11,27 +12,39 @@ enum EstadoPermiso {
   /// El sistema ya no muestra la ventana (Android tras negarlo dos veces, iOS
   /// tras negarlo una). Solo se puede activar desde los ajustes del teléfono.
   bloqueado,
+
+  /// El dispositivo no lo soporta: web, escritorio, o un Android sin Health
+  /// Connect instalado.
+  noDisponible,
 }
 
 /// Permisos que usa la app (SCRUM-37).
 class EstadoPermisos {
   const EstadoPermisos({
     this.ubicacion = EstadoPermiso.desconocido,
+    this.salud = EstadoPermiso.desconocido,
     this.solicitandoUbicacion = false,
+    this.solicitandoSalud = false,
   });
 
   final EstadoPermiso ubicacion;
+  final EstadoPermiso salud;
 
   /// La ventana del sistema está abierta: evita pedirlo dos veces seguidas.
   final bool solicitandoUbicacion;
+  final bool solicitandoSalud;
 
   EstadoPermisos copyWith({
     EstadoPermiso? ubicacion,
+    EstadoPermiso? salud,
     bool? solicitandoUbicacion,
+    bool? solicitandoSalud,
   }) {
     return EstadoPermisos(
       ubicacion: ubicacion ?? this.ubicacion,
+      salud: salud ?? this.salud,
       solicitandoUbicacion: solicitandoUbicacion ?? this.solicitandoUbicacion,
+      solicitandoSalud: solicitandoSalud ?? this.solicitandoSalud,
     );
   }
 }

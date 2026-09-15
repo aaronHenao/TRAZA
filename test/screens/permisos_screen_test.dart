@@ -19,7 +19,11 @@ void main() {
     when(
       () => servicio.estadoUbicacion(),
     ).thenAnswer((_) async => EstadoPermiso.denegado);
+    when(
+      () => servicio.estadoSalud(),
+    ).thenAnswer((_) async => EstadoPermiso.denegado);
     when(() => servicio.abrirAjustes()).thenAnswer((_) async {});
+    when(() => servicio.instalarProveedorSalud()).thenAnswer((_) async {});
   });
 
   Future<void> montar(WidgetTester tester) async {
@@ -141,6 +145,57 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(() => servicio.abrirAjustes()).called(1);
+    });
+  });
+
+  group('Datos de salud', () {
+    testWidgets('al aceptarlo la tarjeta pasa a concedido', (tester) async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir acceso'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.solicitarSalud()).called(1);
+      expect(find.text('Permiso concedido'), findsOneWidget);
+    });
+
+    testWidgets('al negarlo avisa que el resumen irá sin esas métricas', (
+      tester,
+    ) async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir acceso'));
+      await tester.pump();
+
+      expect(
+        find.text('Tu resumen no mostrará métricas de salud'),
+        findsOneWidget,
+      );
+      await esperarAviso(tester);
+    });
+
+    testWidgets('en Android sin Health Connect ofrece instalarlo', (
+      tester,
+    ) async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.noDisponible);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir acceso'));
+      await tester.pumpAndSettle();
+      expect(find.text('Falta Health Connect'), findsOneWidget);
+
+      await tester.tap(find.text('Instalar'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.instalarProveedorSalud()).called(1);
     });
   });
 }

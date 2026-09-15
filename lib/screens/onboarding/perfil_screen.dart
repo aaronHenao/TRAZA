@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../services/perfil_provider.dart';
@@ -25,7 +26,7 @@ class PerfilScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            TrazaTopBar(titulo: 'Perfil'),
+            TrazaTopBar(titulo: 'Perfil', accion: BotonCerrarSesion()),
             Expanded(child: _Cuerpo()),
           ],
         ),

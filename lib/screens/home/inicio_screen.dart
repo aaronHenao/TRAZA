@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../services/actividad_provider.dart';
 import '../../widgets/chips_tipo_actividad.dart';
@@ -105,6 +106,8 @@ class _Cabecera extends StatelessWidget {
           onPressed: null,
           tooltip: 'Historial',
         ),
+        SizedBox(width: 8),
+        BotonCerrarSesion(),
       ],
     );
   }

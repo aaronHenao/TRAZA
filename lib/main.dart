@@ -3,13 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/auth/rutas_auth.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
-import 'theme/app_theme.dart';
 import 'supabase_config.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,41 +21,39 @@ Future<void> main() async {
   runApp(const ProviderScope(child: TrazaApp()));
 }
 
-/// Pantalla con la que abre la app. Por defecto, el perfil.
+/// Pantalla con la que abre la app. Por defecto, el login.
 ///
-/// Mientras el flujo no esté completo no se llega a todas las pantallas
-/// navegando, y en un celular o emulador no hay barra de direcciones. Para
-/// abrir directo otra pantalla se elige al ejecutar:
+/// En un celular o emulador no hay barra de direcciones. Para abrir directo
+/// otra pantalla se elige al ejecutar:
 ///
 /// ```bash
 /// flutter run --dart-define=RUTA_INICIAL=/tracking
 /// ```
 const _rutaInicial = String.fromEnvironment(
   'RUTA_INICIAL',
-  defaultValue: '/perfil',
+  defaultValue: '/login',
 );
 
 /// Navegación entre pantallas de la app (no son endpoints: el backend es
 /// Supabase).
-///
-/// El flujo definitivo arranca en registro/login (SCRUM-32 a SCRUM-36); mientras
-/// esas pantallas no existan, la app abre directamente en el perfil, salvo que
-/// se elija otra pantalla con `RUTA_INICIAL`.
 final _navegacion = GoRouter(
   initialLocation: _rutaInicial,
+  // Se evalúa en cada cambio de pantalla. Supabase guarda la sesión en el
+  // dispositivo y la restaura en `Supabase.initialize`, así que al abrir la
+  // app ya se sabe si hay alguien con sesión iniciada.
+  redirect: (context, state) => redireccionPorSesion(
+    haySesion: Supabase.instance.client.auth.currentSession != null,
+    ruta: state.matchedLocation,
+  ),
   routes: [
-    GoRoute(
-      path: '/perfil',
-      builder: (context, state) => const PerfilScreen(),
-    ),
+    // Login, registro y recuperación de contraseña (SCRUM-32 a SCRUM-36).
+    ...rutasAuth,
+    GoRoute(path: '/perfil', builder: (context, state) => const PerfilScreen()),
     GoRoute(
       path: '/permisos',
       builder: (context, state) => const PermisosScreen(),
     ),
-    GoRoute(
-      path: '/inicio',
-      builder: (context, state) => const InicioScreen(),
-    ),
+    GoRoute(path: '/inicio', builder: (context, state) => const InicioScreen()),
     // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
     // usuario eligió en los chips del inicio (SCRUM-93).
     GoRoute(

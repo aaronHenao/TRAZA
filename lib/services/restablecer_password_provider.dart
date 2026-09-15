@@ -10,7 +10,8 @@ final restablecerPasswordProvider =
       EstadoRestablecerPassword
     >(RestablecerPasswordNotifier.new);
 
-/// Verifica el código y cambia la contraseña (SCRUM-74).
+/// Verifica el código y cambia la contraseña (SCRUM-74), y al terminar cierra
+/// la sesión temporal que abre el código (SCRUM-75).
 class RestablecerPasswordNotifier
     extends AutoDisposeNotifier<EstadoRestablecerPassword> {
   bool _activo = false;
@@ -19,10 +20,23 @@ class RestablecerPasswordNotifier
   /// la contraseña, el siguiente intento no vuelve a verificarlo.
   bool _codigoVerificado = false;
 
+  /// Si ya se cambió la contraseña y se cerró la sesión.
+  bool _terminado = false;
+
   @override
   EstadoRestablecerPassword build() {
     _activo = true;
-    ref.onDispose(() => _activo = false);
+    // Se lee aquí y no dentro de onDispose, donde no se debe usar ref.
+    final authService = ref.read(authServiceProvider);
+    ref.onDispose(() {
+      _activo = false;
+      // Verificó el código pero se fue sin cambiar la contraseña: no dejar
+      // abierta una sesión que la persona nunca inició de verdad. Sin await:
+      // onDispose no puede esperar.
+      if (_codigoVerificado && !_terminado) {
+        authService.cerrarSesion();
+      }
+    });
     return const EstadoRestablecerPassword.inicial();
   }
 
@@ -46,6 +60,8 @@ class RestablecerPasswordNotifier
       }
 
       await authService.cambiarPassword(nuevaPassword: nuevaPassword);
+      await authService.cerrarSesion();
+      _terminado = true;
       _publicar(const EstadoRestablecerPassword.exito());
     } on RecuperacionException catch (e) {
       _publicar(

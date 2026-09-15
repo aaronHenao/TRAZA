@@ -348,4 +348,20 @@ void main() {
       );
     });
   });
+
+  group('cerrarSesion (SCRUM-75)', () {
+    test('cierra la sesión en Supabase', () async {
+      when(() => auth.signOut()).thenAnswer((_) async {});
+
+      await servicio.cerrarSesion();
+
+      verify(() => auth.signOut()).called(1);
+    });
+
+    test('si falla la red, no lanza el error', () async {
+      when(() => auth.signOut()).thenThrow(AuthRetryableFetchException());
+
+      await expectLater(servicio.cerrarSesion(), completes);
+    });
+  });
 }

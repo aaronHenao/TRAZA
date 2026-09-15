@@ -6,6 +6,7 @@ import '../../models/estado_restablecer_password.dart';
 import '../../services/restablecer_password_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
+import 'login_screen.dart';
 
 /// Segundo paso de la recuperación: código y nueva contraseña (SCRUM-74).
 class ResetPasswordScreen extends ConsumerStatefulWidget {
@@ -53,16 +54,26 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   ) {
     switch (actual.fase) {
       case FaseRestablecerPassword.exito:
-        // TODO(SCRUM-75): cerrar la sesión temporal y volver al login.
-        _mostrarAlerta(
-          'Contraseña actualizada',
-          'Ya puedes iniciar sesión con tu nueva contraseña.',
-        );
+        _mostrarExitoYVolverAlLogin();
       case FaseRestablecerPassword.error:
         _mostrarAlerta(actual.tituloError!, actual.mensajeError!);
       case FaseRestablecerPassword.inicial || FaseRestablecerPassword.enviando:
         break;
     }
+  }
+
+  Future<void> _mostrarExitoYVolverAlLogin() async {
+    await _mostrarAlerta(
+      'Contraseña actualizada',
+      'Ya puedes iniciar sesión con tu nueva contraseña.',
+    );
+
+    if (!mounted) return;
+    // Borra toda la pila y deja solo el login: atrás no vuelve al código.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {

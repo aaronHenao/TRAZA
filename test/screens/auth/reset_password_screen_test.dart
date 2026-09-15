@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/screens/auth/forgot_password_screen.dart';
+import 'package:traza/screens/auth/login_screen.dart';
 import 'package:traza/screens/auth/reset_password_screen.dart';
 import 'package:traza/services/auth_service.dart';
 
@@ -12,7 +13,10 @@ class _MockAuthService extends Mock implements AuthService {}
 void main() {
   late _MockAuthService auth;
 
-  setUp(() => auth = _MockAuthService());
+  setUp(() {
+    auth = _MockAuthService();
+    when(() => auth.cerrarSesion()).thenAnswer((_) async {});
+  });
 
   Future<void> montar(WidgetTester tester, Widget pantalla) async {
     // Tamaño de un celular: 390 x 844 puntos.
@@ -123,6 +127,32 @@ void main() {
       ).called(1);
       verify(() => auth.cambiarPassword(nuevaPassword: 'Nueva123!')).called(1);
       expect(find.text('Contraseña actualizada'), findsOneWidget);
+    });
+
+    testWidgets('SCRUM-75: al cerrar el mensaje deja solo el login', (
+      tester,
+    ) async {
+      when(
+        () => auth.verificarCodigoRecuperacion(
+          correo: any(named: 'correo'),
+          codigo: any(named: 'codigo'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => auth.cambiarPassword(nuevaPassword: any(named: 'nuevaPassword')),
+      ).thenAnswer((_) async {});
+      await montar(tester, const ResetPasswordScreen(correo: 'ana@correo.com'));
+
+      await llenar(tester);
+      await tocar(tester, 'Cambiar contraseña');
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(ResetPasswordScreen), findsNothing);
+      // Nada debajo del login: "atrás" no vuelve al formulario del código.
+      final navegador = tester.state<NavigatorState>(find.byType(Navigator));
+      expect(navegador.canPop(), isFalse);
     });
 
     testWidgets('muestra el error que manda el service', (tester) async {

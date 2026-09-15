@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -256,6 +257,16 @@ class AuthService {
           mensaje: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
         ),
       };
+    }
+  }
+
+  /// Cierra la sesión. Si falla la red, Supabase igual borra la sesión del
+  /// dispositivo, así que el error no se propaga.
+  Future<void> cerrarSesion() async {
+    try {
+      await _auth.signOut();
+    } catch (e) {
+      debugPrint('No se pudo cerrar la sesión en el servidor: $e');
     }
   }
 }

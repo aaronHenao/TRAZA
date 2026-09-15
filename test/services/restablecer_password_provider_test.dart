@@ -14,6 +14,7 @@ void main() {
 
   setUp(() {
     auth = _MockAuthService();
+    when(() => auth.cerrarSesion()).thenAnswer((_) async {});
     contenedor = ProviderContainer(
       overrides: [authServiceProvider.overrideWithValue(auth)],
     );
@@ -111,4 +112,36 @@ void main() {
       ).called(1);
     },
   );
+
+  group('SCRUM-75 — sesión temporal', () {
+    test('cierra la sesión después de cambiar la contraseña', () async {
+      cuandoVerificar().thenAnswer((_) async {});
+      cuandoCambiar().thenAnswer((_) async {});
+
+      await restablecer();
+
+      verify(() => auth.cerrarSesion()).called(1);
+    });
+
+    test('si se sale tras verificar el código, cierra la sesión', () async {
+      cuandoVerificar().thenAnswer((_) async {});
+      cuandoCambiar().thenThrow(
+        const RecuperacionException(
+          titulo: 'Usa otra contraseña',
+          mensaje: 'Tiene que ser distinta.',
+        ),
+      );
+
+      await restablecer();
+      contenedor.dispose(); // la persona cerró la pantalla
+
+      verify(() => auth.cerrarSesion()).called(1);
+    });
+
+    test('si se sale sin verificar el código, no toca la sesión', () async {
+      contenedor.dispose();
+
+      verifyNever(() => auth.cerrarSesion());
+    });
+  });
 }

@@ -1,4 +1,6 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/services/auth_service.dart';
@@ -31,13 +33,23 @@ User _usuario({required bool conIdentidades}) {
   );
 }
 
+/// Google falso: simula la ventana de elegir cuenta sin abrir nada.
+class _MockGoogleSignIn extends Mock implements GoogleSignIn {}
+
+class _MockCuentaGoogle extends Mock implements GoogleSignInAccount {}
+
+class _MockAutenticacionGoogle extends Mock
+    implements GoogleSignInAuthentication {}
+
 void main() {
   late _MockGoTrueClient auth;
+  late _MockGoogleSignIn google;
   late AuthService servicio;
 
   setUp(() {
     auth = _MockGoTrueClient();
-    servicio = AuthService(auth: auth);
+    google = _MockGoogleSignIn();
+    servicio = AuthService(auth: auth, googleSignIn: google);
   });
 
   When<Future<AuthResponse>> cuandoSignUp() {
@@ -362,6 +374,101 @@ void main() {
       when(() => auth.signOut()).thenThrow(AuthRetryableFetchException());
 
       await expectLater(servicio.cerrarSesion(), completes);
+    });
+
+    test('también cierra la sesión de Google', () async {
+      when(() => auth.signOut()).thenAnswer((_) async {});
+      when(() => google.signOut()).thenAnswer((_) async => null);
+
+      await servicio.cerrarSesion();
+
+      verify(() => google.signOut()).called(1);
+    });
+  });
+
+  group('iniciarSesionConGoogle (SCRUM-68 y SCRUM-69)', () {
+    Matcher lanzaInicioSesionException(String titulo) {
+      return throwsA(
+        isA<InicioSesionException>().having((e) => e.titulo, 'titulo', titulo),
+      );
+    }
+
+    void verificarQueNoLlamoASupabase() {
+      verifyNever(
+        () => auth.signInWithIdToken(
+          provider: OAuthProvider.google,
+          idToken: any(named: 'idToken'),
+          accessToken: any(named: 'accessToken'),
+        ),
+      );
+    }
+
+    test('entra: le pasa a Supabase el pase de Google', () async {
+      final cuenta = _MockCuentaGoogle();
+      final autenticacion = _MockAutenticacionGoogle();
+      when(() => google.signIn()).thenAnswer((_) async => cuenta);
+      when(() => cuenta.authentication).thenAnswer((_) async => autenticacion);
+      when(() => autenticacion.idToken).thenReturn('pase-de-google');
+      when(() => autenticacion.accessToken).thenReturn('acceso');
+      when(
+        () => auth.signInWithIdToken(
+          provider: OAuthProvider.google,
+          idToken: 'pase-de-google',
+          accessToken: 'acceso',
+        ),
+      ).thenAnswer((_) async => AuthResponse());
+
+      expect(await servicio.iniciarSesionConGoogle(), isTrue);
+    });
+
+    test('siempre muestra la lista de cuentas: olvida la anterior', () async {
+      when(() => google.signOut()).thenAnswer((_) async => null);
+      when(() => google.signIn()).thenAnswer((_) async => null);
+
+      await servicio.iniciarSesionConGoogle();
+
+      verifyInOrder([() => google.signOut(), () => google.signIn()]);
+    });
+
+    test('cerró la ventana de Google: no es error', () async {
+      when(() => google.signIn()).thenAnswer((_) async => null);
+
+      expect(await servicio.iniciarSesionConGoogle(), isFalse);
+      verificarQueNoLlamoASupabase();
+    });
+
+    test('Google avisa cancelación: no es error', () async {
+      when(
+        () => google.signIn(),
+      ).thenThrow(PlatformException(code: GoogleSignIn.kSignInCanceledError));
+
+      expect(await servicio.iniciarSesionConGoogle(), isFalse);
+    });
+
+    test('sin conexión', () async {
+      when(
+        () => google.signIn(),
+      ).thenThrow(PlatformException(code: GoogleSignIn.kNetworkError));
+
+      await expectLater(
+        servicio.iniciarSesionConGoogle(),
+        lanzaInicioSesionException('Sin conexión'),
+      );
+    });
+
+    test('Google falla (por ejemplo, SHA-1 sin registrar)', () async {
+      when(() => google.signIn()).thenThrow(
+        PlatformException(
+          code: GoogleSignIn.kSignInFailedError,
+          message: 'ApiException: 10',
+        ),
+      );
+
+      await expectLater(
+        servicio.iniciarSesionConGoogle(),
+        lanzaInicioSesionException('No pudimos conectar con Google'),
+      );
+      verificarQueNoLlamoASupabase();
     });
   });
 }

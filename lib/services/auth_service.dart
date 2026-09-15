@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../google_config.dart';
 
 /// El correo ya pertenece a otra cuenta.
 class CorreoYaRegistradoException implements Exception {}
@@ -42,10 +46,16 @@ final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 class AuthService {
   /// En la app se usa el cliente real. Las pruebas pasan uno simulado, porque
   /// ahí Supabase no está inicializado.
-  AuthService({GoTrueClient? auth})
-    : _auth = auth ?? Supabase.instance.client.auth;
+  AuthService({GoTrueClient? auth, GoogleSignIn? googleSignIn})
+    : _auth = auth ?? Supabase.instance.client.auth,
+      // serverClientId: el pase de Google va dirigido al cliente web, que es
+      // el que Supabase tiene configurado para verificarlo.
+      _googleSignIn =
+          googleSignIn ??
+          GoogleSignIn(serverClientId: GoogleConfig.webClientId);
 
   final GoTrueClient _auth;
+  final GoogleSignIn _googleSignIn;
 
   /// Crea la cuenta en Supabase Auth. Devuelve `true` si el usuario tiene que
   /// confirmar el correo antes de poder iniciar sesión.
@@ -260,6 +270,57 @@ class AuthService {
     }
   }
 
+  /// Abre la ventana de Google y, con el pase que devuelve, inicia sesión en
+  /// Supabase. Si es la primera vez, Supabase crea la cuenta y el trigger llena
+  /// `perfiles` con el nombre de Google. Devuelve `false` si la persona cerró
+  /// la ventana sin terminar: no es un error.
+  Future<bool> iniciarSesionConGoogle() async {
+    const errorGoogle = InicioSesionException(
+      titulo: 'No pudimos conectar con Google',
+      mensaje:
+          'Inténtalo de nuevo. Si sigue pasando, avísale al equipo de TRAZA.',
+    );
+    const sinConexion = InicioSesionException(
+      titulo: 'Sin conexión',
+      mensaje:
+          'No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo.',
+    );
+
+    try {
+      // Olvida la cuenta de la vez anterior para que Google siempre muestre
+      // la lista y la persona pueda elegir con cuál entrar.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
+      final cuenta = await _googleSignIn.signIn();
+      if (cuenta == null) return false;
+
+      final autenticacion = await cuenta.authentication;
+      final idToken = autenticacion.idToken;
+      // Sin pase: el serverClientId no corresponde al cliente web.
+      if (idToken == null) throw errorGoogle;
+
+      await _auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: autenticacion.accessToken,
+      );
+      return true;
+    } on PlatformException catch (e) {
+      if (e.code == GoogleSignIn.kSignInCanceledError) return false;
+      // "sign_in_failed" con "ApiException: 10" es casi siempre la SHA-1 de
+      // este computador sin registrar en el cliente Android de Google Cloud.
+      debugPrint('Google Sign-In falló: ${e.code} ${e.message}');
+      throw e.code == GoogleSignIn.kNetworkError ? sinConexion : errorGoogle;
+    } on AuthRetryableFetchException {
+      throw sinConexion;
+    } on AuthException catch (e) {
+      debugPrint('Supabase rechazó el pase de Google: ${e.code} ${e.message}');
+      throw errorGoogle;
+    }
+  }
+
   /// Cierra la sesión. Si falla la red, Supabase igual borra la sesión del
   /// dispositivo, así que el error no se propaga.
   Future<void> cerrarSesion() async {
@@ -267,6 +328,13 @@ class AuthService {
       await _auth.signOut();
     } catch (e) {
       debugPrint('No se pudo cerrar la sesión en el servidor: $e');
+    }
+    // También en Google: si no, la próxima vez entraría directo con la misma
+    // cuenta, sin dejar elegir otra.
+    try {
+      await _googleSignIn.signOut();
+    } catch (e) {
+      debugPrint('No se pudo cerrar la sesión de Google: $e');
     }
   }
 }

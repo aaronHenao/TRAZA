@@ -116,8 +116,34 @@ void main() {
     expect(container.read(recorridoProvider).puntos, hasLength(4));
   });
 
+  test('sin lecturas del GPS la distancia es 0, no un dato vacío', () async {
+    await montar();
+    await pumpEventQueue();
 
+    expect(distancia(), const DistanciaEnVivo(metros: 0));
+    expect(distancia().ritmoPara(const Duration(minutes: 5)), "0'00\"");
+  });
 
+  test('si el GPS falla conserva lo acumulado y no lanza', () async {
+    await montar();
+
+    await emitir(6.2311, segundos: 0);
+    await emitir(6.2321, segundos: 30); // +111 m
+
+    fuente.fallar(StateError('GPS apagado'));
+    await pumpEventQueue();
+
+    expect(distancia().metros, closeTo(_metrosPorMiliGrado, 0.5));
+  });
+
+  test('una lectura sin precisión reportada sí cuenta', () async {
+    await montar();
+
+    await emitir(6.2311, segundos: 0, precisionMetros: null);
+    await emitir(6.2321, segundos: 30, precisionMetros: null);
+
+    expect(distancia().metros, closeTo(_metrosPorMiliGrado, 0.5));
+  });
 
   test('no cuenta lo que el usuario se movió en pausa', () async {
     await montar();

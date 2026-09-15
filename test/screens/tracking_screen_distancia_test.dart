@@ -13,7 +13,7 @@ import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
 
 /// Distancia y ritmo en vivo dentro de la pantalla de entrenamiento
-/// (SCRUM-113).
+/// (SCRUM-113 y SCRUM-115).
 void main() {
   late RelojFalso reloj;
   late ProviderContainer container;
@@ -50,6 +50,23 @@ void main() {
     await tester.pump();
   }
 
+  /// Emite una lectura [segundos] después del inicio y deja que llegue
+  /// a la pantalla (el evento del stream cae después del frame).
+  Future<void> emitir(
+    WidgetTester tester,
+    double latitud, {
+    required int segundos,
+  }) async {
+    fuente.emitir(
+      puntoDePrueba(
+        latitud: latitud,
+        capturadoEn: DateTime(2026, 1, 1, 8).add(Duration(seconds: segundos)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+  }
+
   void detener() => container.read(cronometroProvider.notifier).detener();
 
   testWidgets('arranca en 0.00 km y ritmo 0\'00" mientras no hay ubicación', (
@@ -69,4 +86,21 @@ void main() {
 
 
 
+  testWidgets('si se pierde la ubicación conserva la distancia acumulada', (
+    tester,
+  ) async {
+    await montar(tester);
+
+    await emitir(tester, 6.2311, segundos: 0);
+    await emitir(tester, 6.2321, segundos: 30); // +111 m
+
+    fuente.fallar(StateError('GPS apagado'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('0.11 km'), findsOneWidget);
+    expect(find.text('No se pudo obtener tu ubicación.'), findsOneWidget);
+
+    detener();
+  });
 }

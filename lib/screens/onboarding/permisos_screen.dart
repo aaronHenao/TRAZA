@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/estado_permisos.dart';
+import '../../services/permisos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/tarjeta_permiso.dart';
@@ -12,13 +15,88 @@ import '../../widgets/traza_top_bar.dart';
 /// Llega después del perfil y explica para qué usa la app la ubicación y los
 /// datos de salud. Ninguno es obligatorio: el usuario puede seguir sin
 /// concederlos y se le vuelven a pedir cuando use una función que los necesite.
-class PermisosScreen extends StatelessWidget {
+class PermisosScreen extends ConsumerStatefulWidget {
   const PermisosScreen({super.key});
 
+  @override
+  ConsumerState<PermisosScreen> createState() => _PermisosScreenState();
+}
+
+class _PermisosScreenState extends ConsumerState<PermisosScreen> {
   static const _mensajeAhoraNo = 'Podrás activarlo luego cuando lo necesites';
+
+  /// Avisa cuando la app vuelve al frente, por ejemplo al regresar de los
+  /// ajustes del teléfono, para mostrar el permiso como quedó allá.
+  late final AppLifecycleListener _ciclo;
+
+  @override
+  void initState() {
+    super.initState();
+    _ciclo = AppLifecycleListener(
+      onResume: () => ref.read(permisosProvider.notifier).actualizar(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ciclo.dispose();
+    super.dispose();
+  }
+
+  /// SCRUM-77: pide la ubicación y explica qué pasa según la respuesta.
+  Future<void> _permitirUbicacion() async {
+    final resultado = await ref
+        .read(permisosProvider.notifier)
+        .solicitarUbicacion();
+    if (!mounted) return;
+
+    switch (resultado) {
+      case EstadoPermiso.concedido:
+        // La tarjeta ya cambia sola a "Permiso concedido".
+        break;
+      case EstadoPermiso.denegado:
+      case EstadoPermiso.desconocido:
+        mostrarToast(
+          context,
+          'Sin ubicación no podrás registrar tus recorridos',
+          separacionInferior: 90,
+        );
+      case EstadoPermiso.bloqueado:
+        await _explicarAjustes();
+    }
+  }
+
+  /// El sistema ya no muestra su ventana: la única salida son los ajustes.
+  Future<void> _explicarAjustes() async {
+    final abrir = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ubicación desactivada'),
+        content: const Text(
+          'Para registrar tus recorridos, activa el permiso de ubicación en '
+          'los ajustes del teléfono.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Ahora no'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Abrir ajustes'),
+          ),
+        ],
+      ),
+    );
+    if (abrir == true) {
+      await ref.read(permisosProvider.notifier).abrirAjustes();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final permisos = ref.watch(permisosProvider);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -50,8 +128,10 @@ class PermisosScreen extends StatelessWidget {
                         'Necesaria para trazar tu recorrido y calcular la '
                         'distancia mientras entrenas.',
                     textoBoton: 'Permitir ubicación',
-                    // Se conecta con el permiso real en SCRUM-77.
-                    onPermitir: null,
+                    concedido: permisos.ubicacion == EstadoPermiso.concedido,
+                    onPermitir: permisos.solicitandoUbicacion
+                        ? null
+                        : _permitirUbicacion,
                     onAhoraNo: () => mostrarToast(context, _mensajeAhoraNo),
                   ),
                   const SizedBox(height: AppSpacing.md),

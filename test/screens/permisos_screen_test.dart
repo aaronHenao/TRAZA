@@ -1,10 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/screens/onboarding/permisos_screen.dart';
+import 'package:traza/services/permisos_service.dart';
 
-/// Pruebas de la pantalla de permisos (SCRUM-76).
+class _MockPermisosService extends Mock implements PermisosService {}
+
+/// Pruebas de la pantalla de permisos (SCRUM-76) y del permiso de ubicación
+/// (SCRUM-77).
 void main() {
+  late _MockPermisosService servicio;
+
+  setUp(() {
+    servicio = _MockPermisosService();
+    when(
+      () => servicio.estadoUbicacion(),
+    ).thenAnswer((_) async => EstadoPermiso.denegado);
+    when(() => servicio.abrirAjustes()).thenAnswer((_) async {});
+  });
+
   Future<void> montar(WidgetTester tester) async {
     final router = GoRouter(
       initialLocation: '/permisos',
@@ -20,8 +37,18 @@ void main() {
         ),
       ],
     );
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [permisosServiceProvider.overrideWithValue(servicio)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pump();
   }
+
+  /// Deja que el aviso termine su temporizador.
+  Future<void> esperarAviso(WidgetTester tester) =>
+      tester.pumpAndSettle(const Duration(seconds: 3));
 
   testWidgets('explica para qué se usa cada permiso', (tester) async {
     await montar(tester);
@@ -45,8 +72,7 @@ void main() {
       find.text('Podrás activarlo luego cuando lo necesites'),
       findsOneWidget,
     );
-    // Deja que el aviso termine su temporizador.
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    await esperarAviso(tester);
   });
 
   testWidgets('"Continuar" lleva a Inicio', (tester) async {
@@ -56,5 +82,65 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Pantalla Inicio'), findsOneWidget);
+  });
+
+  group('Permiso de ubicación', () {
+    testWidgets('si ya estaba concedido, la tarjeta lo muestra', (
+      tester,
+    ) async {
+      when(
+        () => servicio.estadoUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      expect(find.text('Permiso concedido'), findsOneWidget);
+      expect(find.text('Permitir ubicación'), findsNothing);
+    });
+
+    testWidgets('al aceptarlo la tarjeta pasa a concedido', (tester) async {
+      when(
+        () => servicio.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir ubicación'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.solicitarUbicacion()).called(1);
+      expect(find.text('Permiso concedido'), findsOneWidget);
+    });
+
+    testWidgets('al negarlo explica qué no podrá hacer', (tester) async {
+      when(
+        () => servicio.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir ubicación'));
+      await tester.pump();
+
+      expect(
+        find.text('Sin ubicación no podrás registrar tus recorridos'),
+        findsOneWidget,
+      );
+      expect(find.text('Permitir ubicación'), findsOneWidget);
+      await esperarAviso(tester);
+    });
+
+    testWidgets('si está bloqueado, ofrece abrir los ajustes', (tester) async {
+      when(
+        () => servicio.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.bloqueado);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir ubicación'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ubicación desactivada'), findsOneWidget);
+
+      await tester.tap(find.text('Abrir ajustes'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.abrirAjustes()).called(1);
+    });
   });
 }

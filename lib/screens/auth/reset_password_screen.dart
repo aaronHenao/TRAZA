@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/estado_restablecer_password.dart';
 import '../../services/restablecer_password_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
-import 'login_screen.dart';
 
 /// Segundo paso de la recuperación: código y nueva contraseña (SCRUM-74).
 class ResetPasswordScreen extends ConsumerStatefulWidget {
@@ -69,11 +69,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     );
 
     if (!mounted) return;
-    // Borra toda la pila y deja solo el login: atrás no vuelve al código.
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
+    // go borra toda la pila y deja solo el login: atrás no vuelve al código.
+    context.go('/login');
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {

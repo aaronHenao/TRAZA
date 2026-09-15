@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:traza/screens/auth/forgot_password_screen.dart';
 import 'package:traza/screens/auth/login_screen.dart';
 import 'package:traza/screens/auth/reset_password_screen.dart';
 import 'package:traza/services/auth_service.dart';
+
+import '../../utils/app_de_prueba.dart';
 
 /// Service falso: la pantalla cree que habla con Supabase, pero no hay red.
 class _MockAuthService extends Mock implements AuthService {}
@@ -18,17 +18,14 @@ void main() {
     when(() => auth.cerrarSesion()).thenAnswer((_) async {});
   });
 
-  Future<void> montar(WidgetTester tester, Widget pantalla) async {
+  Future<void> montar(WidgetTester tester, String ruta) async {
     // Tamaño de un celular: 390 x 844 puntos.
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [authServiceProvider.overrideWithValue(auth)],
-        child: MaterialApp(home: pantalla),
-      ),
+      appDePrueba(auth: auth, ruta: ruta, extra: 'ana@correo.com'),
     );
   }
 
@@ -67,10 +64,7 @@ void main() {
       when(
         () => auth.solicitarRecuperacion(correo: any(named: 'correo')),
       ).thenAnswer((_) async {});
-      await montar(
-        tester,
-        const ForgotPasswordScreen(correoInicial: 'ana@correo.com'),
-      );
+      await montar(tester, '/recuperar');
 
       await tocar(tester, 'Enviar código');
       expect(find.text('Revisa tu correo'), findsOneWidget);
@@ -84,7 +78,7 @@ void main() {
 
   group('Paso 2 — código y nueva contraseña (SCRUM-74)', () {
     testWidgets('el código solo acepta 6 dígitos', (tester) async {
-      await montar(tester, const ResetPasswordScreen(correo: 'ana@correo.com'));
+      await montar(tester, '/restablecer');
 
       final campoCodigo = find.byType(TextFormField).first;
       await tester.enterText(campoCodigo, 'ab12345678');
@@ -95,7 +89,7 @@ void main() {
     });
 
     testWidgets('criterio 5: contraseñas diferentes', (tester) async {
-      await montar(tester, const ResetPasswordScreen(correo: 'ana@correo.com'));
+      await montar(tester, '/restablecer');
 
       await llenar(tester, confirmacion: 'Otra123!');
       await tocar(tester, 'Cambiar contraseña');
@@ -114,7 +108,7 @@ void main() {
       when(
         () => auth.cambiarPassword(nuevaPassword: any(named: 'nuevaPassword')),
       ).thenAnswer((_) async {});
-      await montar(tester, const ResetPasswordScreen(correo: 'ana@correo.com'));
+      await montar(tester, '/restablecer');
 
       await llenar(tester);
       await tocar(tester, 'Cambiar contraseña');
@@ -141,7 +135,7 @@ void main() {
       when(
         () => auth.cambiarPassword(nuevaPassword: any(named: 'nuevaPassword')),
       ).thenAnswer((_) async {});
-      await montar(tester, const ResetPasswordScreen(correo: 'ana@correo.com'));
+      await montar(tester, '/restablecer');
 
       await llenar(tester);
       await tocar(tester, 'Cambiar contraseña');
@@ -167,7 +161,7 @@ void main() {
           mensaje: 'El código es incorrecto o ya venció. Pide uno nuevo.',
         ),
       );
-      await montar(tester, const ResetPasswordScreen(correo: 'ana@correo.com'));
+      await montar(tester, '/restablecer');
 
       await llenar(tester);
       await tocar(tester, 'Cambiar contraseña');

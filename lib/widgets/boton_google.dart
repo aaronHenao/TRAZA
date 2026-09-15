@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../models/estado_login.dart';
 import '../services/inicio_google_provider.dart';
@@ -18,11 +19,9 @@ class BotonGoogle extends ConsumerWidget {
     ref.listen(inicioGoogleProvider, (anterior, actual) {
       switch (actual.fase) {
         case FaseLogin.exito:
-          // TODO(SCRUM-60, SCRUM-70): después del merge con develop, ir a
-          // Perfil si es el primer acceso o a Inicio si ya tenía cuenta.
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sesión iniciada con Google')),
-          );
+          // SCRUM-60: primer acceso → Perfil. SCRUM-70: ya tenía cuenta →
+          // Inicio. go: con la sesión iniciada, atrás no vuelve al login.
+          context.go(actual.primerAcceso ? '/perfil' : '/inicio');
         case FaseLogin.error:
           showDialog<void>(
             context: context,

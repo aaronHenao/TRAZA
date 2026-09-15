@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/estado_login.dart';
 import '../../services/login_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/boton_google.dart';
-import 'forgot_password_screen.dart';
-import 'register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -30,10 +29,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _mostrarMensaje(String texto) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
-  }
-
   void _onIniciarSesion() {
     // Pinta en rojo los campos vacíos y detiene el envío (criterio 4).
     if (!_formKey.currentState!.validate()) return;
@@ -50,8 +45,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _alCambiarLogin(EstadoLogin? anterior, EstadoLogin actual) {
     switch (actual.fase) {
       case FaseLogin.exito:
-        // TODO(SCRUM-66): redirigir a la pantalla Inicio.
-        _mostrarMensaje('Sesión iniciada');
+        // SCRUM-66. go: con la sesión iniciada, atrás no vuelve al login.
+        context.go('/inicio');
       case FaseLogin.credencialesInvalidas:
         _mostrarCredencialesInvalidas();
       case FaseLogin.error:
@@ -87,14 +82,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _irARecuperarPassword();
   }
 
-  /// push y no pushReplacement: desde la recuperación se puede volver al login.
+  /// push y no go: desde la recuperación se puede volver al login.
   void _irARecuperarPassword() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            ForgotPasswordScreen(correoInicial: _correoController.text.trim()),
-      ),
-    );
+    context.push('/recuperar', extra: _correoController.text.trim());
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {
@@ -233,9 +223,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     style: TextStyle(fontSize: 14, color: colorTextoSecundario),
                   ),
                   GestureDetector(
-                    onTap: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                    ),
+                    onTap: () => context.go('/registro'),
                     child: Text(
                       'Regístrate',
                       style: TextStyle(

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/screens/auth/login_screen.dart';
-import 'package:traza/screens/auth/register_screen.dart';
 import 'package:traza/services/auth_service.dart';
+
+import '../../utils/app_de_prueba.dart';
 
 /// Service falso: la pantalla cree que habla con Supabase, pero no hay red.
 class _MockAuthService extends Mock implements AuthService {}
@@ -40,13 +40,7 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    // El ProviderScope entrega el service falso a quien pida authServiceProvider.
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [authServiceProvider.overrideWithValue(auth)],
-        child: const MaterialApp(home: RegisterScreen()),
-      ),
-    );
+    await tester.pumpWidget(appDePrueba(auth: auth, ruta: '/registro'));
   }
 
   Future<void> llenarFormulario(
@@ -178,7 +172,9 @@ void main() {
 
   group('SCRUM-68 — registro con Google', () {
     testWidgets('el botón inicia sesión con Google', (tester) async {
-      when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => true);
+      when(
+        () => auth.iniciarSesionConGoogle(),
+      ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaNueva);
       await abrirPantalla(tester);
 
       final boton = find.text('Registrarte con Google');
@@ -187,11 +183,7 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(() => auth.iniciarSesionConGoogle()).called(1);
-      expect(find.text('Sesión iniciada con Google'), findsOneWidget);
-
-      // Deja terminar el SnackBar: su temporizador no puede quedar pendiente.
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
+      expect(find.text('Pantalla Perfil'), findsOneWidget);
     });
   });
 }

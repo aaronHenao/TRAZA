@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/estado_registro.dart';
 import '../../services/registro_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/boton_google.dart';
-import 'login_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -68,9 +68,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
 
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+    // go: el formulario ya se usó, atrás no debe volver a él.
+    context.go('/login');
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {
@@ -216,9 +215,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 style: TextStyle(fontSize: 14, color: colorTextoSecundario),
               ),
               GestureDetector(
-                onTap: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                ),
+                onTap: () => context.go('/login'),
                 child: Text(
                   'Inicia sesión',
                   style: TextStyle(

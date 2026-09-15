@@ -23,30 +23,38 @@ enum FaseLogin {
 class EstadoLogin {
   const EstadoLogin.inicial()
     : fase = FaseLogin.inicial,
+      primerAcceso = false,
       tituloError = null,
       mensajeError = null;
 
   const EstadoLogin.enviando()
     : fase = FaseLogin.enviando,
+      primerAcceso = false,
       tituloError = null,
       mensajeError = null;
 
-  const EstadoLogin.exito()
+  const EstadoLogin.exito({this.primerAcceso = false})
     : fase = FaseLogin.exito,
       tituloError = null,
       mensajeError = null;
 
   const EstadoLogin.credencialesInvalidas()
     : fase = FaseLogin.credencialesInvalidas,
+      primerAcceso = false,
       tituloError = null,
       mensajeError = null;
 
   const EstadoLogin.error({
     required String this.tituloError,
     required String this.mensajeError,
-  }) : fase = FaseLogin.error;
+  }) : fase = FaseLogin.error,
+       primerAcceso = false;
 
   final FaseLogin fase;
+
+  /// Solo en [FaseLogin.exito] con Google: la cuenta se acaba de crear, así
+  /// que va a Perfil en vez de a Inicio (SCRUM-60).
+  final bool primerAcceso;
 
   /// Textos de la alerta. Solo en [FaseLogin.error].
   final String? tituloError;

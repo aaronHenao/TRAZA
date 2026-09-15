@@ -403,7 +403,8 @@ void main() {
       );
     }
 
-    test('entra: le pasa a Supabase el pase de Google', () async {
+    /// Simula que Google entrega un pase y Supabase responde con [usuario].
+    void cuandoGoogleEntraCon(User? usuario) {
       final cuenta = _MockCuentaGoogle();
       final autenticacion = _MockAutenticacionGoogle();
       when(() => google.signIn()).thenAnswer((_) async => cuenta);
@@ -416,9 +417,46 @@ void main() {
           idToken: 'pase-de-google',
           accessToken: 'acceso',
         ),
-      ).thenAnswer((_) async => AuthResponse());
+      ).thenAnswer((_) async => AuthResponse(user: usuario));
+    }
 
-      expect(await servicio.iniciarSesionConGoogle(), isTrue);
+    User usuarioGoogle({required String creado, required String ingreso}) {
+      return User(
+        id: 'usuario-google',
+        appMetadata: const {},
+        userMetadata: const {},
+        aud: 'authenticated',
+        createdAt: creado,
+        lastSignInAt: ingreso,
+      );
+    }
+
+    test('ya tenía cuenta: el último ingreso es muy posterior', () async {
+      cuandoGoogleEntraCon(
+        usuarioGoogle(
+          creado: '2026-01-01T10:00:00Z',
+          ingreso: '2026-09-15T10:00:00Z',
+        ),
+      );
+
+      expect(
+        await servicio.iniciarSesionConGoogle(),
+        ResultadoInicioGoogle.cuentaExistente,
+      );
+    });
+
+    test('SCRUM-60: primer acceso, cuenta e ingreso al mismo tiempo', () async {
+      cuandoGoogleEntraCon(
+        usuarioGoogle(
+          creado: '2026-09-15T10:00:00Z',
+          ingreso: '2026-09-15T10:00:01Z',
+        ),
+      );
+
+      expect(
+        await servicio.iniciarSesionConGoogle(),
+        ResultadoInicioGoogle.cuentaNueva,
+      );
     });
 
     test('siempre muestra la lista de cuentas: olvida la anterior', () async {
@@ -433,7 +471,10 @@ void main() {
     test('cerró la ventana de Google: no es error', () async {
       when(() => google.signIn()).thenAnswer((_) async => null);
 
-      expect(await servicio.iniciarSesionConGoogle(), isFalse);
+      expect(
+        await servicio.iniciarSesionConGoogle(),
+        ResultadoInicioGoogle.cancelado,
+      );
       verificarQueNoLlamoASupabase();
     });
 
@@ -442,7 +483,10 @@ void main() {
         () => google.signIn(),
       ).thenThrow(PlatformException(code: GoogleSignIn.kSignInCanceledError));
 
-      expect(await servicio.iniciarSesionConGoogle(), isFalse);
+      expect(
+        await servicio.iniciarSesionConGoogle(),
+        ResultadoInicioGoogle.cancelado,
+      );
     });
 
     test('sin conexión', () async {

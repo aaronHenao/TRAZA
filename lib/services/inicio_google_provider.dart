@@ -30,12 +30,16 @@ class InicioGoogleNotifier extends AutoDisposeNotifier<EstadoLogin> {
     state = const EstadoLogin.enviando();
 
     try {
-      final entro = await authService.iniciarSesionConGoogle();
-      // Cerrar la ventana de Google no es un error: se vuelve al inicio sin
-      // mostrar nada (criterio 5).
-      _publicar(
-        entro ? const EstadoLogin.exito() : const EstadoLogin.inicial(),
-      );
+      final resultado = await authService.iniciarSesionConGoogle();
+      _publicar(switch (resultado) {
+        // Cerrar la ventana de Google no es un error: se vuelve al inicio sin
+        // mostrar nada (criterio 5).
+        ResultadoInicioGoogle.cancelado => const EstadoLogin.inicial(),
+        ResultadoInicioGoogle.cuentaNueva => const EstadoLogin.exito(
+          primerAcceso: true,
+        ),
+        ResultadoInicioGoogle.cuentaExistente => const EstadoLogin.exito(),
+      });
     } on InicioSesionException catch (e) {
       _publicar(
         EstadoLogin.error(tituloError: e.titulo, mensajeError: e.mensaje),

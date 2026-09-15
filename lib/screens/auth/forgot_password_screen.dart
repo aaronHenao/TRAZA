@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/estado_solicitud_recuperacion.dart';
 import '../../services/solicitud_recuperacion_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
-import 'reset_password_screen.dart';
 
 /// Primer paso de la recuperación: pedir el código al correo (SCRUM-73).
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
@@ -64,10 +64,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     );
 
     if (!mounted) return;
-    // push y no pushReplacement: desde el código, "Pedir otro" regresa aquí.
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ResetPasswordScreen(correo: correo)),
-    );
+    // push y no go: desde el código, "Pedir otro" regresa aquí.
+    context.push('/restablecer', extra: correo);
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {

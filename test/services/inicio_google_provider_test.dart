@@ -28,15 +28,31 @@ void main() {
   EstadoLogin estado() => contenedor.read(inicioGoogleProvider);
 
   test('criterios 1 y 4: entró', () async {
-    when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => true);
+    when(
+      () => auth.iniciarSesionConGoogle(),
+    ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaExistente);
 
     await iniciar();
 
     expect(estado().fase, FaseLogin.exito);
+    expect(estado().primerAcceso, isFalse);
+  });
+
+  test('SCRUM-60: primer acceso queda marcado', () async {
+    when(
+      () => auth.iniciarSesionConGoogle(),
+    ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaNueva);
+
+    await iniciar();
+
+    expect(estado().fase, FaseLogin.exito);
+    expect(estado().primerAcceso, isTrue);
   });
 
   test('criterio 5: cerró la ventana, vuelve al inicio sin error', () async {
-    when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => false);
+    when(
+      () => auth.iniciarSesionConGoogle(),
+    ).thenAnswer((_) async => ResultadoInicioGoogle.cancelado);
 
     await iniciar();
 

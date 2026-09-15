@@ -39,6 +39,18 @@ class RecuperacionException implements Exception {
   final String mensaje;
 }
 
+/// Cómo terminó el inicio de sesión con Google.
+enum ResultadoInicioGoogle {
+  /// La persona cerró la ventana de Google sin terminar. No es un error.
+  cancelado,
+
+  /// Primer acceso: Supabase acaba de crear la cuenta (va a Perfil).
+  cuentaNueva,
+
+  /// Ya tenía cuenta (va a Inicio).
+  cuentaExistente,
+}
+
 /// Cómo obtiene la app el servicio de autenticación. Las pruebas lo
 /// reemplazan con `overrideWithValue`.
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
@@ -272,9 +284,8 @@ class AuthService {
 
   /// Abre la ventana de Google y, con el pase que devuelve, inicia sesión en
   /// Supabase. Si es la primera vez, Supabase crea la cuenta y el trigger llena
-  /// `perfiles` con el nombre de Google. Devuelve `false` si la persona cerró
-  /// la ventana sin terminar: no es un error.
-  Future<bool> iniciarSesionConGoogle() async {
+  /// `perfiles` con el nombre de Google.
+  Future<ResultadoInicioGoogle> iniciarSesionConGoogle() async {
     const errorGoogle = InicioSesionException(
       titulo: 'No pudimos conectar con Google',
       mensaje:
@@ -294,21 +305,25 @@ class AuthService {
       } catch (_) {}
 
       final cuenta = await _googleSignIn.signIn();
-      if (cuenta == null) return false;
+      if (cuenta == null) return ResultadoInicioGoogle.cancelado;
 
       final autenticacion = await cuenta.authentication;
       final idToken = autenticacion.idToken;
       // Sin pase: el serverClientId no corresponde al cliente web.
       if (idToken == null) throw errorGoogle;
 
-      await _auth.signInWithIdToken(
+      final respuesta = await _auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
         accessToken: autenticacion.accessToken,
       );
-      return true;
+      return _esCuentaNueva(respuesta.user)
+          ? ResultadoInicioGoogle.cuentaNueva
+          : ResultadoInicioGoogle.cuentaExistente;
     } on PlatformException catch (e) {
-      if (e.code == GoogleSignIn.kSignInCanceledError) return false;
+      if (e.code == GoogleSignIn.kSignInCanceledError) {
+        return ResultadoInicioGoogle.cancelado;
+      }
       // "sign_in_failed" con "ApiException: 10" es casi siempre la SHA-1 de
       // este computador sin registrar en el cliente Android de Google Cloud.
       debugPrint('Google Sign-In falló: ${e.code} ${e.message}');
@@ -319,6 +334,16 @@ class AuthService {
       debugPrint('Supabase rechazó el pase de Google: ${e.code} ${e.message}');
       throw errorGoogle;
     }
+  }
+
+  /// En el primer acceso Supabase crea la cuenta y registra el ingreso casi al
+  /// mismo tiempo. Si ya tenía cuenta, el último ingreso es muy posterior.
+  bool _esCuentaNueva(User? usuario) {
+    if (usuario == null) return false;
+    final creada = DateTime.tryParse(usuario.createdAt);
+    final ultimoIngreso = DateTime.tryParse(usuario.lastSignInAt ?? '');
+    if (creada == null || ultimoIngreso == null) return false;
+    return ultimoIngreso.difference(creada).inSeconds.abs() < 30;
   }
 
   /// Cierra la sesión. Si falla la red, Supabase igual borra la sesión del

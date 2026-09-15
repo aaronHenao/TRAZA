@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/screens/auth/forgot_password_screen.dart';
 import 'package:traza/screens/auth/login_screen.dart';
 import 'package:traza/services/auth_service.dart';
+
+import '../../utils/app_de_prueba.dart';
 
 /// Service falso: la pantalla cree que habla con Supabase, pero no hay red.
 class _MockAuthService extends Mock implements AuthService {}
@@ -29,12 +30,7 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [authServiceProvider.overrideWithValue(auth)],
-        child: const MaterialApp(home: LoginScreen()),
-      ),
-    );
+    await tester.pumpWidget(appDePrueba(auth: auth, ruta: '/login'));
   }
 
   Future<void> llenarFormulario(WidgetTester tester) async {
@@ -51,15 +47,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Deja que el SnackBar termine de mostrarse. Si su temporizador queda
-  /// pendiente al final, la prueba falla.
-  Future<void> esperarSnackBar(WidgetTester tester) async {
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-  }
-
   group('Criterio 1 — inicio de sesión exitoso', () {
-    testWidgets('envía el correo sin espacios y avisa que entró', (
+    testWidgets('envía el correo sin espacios y va a Inicio (SCRUM-66)', (
       tester,
     ) async {
       cuandoIniciarSesion().thenAnswer((_) async {});
@@ -74,9 +63,7 @@ void main() {
           password: 'clave mala',
         ),
       ).called(1);
-      expect(find.text('Sesión iniciada'), findsOneWidget);
-
-      await esperarSnackBar(tester);
+      expect(find.text('Pantalla Inicio'), findsOneWidget);
     });
   });
 
@@ -149,24 +136,38 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('entró: avisa que inició sesión', (tester) async {
-      when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => true);
+    testWidgets('ya tenía cuenta: va a Inicio (SCRUM-70)', (tester) async {
+      when(
+        () => auth.iniciarSesionConGoogle(),
+      ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaExistente);
       await abrirPantalla(tester);
 
       await tocarGoogle(tester);
 
-      expect(find.text('Sesión iniciada con Google'), findsOneWidget);
-      await esperarSnackBar(tester);
+      expect(find.text('Pantalla Inicio'), findsOneWidget);
+    });
+
+    testWidgets('primer acceso: va a Perfil (SCRUM-60)', (tester) async {
+      when(
+        () => auth.iniciarSesionConGoogle(),
+      ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaNueva);
+      await abrirPantalla(tester);
+
+      await tocarGoogle(tester);
+
+      expect(find.text('Pantalla Perfil'), findsOneWidget);
     });
 
     testWidgets('canceló: no muestra nada', (tester) async {
-      when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => false);
+      when(
+        () => auth.iniciarSesionConGoogle(),
+      ).thenAnswer((_) async => ResultadoInicioGoogle.cancelado);
       await abrirPantalla(tester);
 
       await tocarGoogle(tester);
 
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.byType(SnackBar), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
     });
 
     testWidgets('error: muestra la alerta', (tester) async {

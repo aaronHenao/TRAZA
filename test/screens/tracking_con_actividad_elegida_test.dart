@@ -236,6 +236,11 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   bool fallar = false;
 
   @override
+  Future<String> crear({required String tipoActividadId}) =>
+      throw UnimplementedError('La pantalla arranca con el entrenamiento ya '
+          'creado (SCRUM-99)');
+
+  @override
   Future<ResumenEntrenamiento?> cargarFinalizado(String entrenamientoId) =>
       throw UnimplementedError('Al finalizar, el resumen llega sin consultar');
 

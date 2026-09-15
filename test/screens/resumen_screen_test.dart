@@ -277,6 +277,10 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   final Completer<void>? espera;
 
   @override
+  Future<String> crear({required String tipoActividadId}) =>
+      throw UnimplementedError('El resumen no crea entrenamientos');
+
+  @override
   Future<ResumenEntrenamiento?> cargarFinalizado(String entrenamientoId) async {
     consultas.add(entrenamientoId);
     await espera?.future;

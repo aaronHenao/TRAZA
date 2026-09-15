@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/recorrido.dart';
 import '../models/resumen_entrenamiento.dart';
 import 'actividad_provider.dart';
+import 'entrenamiento_actual_provider.dart';
 import 'entrenamiento_service.dart';
-import 'recorrido_provider.dart';
+import 'objetivos_service.dart' show SesionRequeridaException;
 import 'reloj_provider.dart';
 
 /// Datos de un entrenamiento finalizado, leídos de Supabase por su id
@@ -19,6 +20,50 @@ final entrenamientoFinalizadoProvider = FutureProvider.autoDispose
           .watch(entrenamientoRepositoryProvider)
           .cargarFinalizado(entrenamientoId),
     );
+
+/// Inicio del entrenamiento (SCRUM-99).
+final inicioEntrenamientoProvider = Provider<InicioEntrenamiento>(
+  InicioEntrenamiento.new,
+);
+
+/// Crea el entrenamiento cuando el usuario toca "Iniciar actividad".
+///
+/// Es el otro extremo de [CierreEntrenamiento]: aquí nace la fila de
+/// `entrenamientos` con la actividad elegida en los chips (SCRUM-93), y su id
+/// queda en [entrenamientoActualProvider] para que los puntos GPS que se
+/// registren (SCRUM-110) tengan dueño.
+class InicioEntrenamiento {
+  const InicioEntrenamiento(this._ref);
+
+  final Ref _ref;
+
+  static const sinSesion = 'Inicia sesión para empezar a entrenar.';
+  static const noSePudo =
+      'No se pudo iniciar el entrenamiento. Inténtalo de nuevo.';
+
+  /// Devuelve null si el entrenamiento quedó creado y la actividad puede
+  /// arrancar, o el mensaje para el usuario si no se pudo (SCRUM-100). En ese
+  /// caso no queda nada a medias: sin id, no hay entrenamiento en curso.
+  Future<String?> iniciar() async {
+    // Sin configuración no hay tipo de actividad con id, y `tipo_actividad_id`
+    // es obligatorio (ver ConfiguracionInicio.para).
+    final configuracion = _ref.read(configuracionInicioProvider);
+    if (configuracion == null) return sinSesion;
+
+    try {
+      final entrenamientoId = await _ref
+          .read(entrenamientoRepositoryProvider)
+          .crear(tipoActividadId: configuracion.tipoActividadId);
+      _ref.read(entrenamientoEnCursoProvider.notifier).fijar(entrenamientoId);
+      return null;
+    } on SesionRequeridaException {
+      return sinSesion;
+    } catch (error) {
+      debugPrint('No se pudo crear el entrenamiento: $error');
+      return noSePudo;
+    }
+  }
+}
 
 /// Cierre del entrenamiento en curso (SCRUM-121).
 final cierreEntrenamientoProvider = Provider<CierreEntrenamiento>(

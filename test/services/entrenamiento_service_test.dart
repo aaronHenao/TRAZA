@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/services/entrenamiento_service.dart';
+import 'package:traza/services/objetivos_service.dart'
+    show SesionRequeridaException;
 
 /// Pruebas del repositorio real de entrenamientos: el cierre (SCRUM-121) y la
 /// lectura del entrenamiento finalizado para el resumen (SCRUM-118).
@@ -14,6 +16,69 @@ import 'package:traza/services/entrenamiento_service.dart';
 /// que la prueba necesita. Así se verifican las consultas que de verdad salen
 /// hacia Supabase.
 void main() {
+  test('crea el entrenamiento en curso del usuario y devuelve su id',
+      () async {
+    final supabase = _SupabaseFalso(
+      filasActualizadas: [
+        {'id': 'e-nuevo'},
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final id = await supabase.repositorio.crear(tipoActividadId: 'id-correr');
+
+    expect(id, 'e-nuevo');
+    final peticion = supabase.peticiones.single;
+    expect(peticion.method, 'POST');
+    expect(peticion.url.path, '/rest/v1/entrenamientos');
+    // Pide el id de vuelta: lo genera la base y sin él no habría con qué
+    // guardar los puntos ni cerrar el entrenamiento.
+    expect(peticion.url.queryParameters['select'], 'id');
+    expect(jsonDecode(peticion.body), {
+      'usuario_id': 'usuario-1',
+      'tipo_actividad_id': 'id-correr',
+      'estado': 'en_curso',
+    });
+  });
+
+  test('no manda fecha_inicio: la pone la base con la hora del servidor',
+      () async {
+    final supabase = _SupabaseFalso(
+      filasActualizadas: [
+        {'id': 'e-nuevo'},
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    await supabase.repositorio.crear(tipoActividadId: 'id-correr');
+
+    expect(
+      (jsonDecode(supabase.peticiones.single.body) as Map).keys,
+      isNot(contains('fecha_inicio')),
+    );
+  });
+
+  test('sin sesión no intenta crear el entrenamiento', () async {
+    final supabase = _SupabaseFalso(usuarioActual: null);
+    addTearDown(supabase.cerrar);
+
+    await expectLater(
+      supabase.repositorio.crear(tipoActividadId: 'id-correr'),
+      throwsA(isA<SesionRequeridaException>()),
+    );
+    expect(supabase.peticiones, isEmpty);
+  });
+
+  test('si la base rechaza la creación, el error sale a la vista', () async {
+    final supabase = _SupabaseFalso(codigoError: 401);
+    addTearDown(supabase.cerrar);
+
+    await expectLater(
+      supabase.repositorio.crear(tipoActividadId: 'id-correr'),
+      throwsA(isA<PostgrestException>()),
+    );
+  });
+
   test('cierra el entrenamiento con fecha_fin, duración, distancia y estado '
       'finalizado', () async {
     final supabase = _SupabaseFalso(
@@ -182,6 +247,7 @@ class _SupabaseFalso {
     this.filasActualizadas = const [],
     this.filasLeidas = const [],
     this.codigoError,
+    this.usuarioActual = 'usuario-1',
   }) {
     cliente = SupabaseClient(
       'https://proyecto-de-prueba.supabase.co',
@@ -194,6 +260,9 @@ class _SupabaseFalso {
   final List<Map<String, Object?>> filasActualizadas;
   final List<Map<String, Object?>> filasLeidas;
 
+  /// Quién tiene la sesión abierta. Null simula que no hay ninguna.
+  final String? usuarioActual;
+
   /// Un código que PostgREST no reintenta (solo reintenta 503 y 520).
   final int? codigoError;
 
@@ -201,8 +270,10 @@ class _SupabaseFalso {
 
   late final SupabaseClient cliente;
 
-  EntrenamientoRepository get repositorio =>
-      SupabaseEntrenamientoRepository(cliente: cliente);
+  EntrenamientoRepository get repositorio => SupabaseEntrenamientoRepository(
+    cliente: cliente,
+    usuarioActual: () => usuarioActual,
+  );
 
   Future<http.Response> _responder(http.Request peticion) async {
     peticiones.add(peticion);
@@ -220,8 +291,17 @@ class _SupabaseFalso {
       );
     }
     final filas = peticion.method == 'GET' ? filasLeidas : filasActualizadas;
+    // `single` y `maybeSingle` piden una fila suelta con este Accept, y
+    // PostgREST les responde con el objeto, no con una lista.
+    final unaSola = peticion.headers['Accept']?.contains(
+      'vnd.pgrst.object+json',
+    );
+    final cuerpo = unaSola == true
+        ? (filas.isEmpty ? null : filas.first)
+        : filas;
+
     return http.Response(
-      jsonEncode(filas),
+      jsonEncode(cuerpo),
       200,
       headers: encabezados,
       request: peticion,

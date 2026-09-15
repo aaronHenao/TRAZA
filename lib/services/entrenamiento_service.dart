@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/punto_gps.dart';
 import '../models/resumen_entrenamiento.dart';
+import 'objetivos_service.dart' show SesionRequeridaException;
 
 /// Repositorio de entrenamientos que usa la app. Las pruebas lo sustituyen
 /// con `overrideWithValue`.
@@ -25,6 +26,13 @@ class EntrenamientoNoEncontradoException implements Exception {
 
 /// Acceso a la tabla `entrenamientos`.
 abstract interface class EntrenamientoRepository {
+  /// Crea el entrenamiento que empieza (SCRUM-99) y devuelve su `id`, que
+  /// pasa a ser el dueño de los puntos GPS que se registren.
+  ///
+  /// La fila nace `en_curso`; la cierra [finalizar] al terminar la actividad.
+  /// Lanza [SesionRequeridaException] si no hay sesión abierta.
+  Future<String> crear({required String tipoActividadId});
+
   /// Cierra el entrenamiento [entrenamientoId] (SCRUM-121): guarda cuándo
   /// terminó, cuánto duró y la distancia recorrida, y lo deja `finalizado`.
   ///
@@ -47,19 +55,57 @@ abstract interface class EntrenamientoRepository {
 }
 
 class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
-  /// [cliente] existe para las pruebas. En la app se deja vacío y se usa el
-  /// cliente global.
-  SupabaseEntrenamientoRepository({SupabaseClient? cliente})
-    : _clienteInyectado = cliente;
+  /// [cliente] y [usuarioActual] existen para las pruebas. En la app se dejan
+  /// vacíos: se usa el cliente global y el usuario de la sesión abierta.
+  SupabaseEntrenamientoRepository({
+    SupabaseClient? cliente,
+    String? Function()? usuarioActual,
+  }) : _clienteInyectado = cliente,
+       _usuarioActual = usuarioActual;
 
   static const _tabla = 'entrenamientos';
 
   final SupabaseClient? _clienteInyectado;
+  final String? Function()? _usuarioActual;
 
   // `Supabase.instance` se toca recién al usarlo, así que las pruebas de las
   // pantallas, que nunca llegan a hablar con Supabase, no necesitan
   // inicializarlo.
   SupabaseClient get _cliente => _clienteInyectado ?? Supabase.instance.client;
+
+  @override
+  Future<String> crear({required String tipoActividadId}) async {
+    // `fecha_inicio` la pone la base con su `default now()`: es la hora del
+    // servidor, que no depende de que el reloj del teléfono esté en hora.
+    final fila = await _cliente
+        .from(_tabla)
+        .insert({
+          'usuario_id': _usuarioId(),
+          'tipo_actividad_id': tipoActividadId,
+          'estado': 'en_curso',
+        })
+        // El id lo genera la base; sin pedirlo de vuelta no habría con qué
+        // guardar los puntos ni cerrar el entrenamiento.
+        .select('id')
+        .single();
+
+    final id = fila['id'];
+    if (id is! String) {
+      throw StateError('El entrenamiento creado llegó sin id: $fila');
+    }
+    return id;
+  }
+
+  String _usuarioId() {
+    final usuarioActual = _usuarioActual;
+    final id = usuarioActual != null
+        ? usuarioActual()
+        : _cliente.auth.currentUser?.id;
+    // `entrenamientos.usuario_id` referencia a `auth.users` y su RLS exige
+    // `auth.uid() = usuario_id`: sin sesión la base rechazaría la fila.
+    if (id == null) throw const SesionRequeridaException();
+    return id;
+  }
 
   @override
   Future<void> finalizar({

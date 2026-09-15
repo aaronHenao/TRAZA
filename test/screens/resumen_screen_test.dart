@@ -80,6 +80,21 @@ void main() {
       expect(find.text('Pantalla de inicio'), findsOneWidget);
     });
 
+    testWidgets('abierto desde el historial, la X vuelve al historial '
+        '(SCRUM-125)', (tester) async {
+      await _montar(tester, resumen: null, guardados: {'e-123': resumen});
+      final router = GoRouter.of(tester.element(find.byType(ResumenScreen)));
+      router.go('/historial');
+      await tester.pumpAndSettle();
+      router.push('/resumen/e-123?desde=historial');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Cerrar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla de historial'), findsOneWidget);
+    });
+
     testWidgets('el botón principal vuelve al inicio', (tester) async {
       await _montar(tester, resumen: resumen);
 
@@ -320,6 +335,10 @@ Future<_EntrenamientosFalso> _montar(
       GoRoute(
         path: '/inicio',
         builder: (_, _) => const Scaffold(body: Text('Pantalla de inicio')),
+      ),
+      GoRoute(
+        path: '/historial',
+        builder: (_, _) => const Scaffold(body: Text('Pantalla de historial')),
       ),
     ],
   );

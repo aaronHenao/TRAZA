@@ -101,11 +101,11 @@ class _Cabecera extends StatelessWidget {
             ],
           ),
         ),
-        // Lleva al historial de entrenamientos (SCRUM-44). Queda deshabilitado
-        // hasta que exista esa pantalla.
-        const TrazaIconButton(
+        // Historial de entrenamientos (SCRUM-125). push: "atrás" vuelve a
+        // Inicio.
+        TrazaIconButton(
           icon: Icons.schedule,
-          onPressed: null,
+          onPressed: () => context.push('/historial'),
           tooltip: 'Historial',
         ),
         const SizedBox(width: 8),

@@ -51,6 +51,12 @@ class ResumenScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Igual que en el prototipo (`closeSummary`), cerrar lleva al inicio.
     void volverAlInicio() => context.go('/inicio');
+    // Abierto desde el historial, la X vuelve a la lista (SCRUM-125). No
+    // basta con `canPop`: `/resumen/<id>` está anidada en `/resumen` y
+    // siempre se puede "volver".
+    final desdeHistorial =
+        GoRouterState.of(context).uri.queryParameters['desde'] == 'historial';
+    void cerrar() => desdeHistorial ? context.pop() : volverAlInicio();
 
     return Scaffold(
       body: SafeArea(
@@ -60,7 +66,7 @@ class ResumenScreen extends ConsumerWidget {
               titulo: 'Resumen',
               accion: TrazaIconButton(
                 icon: Icons.close,
-                onPressed: volverAlInicio,
+                onPressed: cerrar,
                 tooltip: 'Cerrar',
               ),
             ),

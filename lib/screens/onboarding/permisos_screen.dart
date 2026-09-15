@@ -14,9 +14,13 @@ import '../../widgets/traza_top_bar.dart';
 
 /// Pantalla de permisos (`screen-permissions`, SCRUM-76).
 ///
-/// Llega después del perfil y explica para qué usa la app la ubicación y los
-/// datos de salud. Ninguno es obligatorio: el usuario puede seguir sin
-/// concederlos y se le vuelven a pedir cuando use una función que los necesite.
+/// Explica para qué usa la app la ubicación y los datos de salud, y muestra en
+/// qué estado está cada uno (SCRUM-85). Se abre de dos formas:
+///
+/// - En el onboarding, después del perfil (con `go`). Ninguno es obligatorio:
+///   "Continuar" termina el onboarding y lleva a Inicio.
+/// - Desde Inicio, para revisarlos (con `push`). Tiene botón de atrás y
+///   "Listo" solo regresa.
 class PermisosScreen extends ConsumerStatefulWidget {
   const PermisosScreen({super.key});
 
@@ -48,6 +52,9 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
     super.dispose();
   }
 
+  /// Se abrió desde Inicio para revisar los permisos, no en el onboarding.
+  bool get _revisando => context.canPop();
+
   /// SCRUM-81: último paso del onboarding. Queda marcado para que el próximo
   /// ingreso vaya directo a Inicio.
   Future<void> _continuar() async {
@@ -59,6 +66,11 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
 
   /// SCRUM-77: pide la ubicación y explica qué pasa según la respuesta.
   Future<void> _permitirUbicacion() async {
+    // Ya se sabe que el sistema no mostrará su ventana: directo a ajustes.
+    if (ref.read(permisosProvider).ubicacion == EstadoPermiso.bloqueado) {
+      await ref.read(permisosProvider.notifier).abrirAjustes();
+      return;
+    }
     final resultado = await ref
         .read(permisosProvider.notifier)
         .solicitarUbicacion();
@@ -175,12 +187,21 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
   @override
   Widget build(BuildContext context) {
     final permisos = ref.watch(permisosProvider);
+    final revisando = _revisando;
+    final esAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final ahoraNo = revisando
+        ? null
+        : () => mostrarToast(context, _mensajeAhoraNo);
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            const TrazaTopBar(titulo: 'Permisos'),
+            TrazaTopBar(
+              titulo: 'Permisos',
+              onAtras: revisando ? () => context.pop() : null,
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -190,10 +211,14 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
                   AppSpacing.xl,
                 ),
                 children: [
-                  const Text(
-                    'TRAZA necesita estos permisos para registrar tus '
-                    'entrenamientos. Puedes concederlos ahora o más adelante.',
-                    style: TextStyle(
+                  Text(
+                    revisando
+                        ? 'Revisa qué permisos tiene TRAZA. Puedes concederlos '
+                              'en cualquier momento.'
+                        : 'TRAZA necesita estos permisos para registrar tus '
+                              'entrenamientos. Puedes concederlos ahora o más '
+                              'adelante.',
+                    style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.ink2,
                       height: 1.6,
@@ -206,12 +231,14 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
                     descripcion:
                         'Necesaria para trazar tu recorrido y calcular la '
                         'distancia mientras entrenas.',
-                    textoBoton: 'Permitir ubicación',
-                    concedido: permisos.ubicacion == EstadoPermiso.concedido,
+                    estado: permisos.ubicacion,
+                    textoBoton: permisos.ubicacion == EstadoPermiso.bloqueado
+                        ? 'Abrir ajustes'
+                        : 'Permitir ubicación',
                     onPermitir: permisos.solicitandoUbicacion
                         ? null
                         : _permitirUbicacion,
-                    onAhoraNo: () => mostrarToast(context, _mensajeAhoraNo),
+                    onAhoraNo: ahoraNo,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TarjetaPermiso(
@@ -221,12 +248,19 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
                         'Con tu permiso, TRAZA registrará métricas de salud '
                         'durante tus entrenamientos y las mostrará en tu '
                         'resumen.',
-                    textoBoton: 'Permitir acceso',
-                    concedido: permisos.salud == EstadoPermiso.concedido,
-                    onPermitir: permisos.solicitandoSalud
+                    estado: permisos.salud,
+                    textoBoton: permisos.salud == EstadoPermiso.noDisponible
+                        ? 'Instalar Health Connect'
+                        : 'Permitir acceso',
+                    // Sin Health Connect solo hay algo que hacer en Android:
+                    // instalarlo. En web o escritorio no hay botón.
+                    onPermitir:
+                        permisos.solicitandoSalud ||
+                            (permisos.salud == EstadoPermiso.noDisponible &&
+                                !esAndroid)
                         ? null
                         : _permitirSalud,
-                    onAhoraNo: () => mostrarToast(context, _mensajeAhoraNo),
+                    onAhoraNo: ahoraNo,
                   ),
                 ],
               ),
@@ -241,8 +275,10 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: _continuando ? null : _continuar,
-                  child: const Text('Continuar'),
+                  onPressed: revisando
+                      ? () => context.pop()
+                      : (_continuando ? null : _continuar),
+                  child: Text(revisando ? 'Listo' : 'Continuar'),
                 ),
               ),
             ),

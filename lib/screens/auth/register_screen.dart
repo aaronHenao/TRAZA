@@ -177,7 +177,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ValueListenableBuilder(
             valueListenable: _passwordController,
             builder: (context, valor, _) =>
-                _ChecklistPassword(password: valor.text),
+                ChecklistPassword(password: valor.text),
           ),
           const SizedBox(height: 22),
 
@@ -249,56 +249,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChecklistPassword extends StatelessWidget {
-  const _ChecklistPassword({required this.password});
-
-  final String password;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final regla in reglasPassword)
-          _ItemRegla(
-            texto: regla.descripcion,
-            cumplida: regla.cumple(password),
-          ),
-      ],
-    );
-  }
-}
-
-class _ItemRegla extends StatelessWidget {
-  const _ItemRegla({required this.texto, required this.cumplida});
-
-  final String texto;
-  final bool cumplida;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = cumplida ? colorExito : colorTextoSuave;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Icon(
-            cumplida ? Icons.check_circle : Icons.check_circle_outline,
-            size: 15,
-            color: color,
-          ),
-          const SizedBox(width: 6),
-          // Expanded deja que el texto parta en dos líneas si no cabe.
-          Expanded(
-            child: Text(texto, style: TextStyle(fontSize: 12.5, color: color)),
           ),
         ],
       ),

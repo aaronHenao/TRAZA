@@ -272,4 +272,80 @@ void main() {
       );
     });
   });
+
+  group('restablecer contraseña (SCRUM-74)', () {
+    // mocktail necesita un valor de ejemplo para usar any() con este tipo.
+    setUpAll(() => registerFallbackValue(UserAttributes()));
+
+    Matcher lanzaRecuperacionException(String titulo) {
+      return throwsA(
+        isA<RecuperacionException>().having((e) => e.titulo, 'titulo', titulo),
+      );
+    }
+
+    When<Future<AuthResponse>> cuandoVerificar() {
+      return when(
+        () => auth.verifyOTP(
+          type: OtpType.recovery,
+          email: any(named: 'email'),
+          token: any(named: 'token'),
+        ),
+      );
+    }
+
+    test('verifica el código como código de recuperación', () async {
+      cuandoVerificar().thenAnswer((_) async => AuthResponse());
+
+      await servicio.verificarCodigoRecuperacion(
+        correo: 'ana@correo.com',
+        codigo: '123456',
+      );
+
+      verify(
+        () => auth.verifyOTP(
+          type: OtpType.recovery,
+          email: 'ana@correo.com',
+          token: '123456',
+        ),
+      ).called(1);
+    });
+
+    test('código incorrecto o vencido', () async {
+      cuandoVerificar().thenThrow(
+        const AuthApiException('expired', code: 'otp_expired'),
+      );
+
+      await expectLater(
+        servicio.verificarCodigoRecuperacion(
+          correo: 'ana@correo.com',
+          codigo: '000000',
+        ),
+        lanzaRecuperacionException('Código no válido'),
+      );
+    });
+
+    test('cambia la contraseña con updateUser', () async {
+      when(
+        () => auth.updateUser(any()),
+      ).thenAnswer((_) async => UserResponse.fromJson({}));
+
+      await servicio.cambiarPassword(nuevaPassword: 'Nueva123!');
+
+      final atributos =
+          verify(() => auth.updateUser(captureAny())).captured.single
+              as UserAttributes;
+      expect(atributos.password, 'Nueva123!');
+    });
+
+    test('contraseña igual a la anterior', () async {
+      when(
+        () => auth.updateUser(any()),
+      ).thenThrow(const AuthApiException('same', code: 'same_password'));
+
+      await expectLater(
+        servicio.cambiarPassword(nuevaPassword: 'Vieja123!'),
+        lanzaRecuperacionException('Usa otra contraseña'),
+      );
+    });
+  });
 }

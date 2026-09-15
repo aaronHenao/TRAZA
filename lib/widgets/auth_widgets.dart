@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/validators.dart';
+
 /// Colores de las pantallas de registro e inicio de sesión.
 const colorTextoPrincipal = Color(0xFF16161A);
 const colorTextoSecundario = Color(0xFF6B6B73);
@@ -148,6 +150,58 @@ class DivisorO extends StatelessWidget {
         ),
         linea,
       ],
+    );
+  }
+}
+
+/// Las 5 reglas de contraseña, marcadas en verde a medida que se cumplen. Lo
+/// usan las pantallas que crean una contraseña: registro y recuperación.
+class ChecklistPassword extends StatelessWidget {
+  const ChecklistPassword({super.key, required this.password});
+
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final regla in reglasPassword)
+          _ItemRegla(
+            texto: regla.descripcion,
+            cumplida: regla.cumple(password),
+          ),
+      ],
+    );
+  }
+}
+
+class _ItemRegla extends StatelessWidget {
+  const _ItemRegla({required this.texto, required this.cumplida});
+
+  final String texto;
+  final bool cumplida;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = cumplida ? colorExito : colorTextoSuave;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            cumplida ? Icons.check_circle : Icons.check_circle_outline,
+            size: 15,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          // Expanded deja que el texto parta en dos líneas si no cabe.
+          Expanded(
+            child: Text(texto, style: TextStyle(fontSize: 12.5, color: color)),
+          ),
+        ],
+      ),
     );
   }
 }

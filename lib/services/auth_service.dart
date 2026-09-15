@@ -24,6 +24,7 @@ class InicioSesionException implements Exception {
   final String titulo;
   final String mensaje;
 }
+
 /// Fallo al pedir o usar el código de recuperación. Trae los textos listos
 /// para una alerta.
 class RecuperacionException implements Exception {
@@ -164,7 +165,8 @@ class AuthService {
       };
     }
   }
-    /// Pide a Supabase que envíe el código de recuperación al correo. Supabase
+
+  /// Pide a Supabase que envíe el código de recuperación al correo. Supabase
   /// responde igual exista o no la cuenta, para no revelar qué correos están
   /// registrados.
   Future<void> solicitarRecuperacion({required String correo}) async {
@@ -191,4 +193,69 @@ class AuthService {
     }
   }
 
+  /// Verifica el código de recuperación. Si es correcto, Supabase abre una
+  /// sesión temporal que permite cambiar la contraseña. El código se gasta al
+  /// verificarlo: no se puede usar dos veces.
+  Future<void> verificarCodigoRecuperacion({
+    required String correo,
+    required String codigo,
+  }) async {
+    try {
+      await _auth.verifyOTP(
+        type: OtpType.recovery,
+        email: correo,
+        token: codigo,
+      );
+    } on AuthRetryableFetchException {
+      throw const RecuperacionException(
+        titulo: 'Sin conexión',
+        mensaje:
+            'No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo.',
+      );
+    } on AuthException catch (e) {
+      throw switch (e.code) {
+        // Supabase usa el mismo código para "vencido" y para "incorrecto".
+        'otp_expired' => const RecuperacionException(
+          titulo: 'Código no válido',
+          mensaje: 'El código es incorrecto o ya venció. Pide uno nuevo.',
+        ),
+        'over_request_rate_limit' => const RecuperacionException(
+          titulo: 'Demasiados intentos',
+          mensaje: 'Espera unos minutos y vuelve a intentarlo.',
+        ),
+        _ => const RecuperacionException(
+          titulo: 'No pudimos verificar el código',
+          mensaje: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
+        ),
+      };
+    }
+  }
+
+  /// Cambia la contraseña de la sesión abierta por [verificarCodigoRecuperacion].
+  Future<void> cambiarPassword({required String nuevaPassword}) async {
+    try {
+      await _auth.updateUser(UserAttributes(password: nuevaPassword));
+    } on AuthRetryableFetchException {
+      throw const RecuperacionException(
+        titulo: 'Sin conexión',
+        mensaje:
+            'No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo.',
+      );
+    } on AuthException catch (e) {
+      throw switch (e.code) {
+        'same_password' => const RecuperacionException(
+          titulo: 'Usa otra contraseña',
+          mensaje: 'La nueva contraseña tiene que ser distinta a la anterior.',
+        ),
+        'weak_password' => const RecuperacionException(
+          titulo: 'Contraseña no permitida',
+          mensaje: 'Esa contraseña no es segura. Prueba con una distinta.',
+        ),
+        _ => const RecuperacionException(
+          titulo: 'No pudimos cambiar tu contraseña',
+          mensaje: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
+        ),
+      };
+    }
+  }
 }

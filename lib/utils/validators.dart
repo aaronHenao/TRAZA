@@ -107,3 +107,29 @@ String? validarPasswordIngreso(String? valor) {
   }
   return null;
 }
+
+final _regexCodigo = RegExp(r'^\d{6}$');
+
+/// Código de recuperación: exactamente 6 dígitos.
+String? validarCodigoRecuperacion(String? valor) {
+  final codigo = valor?.trim() ?? '';
+
+  if (codigo.isEmpty) {
+    return 'Ingresa el código que te enviamos';
+  }
+  if (!_regexCodigo.hasMatch(codigo)) {
+    return 'El código tiene 6 dígitos';
+  }
+  return null;
+}
+
+/// Criterio 5: la confirmación tiene que ser igual a la contraseña nueva.
+String? validarConfirmacionPassword(String? valor, String password) {
+  if (valor == null || valor.isEmpty) {
+    return 'Confirma tu nueva contraseña';
+  }
+  if (valor != password) {
+    return 'Las contraseñas no coinciden';
+  }
+  return null;
+}

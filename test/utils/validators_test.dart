@@ -103,4 +103,45 @@ void main() {
       expect(validarPasswordIngreso('abc'), isNull);
     });
   });
+
+  group('Recuperación — validarCodigoRecuperacion', () {
+    test('rechaza el campo vacío', () {
+      expect(
+        validarCodigoRecuperacion(''),
+        'Ingresa el código que te enviamos',
+      );
+    });
+
+    test('rechaza menos de 6 dígitos', () {
+      expect(validarCodigoRecuperacion('12345'), 'El código tiene 6 dígitos');
+    });
+
+    test('rechaza letras', () {
+      expect(validarCodigoRecuperacion('12a456'), 'El código tiene 6 dígitos');
+    });
+
+    test('acepta 6 dígitos', () {
+      expect(validarCodigoRecuperacion('123456'), isNull);
+    });
+  });
+
+  group('Recuperación criterio 5 — validarConfirmacionPassword', () {
+    test('rechaza la confirmación vacía', () {
+      expect(
+        validarConfirmacionPassword('', 'Abcdefg1!'),
+        'Confirma tu nueva contraseña',
+      );
+    });
+
+    test('rechaza si no coincide con la contraseña', () {
+      expect(
+        validarConfirmacionPassword('Abcdefg1?', 'Abcdefg1!'),
+        'Las contraseñas no coinciden',
+      );
+    });
+
+    test('acepta si coincide', () {
+      expect(validarConfirmacionPassword('Abcdefg1!', 'Abcdefg1!'), isNull);
+    });
+  });
 }

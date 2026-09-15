@@ -5,6 +5,7 @@ import '../../models/estado_solicitud_recuperacion.dart';
 import '../../services/solicitud_recuperacion_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
+import 'reset_password_screen.dart';
 
 /// Primer paso de la recuperación: pedir el código al correo (SCRUM-73).
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
@@ -44,19 +45,29 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   ) {
     switch (actual.fase) {
       case FaseSolicitudRecuperacion.enviado:
-        // Mismo mensaje exista o no la cuenta (criterio 2 ajustado).
-        // TODO(SCRUM-74): al cerrar, abrir la pantalla del código.
-        _mostrarAlerta(
-          'Revisa tu correo',
-          'Si ${actual.correo} está registrado, te enviamos un código para '
-              'recuperar tu contraseña.',
-        );
+        _mostrarEnviadoYContinuar(actual.correo!);
       case FaseSolicitudRecuperacion.error:
         _mostrarAlerta(actual.tituloError!, actual.mensajeError!);
       case FaseSolicitudRecuperacion.inicial ||
           FaseSolicitudRecuperacion.enviando:
         break;
     }
+  }
+
+  /// Mismo mensaje exista o no la cuenta (criterio 2 ajustado). Al cerrarlo,
+  /// pasa a escribir el código.
+  Future<void> _mostrarEnviadoYContinuar(String correo) async {
+    await _mostrarAlerta(
+      'Revisa tu correo',
+      'Si $correo está registrado, te enviamos un código para recuperar tu '
+          'contraseña.',
+    );
+
+    if (!mounted) return;
+    // push y no pushReplacement: desde el código, "Pedir otro" regresa aquí.
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ResetPasswordScreen(correo: correo)),
+    );
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {
@@ -119,9 +130,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               onFieldSubmitted: (_) {
                 if (!enviando) _onEnviarCodigo();
               },
-              decoration: const InputDecoration(
-                hintText: 'nombre@correo.com',
-              ),
+              decoration: const InputDecoration(hintText: 'nombre@correo.com'),
             ),
             const SizedBox(height: 24),
 

@@ -5,7 +5,7 @@ import '../../models/estado_login.dart';
 import '../../services/login_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
-import '../../widgets/google_logo.dart';
+import '../../widgets/boton_google.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
@@ -221,24 +221,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const DivisorO(),
               const SizedBox(height: 18),
 
-              OutlinedButton.icon(
-                // TODO: inicio de sesión con Google, HU SCRUM-35.
-                onPressed: () => _mostrarMensaje(
-                  'Inicio de sesión con Google: próximamente',
-                ),
-                icon: const GoogleLogo(size: 18),
-                label: const Text('Continuar con Google'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  shape: const StadiumBorder(),
-                  side: const BorderSide(color: Color(0xFFE3E3E8)),
-                  foregroundColor: colorTextoPrincipal,
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              const BotonGoogle(texto: 'Continuar con Google'),
               const SizedBox(height: 26),
 
               Wrap(

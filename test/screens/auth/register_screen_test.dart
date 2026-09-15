@@ -175,4 +175,23 @@ void main() {
       expect(find.text('Revisa tu internet.'), findsOneWidget);
     });
   });
+
+  group('SCRUM-68 — registro con Google', () {
+    testWidgets('el botón inicia sesión con Google', (tester) async {
+      when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => true);
+      await abrirPantalla(tester);
+
+      final boton = find.text('Registrarte con Google');
+      await tester.ensureVisible(boton);
+      await tester.tap(boton);
+      await tester.pumpAndSettle();
+
+      verify(() => auth.iniciarSesionConGoogle()).called(1);
+      expect(find.text('Sesión iniciada con Google'), findsOneWidget);
+
+      // Deja terminar el SnackBar: su temporizador no puede quedar pendiente.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+  });
 }

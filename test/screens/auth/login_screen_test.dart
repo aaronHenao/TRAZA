@@ -141,6 +141,49 @@ void main() {
     });
   });
 
+  group('SCRUM-68 — inicio de sesión con Google', () {
+    Future<void> tocarGoogle(WidgetTester tester) async {
+      final boton = find.text('Continuar con Google');
+      await tester.ensureVisible(boton);
+      await tester.tap(boton);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('entró: avisa que inició sesión', (tester) async {
+      when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => true);
+      await abrirPantalla(tester);
+
+      await tocarGoogle(tester);
+
+      expect(find.text('Sesión iniciada con Google'), findsOneWidget);
+      await esperarSnackBar(tester);
+    });
+
+    testWidgets('canceló: no muestra nada', (tester) async {
+      when(() => auth.iniciarSesionConGoogle()).thenAnswer((_) async => false);
+      await abrirPantalla(tester);
+
+      await tocarGoogle(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('error: muestra la alerta', (tester) async {
+      when(() => auth.iniciarSesionConGoogle()).thenThrow(
+        const InicioSesionException(
+          titulo: 'No pudimos conectar con Google',
+          mensaje: 'Inténtalo de nuevo.',
+        ),
+      );
+      await abrirPantalla(tester);
+
+      await tocarGoogle(tester);
+
+      expect(find.text('No pudimos conectar con Google'), findsOneWidget);
+    });
+  });
+
   group('Criterio 4 — campos vacíos', () {
     testWidgets('marca los dos campos y no llama al service', (tester) async {
       await abrirPantalla(tester);

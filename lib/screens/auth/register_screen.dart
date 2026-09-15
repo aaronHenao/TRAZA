@@ -5,7 +5,7 @@ import '../../models/estado_registro.dart';
 import '../../services/registro_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
-import '../../widgets/google_logo.dart';
+import '../../widgets/boton_google.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -71,10 +71,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
-  }
-
-  void _mostrarMensaje(String texto) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
   }
 
   Future<void> _mostrarAlerta(String titulo, String mensaje) {
@@ -206,23 +202,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           const DivisorO(),
           const SizedBox(height: 18),
 
-          OutlinedButton.icon(
-            // TODO: registro con Google, en su propia HU.
-            onPressed: () =>
-                _mostrarMensaje('Registro con Google: próximamente'),
-            icon: const GoogleLogo(size: 18),
-            label: const Text('Registrarte con Google'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-              shape: const StadiumBorder(),
-              side: const BorderSide(color: Color(0xFFE3E3E8)),
-              foregroundColor: colorTextoPrincipal,
-              textStyle: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+          const BotonGoogle(texto: 'Registrarte con Google'),
           const SizedBox(height: 26),
 
           // Wrap y no Row: con letra grande o pantalla angosta,

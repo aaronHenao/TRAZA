@@ -13,7 +13,10 @@ class _MockAuthService extends Mock implements AuthService {}
 void main() {
   late _MockAuthService auth;
 
-  setUp(() => auth = _MockAuthService());
+  setUp(() {
+    auth = _MockAuthService();
+    when(() => auth.requiereOnboarding).thenReturn(false);
+  });
 
   When<Future<void>> cuandoIniciarSesion() {
     return when(
@@ -64,6 +67,19 @@ void main() {
         ),
       ).called(1);
       expect(find.text('Pantalla Inicio'), findsOneWidget);
+    });
+
+    testWidgets('sin terminar Perfil y Permisos va a Perfil (SCRUM-81)', (
+      tester,
+    ) async {
+      cuandoIniciarSesion().thenAnswer((_) async {});
+      when(() => auth.requiereOnboarding).thenReturn(true);
+      await abrirPantalla(tester);
+
+      await llenarFormulario(tester);
+      await tocarIniciarSesion(tester);
+
+      expect(find.text('Pantalla Perfil'), findsOneWidget);
     });
   });
 
@@ -139,7 +155,7 @@ void main() {
     testWidgets('ya tenía cuenta: va a Inicio (SCRUM-70)', (tester) async {
       when(
         () => auth.iniciarSesionConGoogle(),
-      ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaExistente);
+      ).thenAnswer((_) async => ResultadoInicioGoogle.onboardingCompleto);
       await abrirPantalla(tester);
 
       await tocarGoogle(tester);
@@ -150,7 +166,7 @@ void main() {
     testWidgets('primer acceso: va a Perfil (SCRUM-60)', (tester) async {
       when(
         () => auth.iniciarSesionConGoogle(),
-      ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaNueva);
+      ).thenAnswer((_) async => ResultadoInicioGoogle.onboardingPendiente);
       await abrirPantalla(tester);
 
       await tocarGoogle(tester);

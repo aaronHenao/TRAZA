@@ -33,6 +33,35 @@ void main() {
       );
     });
 
+    test(
+      'SCRUM-81: sin terminar Perfil y Permisos, el login lleva a Perfil',
+      () {
+        for (final ruta in ['/login', '/registro']) {
+          expect(
+            redireccionPorSesion(
+              haySesion: true,
+              ruta: ruta,
+              requiereOnboarding: true,
+            ),
+            '/perfil',
+            reason: ruta,
+          );
+        }
+      },
+    );
+
+    // Si marcar el onboarding falla, "Continuar" igual debe llegar a Inicio.
+    test('no encierra en Perfil a quien ya está en la app', () {
+      expect(
+        redireccionPorSesion(
+          haySesion: true,
+          ruta: '/inicio',
+          requiereOnboarding: true,
+        ),
+        isNull,
+      );
+    });
+
     test('las pantallas de la app se abren normal', () {
       expect(redireccionPorSesion(haySesion: true, ruta: '/perfil'), isNull);
     });

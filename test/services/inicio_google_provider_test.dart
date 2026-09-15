@@ -30,23 +30,23 @@ void main() {
   test('criterios 1 y 4: entró', () async {
     when(
       () => auth.iniciarSesionConGoogle(),
-    ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaExistente);
+    ).thenAnswer((_) async => ResultadoInicioGoogle.onboardingCompleto);
 
     await iniciar();
 
     expect(estado().fase, FaseLogin.exito);
-    expect(estado().primerAcceso, isFalse);
+    expect(estado().requiereOnboarding, isFalse);
   });
 
   test('SCRUM-60: primer acceso queda marcado', () async {
     when(
       () => auth.iniciarSesionConGoogle(),
-    ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaNueva);
+    ).thenAnswer((_) async => ResultadoInicioGoogle.onboardingPendiente);
 
     await iniciar();
 
     expect(estado().fase, FaseLogin.exito);
-    expect(estado().primerAcceso, isTrue);
+    expect(estado().requiereOnboarding, isTrue);
   });
 
   test('criterio 5: cerró la ventana, vuelve al inicio sin error', () async {

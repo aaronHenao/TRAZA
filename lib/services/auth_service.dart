@@ -44,11 +44,12 @@ enum ResultadoInicioGoogle {
   /// La persona cerró la ventana de Google sin terminar. No es un error.
   cancelado,
 
-  /// Primer acceso: Supabase acaba de crear la cuenta (va a Perfil).
-  cuentaNueva,
+  /// No ha terminado Perfil y Permisos, por ejemplo porque la cuenta es
+  /// nueva (va a Perfil).
+  onboardingPendiente,
 
-  /// Ya tenía cuenta (va a Inicio).
-  cuentaExistente,
+  /// Ya los terminó alguna vez (va a Inicio).
+  onboardingCompleto,
 }
 
 /// Cómo obtiene la app el servicio de autenticación. Las pruebas lo
@@ -317,9 +318,9 @@ class AuthService {
         idToken: idToken,
         accessToken: autenticacion.accessToken,
       );
-      return _esCuentaNueva(respuesta.user)
-          ? ResultadoInicioGoogle.cuentaNueva
-          : ResultadoInicioGoogle.cuentaExistente;
+      return requiereOnboardingDe(respuesta.user)
+          ? ResultadoInicioGoogle.onboardingPendiente
+          : ResultadoInicioGoogle.onboardingCompleto;
     } on PlatformException catch (e) {
       if (e.code == GoogleSignIn.kSignInCanceledError) {
         return ResultadoInicioGoogle.cancelado;
@@ -338,12 +339,28 @@ class AuthService {
 
   /// En el primer acceso Supabase crea la cuenta y registra el ingreso casi al
   /// mismo tiempo. Si ya tenía cuenta, el último ingreso es muy posterior.
-  bool _esCuentaNueva(User? usuario) {
-    if (usuario == null) return false;
-    final creada = DateTime.tryParse(usuario.createdAt);
-    final ultimoIngreso = DateTime.tryParse(usuario.lastSignInAt ?? '');
-    if (creada == null || ultimoIngreso == null) return false;
-    return ultimoIngreso.difference(creada).inSeconds.abs() < 30;
+  /// Metadato del usuario que marca que ya pasó por Perfil y Permisos.
+  static const _claveOnboarding = 'onboarding_completado';
+
+  /// Si [usuario] todavía debe pasar por Perfil y Permisos (SCRUM-81).
+  ///
+  /// Se guarda en los metadatos de la cuenta y no se deduce de la fecha de
+  /// creación: con correo, el primer ingreso llega cuando confirma, minutos u
+  /// horas después del registro. Y quien abandona a mitad lo vuelve a ver.
+  static bool requiereOnboardingDe(User? usuario) =>
+      usuario != null && usuario.userMetadata?[_claveOnboarding] != true;
+
+  /// Lo mismo para el usuario con la sesión abierta.
+  bool get requiereOnboarding => requiereOnboardingDe(_auth.currentUser);
+
+  /// Marca que el usuario terminó Perfil y Permisos. Si falla la red no se
+  /// propaga: lo peor es que la próxima vez vuelva a ver esas pantallas.
+  Future<void> completarOnboarding() async {
+    try {
+      await _auth.updateUser(UserAttributes(data: {_claveOnboarding: true}));
+    } catch (e) {
+      debugPrint('No se pudo marcar el onboarding como completado: $e');
+    }
   }
 
   /// Cierra la sesión. Si falla la red, Supabase igual borra la sesión del

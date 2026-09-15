@@ -420,42 +420,33 @@ void main() {
       ).thenAnswer((_) async => AuthResponse(user: usuario));
     }
 
-    User usuarioGoogle({required String creado, required String ingreso}) {
+    User usuarioGoogle({Map<String, dynamic> metadatos = const {}}) {
       return User(
         id: 'usuario-google',
         appMetadata: const {},
-        userMetadata: const {},
+        userMetadata: metadatos,
         aud: 'authenticated',
-        createdAt: creado,
-        lastSignInAt: ingreso,
+        createdAt: _fecha,
       );
     }
 
-    test('ya tenía cuenta: el último ingreso es muy posterior', () async {
+    test('ya terminó Perfil y Permisos: va a Inicio', () async {
       cuandoGoogleEntraCon(
-        usuarioGoogle(
-          creado: '2026-01-01T10:00:00Z',
-          ingreso: '2026-09-15T10:00:00Z',
-        ),
+        usuarioGoogle(metadatos: {'onboarding_completado': true}),
       );
 
       expect(
         await servicio.iniciarSesionConGoogle(),
-        ResultadoInicioGoogle.cuentaExistente,
+        ResultadoInicioGoogle.onboardingCompleto,
       );
     });
 
-    test('SCRUM-60: primer acceso, cuenta e ingreso al mismo tiempo', () async {
-      cuandoGoogleEntraCon(
-        usuarioGoogle(
-          creado: '2026-09-15T10:00:00Z',
-          ingreso: '2026-09-15T10:00:01Z',
-        ),
-      );
+    test('SCRUM-60: cuenta nueva, sin la marca, va a Perfil', () async {
+      cuandoGoogleEntraCon(usuarioGoogle());
 
       expect(
         await servicio.iniciarSesionConGoogle(),
-        ResultadoInicioGoogle.cuentaNueva,
+        ResultadoInicioGoogle.onboardingPendiente,
       );
     });
 
@@ -513,6 +504,55 @@ void main() {
         lanzaInicioSesionException('No pudimos conectar con Google'),
       );
       verificarQueNoLlamoASupabase();
+    });
+  });
+
+  group('onboarding (SCRUM-81)', () {
+    User usuario(Map<String, dynamic> metadatos) => User(
+      id: 'usuario-1',
+      appMetadata: const {},
+      userMetadata: metadatos,
+      aud: 'authenticated',
+      createdAt: _fecha,
+    );
+
+    test('sin la marca en los metadatos, lo requiere', () {
+      when(() => auth.currentUser).thenReturn(usuario(const {}));
+      expect(servicio.requiereOnboarding, isTrue);
+    });
+
+    test('con la marca, ya no', () {
+      when(
+        () => auth.currentUser,
+      ).thenReturn(usuario(const {'onboarding_completado': true}));
+      expect(servicio.requiereOnboarding, isFalse);
+    });
+
+    test('sin sesión no aplica', () {
+      expect(AuthService.requiereOnboardingDe(null), isFalse);
+    });
+
+    test('completarlo guarda la marca en los metadatos', () async {
+      registerFallbackValue(UserAttributes());
+      when(
+        () => auth.updateUser(any()),
+      ).thenAnswer((_) async => UserResponse.fromJson(const {}));
+
+      await servicio.completarOnboarding();
+
+      final atributos =
+          verify(() => auth.updateUser(captureAny())).captured.single
+              as UserAttributes;
+      expect(atributos.data, {'onboarding_completado': true});
+    });
+
+    test('si falla la red, no lanza el error', () async {
+      registerFallbackValue(UserAttributes());
+      when(
+        () => auth.updateUser(any()),
+      ).thenThrow(AuthRetryableFetchException());
+
+      await expectLater(servicio.completarOnboarding(), completes);
     });
   });
 }

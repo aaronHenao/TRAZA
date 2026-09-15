@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -70,15 +71,16 @@ class InicioScreen extends ConsumerWidget {
   }
 }
 
-/// Saludo y acceso al historial (`.home-head` del prototipo).
+/// Saludo y accesos al historial, los permisos y cerrar sesión (`.home-head`
+/// del prototipo).
 class _Cabecera extends StatelessWidget {
   const _Cabecera();
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(
+        const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -101,13 +103,21 @@ class _Cabecera extends StatelessWidget {
         ),
         // Lleva al historial de entrenamientos (SCRUM-44). Queda deshabilitado
         // hasta que exista esa pantalla.
-        TrazaIconButton(
+        const TrazaIconButton(
           icon: Icons.schedule,
           onPressed: null,
           tooltip: 'Historial',
         ),
-        SizedBox(width: 8),
-        BotonCerrarSesion(),
+        const SizedBox(width: 8),
+        // Revisar y conceder permisos después del onboarding (SCRUM-85).
+        // push: "atrás" vuelve a Inicio.
+        TrazaIconButton(
+          icon: Icons.shield_outlined,
+          onPressed: () => context.push('/permisos'),
+          tooltip: 'Permisos',
+        ),
+        const SizedBox(width: 8),
+        const BotonCerrarSesion(),
       ],
     );
   }

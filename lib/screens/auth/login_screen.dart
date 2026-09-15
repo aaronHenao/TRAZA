@@ -45,8 +45,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _alCambiarLogin(EstadoLogin? anterior, EstadoLogin actual) {
     switch (actual.fase) {
       case FaseLogin.exito:
-        // SCRUM-66. go: con la sesión iniciada, atrás no vuelve al login.
-        context.go('/inicio');
+        // SCRUM-66 y SCRUM-81. go: con la sesión iniciada, atrás no vuelve
+        // al login. Quien no ha terminado Perfil y Permisos empieza por ahí.
+        context.go(actual.requiereOnboarding ? '/perfil' : '/inicio');
       case FaseLogin.credencialesInvalidas:
         _mostrarCredencialesInvalidas();
       case FaseLogin.error:

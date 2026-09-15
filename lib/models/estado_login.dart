@@ -23,24 +23,24 @@ enum FaseLogin {
 class EstadoLogin {
   const EstadoLogin.inicial()
     : fase = FaseLogin.inicial,
-      primerAcceso = false,
+      requiereOnboarding = false,
       tituloError = null,
       mensajeError = null;
 
   const EstadoLogin.enviando()
     : fase = FaseLogin.enviando,
-      primerAcceso = false,
+      requiereOnboarding = false,
       tituloError = null,
       mensajeError = null;
 
-  const EstadoLogin.exito({this.primerAcceso = false})
+  const EstadoLogin.exito({this.requiereOnboarding = false})
     : fase = FaseLogin.exito,
       tituloError = null,
       mensajeError = null;
 
   const EstadoLogin.credencialesInvalidas()
     : fase = FaseLogin.credencialesInvalidas,
-      primerAcceso = false,
+      requiereOnboarding = false,
       tituloError = null,
       mensajeError = null;
 
@@ -48,13 +48,13 @@ class EstadoLogin {
     required String this.tituloError,
     required String this.mensajeError,
   }) : fase = FaseLogin.error,
-       primerAcceso = false;
+       requiereOnboarding = false;
 
   final FaseLogin fase;
 
-  /// Solo en [FaseLogin.exito] con Google: la cuenta se acaba de crear, así
-  /// que va a Perfil en vez de a Inicio (SCRUM-60).
-  final bool primerAcceso;
+  /// Solo en [FaseLogin.exito]: el usuario no ha terminado Perfil y Permisos,
+  /// así que va a Perfil en vez de a Inicio (SCRUM-60 y SCRUM-81).
+  final bool requiereOnboarding;
 
   /// Textos de la alerta. Solo en [FaseLogin.error].
   final String? tituloError;

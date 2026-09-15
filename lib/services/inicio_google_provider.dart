@@ -35,10 +35,10 @@ class InicioGoogleNotifier extends AutoDisposeNotifier<EstadoLogin> {
         // Cerrar la ventana de Google no es un error: se vuelve al inicio sin
         // mostrar nada (criterio 5).
         ResultadoInicioGoogle.cancelado => const EstadoLogin.inicial(),
-        ResultadoInicioGoogle.cuentaNueva => const EstadoLogin.exito(
-          primerAcceso: true,
+        ResultadoInicioGoogle.onboardingPendiente => const EstadoLogin.exito(
+          requiereOnboarding: true,
         ),
-        ResultadoInicioGoogle.cuentaExistente => const EstadoLogin.exito(),
+        ResultadoInicioGoogle.onboardingCompleto => const EstadoLogin.exito(),
       });
     } on InicioSesionException catch (e) {
       _publicar(

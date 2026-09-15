@@ -1,0 +1,321 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:traza/models/estado_permisos.dart';
+import 'package:traza/screens/onboarding/permisos_screen.dart';
+import 'package:traza/services/auth_service.dart';
+import 'package:traza/services/permisos_service.dart';
+import 'package:traza/services/permisos_usuario_service.dart';
+
+class _MockPermisosService extends Mock implements PermisosService {}
+
+class _MockAuthService extends Mock implements AuthService {}
+
+/// La pantalla no prueba el guardado (eso está en permisos_provider_test):
+/// solo evita que intente hablar con Supabase.
+class _RepositorioFalso implements PermisosUsuarioRepository {
+  @override
+  Future<void> guardar(TipoPermiso tipo, {required bool concedido}) async {}
+}
+
+/// Pruebas de la pantalla de permisos (SCRUM-76) y del permiso de ubicación
+/// (SCRUM-77).
+void main() {
+  late _MockPermisosService servicio;
+  late _MockAuthService auth;
+
+  setUp(() {
+    auth = _MockAuthService();
+    when(() => auth.completarOnboarding()).thenAnswer((_) async {});
+    servicio = _MockPermisosService();
+    when(
+      () => servicio.estadoUbicacion(),
+    ).thenAnswer((_) async => EstadoPermiso.denegado);
+    when(
+      () => servicio.estadoSalud(),
+    ).thenAnswer((_) async => EstadoPermiso.denegado);
+    when(() => servicio.abrirAjustes()).thenAnswer((_) async {});
+    when(() => servicio.instalarProveedorSalud()).thenAnswer((_) async {});
+  });
+
+  /// Por defecto abre Permisos como en el onboarding (con `go`). Con
+  /// [desdeInicio] la abre como al revisarlos desde Inicio (con `push`).
+  Future<void> montar(WidgetTester tester, {bool desdeInicio = false}) async {
+    final router = GoRouter(
+      initialLocation: desdeInicio ? '/inicio' : '/permisos',
+      routes: [
+        GoRoute(
+          path: '/permisos',
+          builder: (context, state) => const PermisosScreen(),
+        ),
+        GoRoute(
+          path: '/inicio',
+          builder: (context, state) => Scaffold(
+            body: TextButton(
+              onPressed: () => context.push('/permisos'),
+              child: const Text('Pantalla Inicio'),
+            ),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          permisosServiceProvider.overrideWithValue(servicio),
+          authServiceProvider.overrideWithValue(auth),
+          permisosUsuarioRepositoryProvider.overrideWithValue(
+            _RepositorioFalso(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pump();
+    if (desdeInicio) {
+      await tester.tap(find.text('Pantalla Inicio'));
+      await tester.pumpAndSettle();
+    }
+  }
+
+  /// Deja que el aviso termine su temporizador.
+  Future<void> esperarAviso(WidgetTester tester) =>
+      tester.pumpAndSettle(const Duration(seconds: 3));
+
+  testWidgets('explica para qué se usa cada permiso', (tester) async {
+    await montar(tester);
+
+    expect(find.text('Ubicación'), findsOneWidget);
+    expect(find.textContaining('trazar tu recorrido'), findsOneWidget);
+    expect(find.text('Permitir ubicación'), findsOneWidget);
+
+    expect(find.text('Datos de salud'), findsOneWidget);
+    expect(find.textContaining('métricas de salud'), findsOneWidget);
+    expect(find.text('Permitir acceso'), findsOneWidget);
+  });
+
+  testWidgets('"Ahora no" avisa que se puede activar después', (tester) async {
+    await montar(tester);
+
+    await tester.tap(find.text('Ahora no').first);
+    await tester.pump();
+
+    expect(
+      find.text('Podrás activarlo luego cuando lo necesites'),
+      findsOneWidget,
+    );
+    await esperarAviso(tester);
+  });
+
+  testWidgets('"Continuar" termina el onboarding y lleva a Inicio', (
+    tester,
+  ) async {
+    await montar(tester);
+
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+
+    verify(() => auth.completarOnboarding()).called(1);
+    expect(find.text('Pantalla Inicio'), findsOneWidget);
+  });
+
+  group('Permiso de ubicación', () {
+    testWidgets('si ya estaba concedido, la tarjeta lo muestra', (
+      tester,
+    ) async {
+      when(
+        () => servicio.estadoUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      expect(find.text('Permiso concedido'), findsOneWidget);
+      expect(find.text('Permitir ubicación'), findsNothing);
+    });
+
+    testWidgets('al aceptarlo la tarjeta pasa a concedido', (tester) async {
+      when(
+        () => servicio.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir ubicación'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.solicitarUbicacion()).called(1);
+      expect(find.text('Permiso concedido'), findsOneWidget);
+    });
+
+    testWidgets('al negarlo explica qué no podrá hacer', (tester) async {
+      when(
+        () => servicio.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir ubicación'));
+      await tester.pump();
+
+      expect(
+        find.text('Sin ubicación no podrás registrar tus recorridos'),
+        findsOneWidget,
+      );
+      expect(find.text('Permitir ubicación'), findsOneWidget);
+      await esperarAviso(tester);
+    });
+
+    testWidgets('si está bloqueado, ofrece abrir los ajustes', (tester) async {
+      when(
+        () => servicio.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.bloqueado);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir ubicación'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ubicación desactivada'), findsOneWidget);
+
+      // La tarjeta también cambia a "Abrir ajustes": se toca el del diálogo.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Abrir ajustes'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.abrirAjustes()).called(1);
+    });
+  });
+
+  group('Datos de salud', () {
+    testWidgets('al aceptarlo la tarjeta pasa a concedido', (tester) async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir acceso'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.solicitarSalud()).called(1);
+      expect(find.text('Permiso concedido'), findsOneWidget);
+    });
+
+    testWidgets('al negarlo avisa que el resumen irá sin esas métricas', (
+      tester,
+    ) async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir acceso'));
+      await tester.pump();
+
+      expect(
+        find.text('Tu resumen no mostrará métricas de salud'),
+        findsOneWidget,
+      );
+      await esperarAviso(tester);
+    });
+
+    testWidgets('en Android sin Health Connect ofrece instalarlo', (
+      tester,
+    ) async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.noDisponible);
+      await montar(tester);
+
+      await tester.tap(find.text('Permitir acceso'));
+      await tester.pumpAndSettle();
+      expect(find.text('Falta Health Connect'), findsOneWidget);
+
+      await tester.tap(find.text('Instalar'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.instalarProveedorSalud()).called(1);
+    });
+  });
+
+  group('Estado de los permisos (SCRUM-85)', () {
+    testWidgets('muestra cuando un permiso no está concedido', (tester) async {
+      await montar(tester);
+
+      expect(find.text('No concedido'), findsNWidgets(2));
+    });
+
+    testWidgets('bloqueado lo dice y el botón va directo a ajustes', (
+      tester,
+    ) async {
+      when(
+        () => servicio.estadoUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.bloqueado);
+      await montar(tester);
+
+      expect(
+        find.text('Bloqueado: actívalo en los ajustes del teléfono'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Abrir ajustes'));
+      await tester.pumpAndSettle();
+
+      verify(() => servicio.abrirAjustes()).called(1);
+      verifyNever(() => servicio.solicitarUbicacion());
+    });
+
+    testWidgets('sin Health Connect ofrece instalarlo', (tester) async {
+      when(
+        () => servicio.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.noDisponible);
+      await montar(tester);
+
+      expect(find.text('No disponible en este dispositivo'), findsOneWidget);
+      expect(find.text('Instalar Health Connect'), findsOneWidget);
+    });
+
+    testWidgets('concedidos, los dos lo muestran', (tester) async {
+      when(
+        () => servicio.estadoUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      when(
+        () => servicio.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester);
+
+      expect(find.text('Permiso concedido'), findsNWidgets(2));
+      expect(find.text('No concedido'), findsNothing);
+    });
+
+    group('abierta desde Inicio', () {
+      testWidgets('no ofrece "Ahora no" y tiene "Listo"', (tester) async {
+        await montar(tester, desdeInicio: true);
+
+        expect(find.text('Ahora no'), findsNothing);
+        expect(find.text('Listo'), findsOneWidget);
+        expect(find.text('Continuar'), findsNothing);
+      });
+
+      testWidgets('"Listo" vuelve a Inicio sin tocar el onboarding', (
+        tester,
+      ) async {
+        await montar(tester, desdeInicio: true);
+
+        await tester.tap(find.text('Listo'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Pantalla Inicio'), findsOneWidget);
+        verifyNever(() => auth.completarOnboarding());
+      });
+
+      testWidgets('el botón de atrás vuelve a Inicio', (tester) async {
+        await montar(tester, desdeInicio: true);
+
+        await tester.tap(find.byTooltip('Volver'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Pantalla Inicio'), findsOneWidget);
+      });
+    });
+  });
+}

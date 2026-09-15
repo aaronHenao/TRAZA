@@ -21,7 +21,7 @@ class BotonGoogle extends ConsumerWidget {
         case FaseLogin.exito:
           // SCRUM-60: primer acceso → Perfil. SCRUM-70: ya tenía cuenta →
           // Inicio. go: con la sesión iniciada, atrás no vuelve al login.
-          context.go(actual.primerAcceso ? '/perfil' : '/inicio');
+          context.go(actual.requiereOnboarding ? '/perfil' : '/inicio');
         case FaseLogin.error:
           showDialog<void>(
             context: context,

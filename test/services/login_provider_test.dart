@@ -16,6 +16,7 @@ void main() {
 
   setUp(() {
     auth = _MockAuthService();
+    when(() => auth.requiereOnboarding).thenReturn(false);
     contenedor = ProviderContainer(
       overrides: [authServiceProvider.overrideWithValue(auth)],
     );
@@ -81,6 +82,17 @@ void main() {
     await iniciarSesion();
 
     expect(estado().fase, FaseLogin.exito);
+    expect(estado().requiereOnboarding, isFalse);
+  });
+
+  test('SCRUM-81: avisa si todavía no terminó Perfil y Permisos', () async {
+    cuandoIniciarSesion().thenAnswer((_) async {});
+    when(() => auth.requiereOnboarding).thenReturn(true);
+
+    await iniciarSesion();
+
+    expect(estado().fase, FaseLogin.exito);
+    expect(estado().requiereOnboarding, isTrue);
   });
 
   test('criterios 2 y 3: publica credenciales inválidas', () async {

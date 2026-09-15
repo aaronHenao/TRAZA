@@ -37,7 +37,9 @@ class LoginNotifier extends AutoDisposeNotifier<EstadoLogin> {
 
     try {
       await authService.iniciarSesion(correo: correo, password: password);
-      _publicar(const EstadoLogin.exito());
+      _publicar(
+        EstadoLogin.exito(requiereOnboarding: authService.requiereOnboarding),
+      );
     } on CredencialesInvalidasException {
       _publicar(const EstadoLogin.credencialesInvalidas());
     } on InicioSesionException catch (e) {

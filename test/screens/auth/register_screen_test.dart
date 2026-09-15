@@ -174,7 +174,7 @@ void main() {
     testWidgets('el botón inicia sesión con Google', (tester) async {
       when(
         () => auth.iniciarSesionConGoogle(),
-      ).thenAnswer((_) async => ResultadoInicioGoogle.cuentaNueva);
+      ).thenAnswer((_) async => ResultadoInicioGoogle.onboardingPendiente);
       await abrirPantalla(tester);
 
       final boton = find.text('Registrarte con Google');

@@ -1,3 +1,13 @@
+/// Permisos que pide la app. [valorDb] es el de `permisos_usuario.tipo_permiso`.
+enum TipoPermiso {
+  ubicacion('ubicacion'),
+  salud('salud');
+
+  const TipoPermiso(this.valorDb);
+
+  final String valorDb;
+}
+
 /// En qué punto está un permiso del sistema.
 enum EstadoPermiso {
   /// Todavía no se sabe. iOS, además, nunca revela si se negó la lectura de

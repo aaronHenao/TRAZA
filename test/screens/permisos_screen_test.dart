@@ -6,8 +6,16 @@ import 'package:mocktail/mocktail.dart';
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/screens/onboarding/permisos_screen.dart';
 import 'package:traza/services/permisos_service.dart';
+import 'package:traza/services/permisos_usuario_service.dart';
 
 class _MockPermisosService extends Mock implements PermisosService {}
+
+/// La pantalla no prueba el guardado (eso está en permisos_provider_test):
+/// solo evita que intente hablar con Supabase.
+class _RepositorioFalso implements PermisosUsuarioRepository {
+  @override
+  Future<void> guardar(TipoPermiso tipo, {required bool concedido}) async {}
+}
 
 /// Pruebas de la pantalla de permisos (SCRUM-76) y del permiso de ubicación
 /// (SCRUM-77).
@@ -43,7 +51,12 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [permisosServiceProvider.overrideWithValue(servicio)],
+        overrides: [
+          permisosServiceProvider.overrideWithValue(servicio),
+          permisosUsuarioRepositoryProvider.overrideWithValue(
+            _RepositorioFalso(),
+          ),
+        ],
         child: MaterialApp.router(routerConfig: router),
       ),
     );

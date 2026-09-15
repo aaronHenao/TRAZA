@@ -52,7 +52,11 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
     if (solicitudesSalud != _solicitudesSalud || anterior.solicitandoSalud) {
       salud = anterior.salud;
     }
-    state = state.copyWith(ubicacion: ubicacion, salud: salud);
+    state = state.copyWith(
+      ubicacion: ubicacion,
+      salud: salud,
+      consultado: true,
+    );
 
     // Solo si cambió: volver a la app no debe escribir en Supabase cada vez.
     if (ubicacion != anterior.ubicacion) {

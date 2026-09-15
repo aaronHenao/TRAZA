@@ -12,6 +12,7 @@ import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
+import 'widgets/requiere_permiso_ubicacion.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,7 +64,10 @@ final _navegacion = GoRouter(
     // usuario eligió en los chips del inicio (SCRUM-93).
     GoRoute(
       path: '/tracking',
-      builder: (context, state) => const TrackingConActividadElegida(),
+      // Sin permiso de ubicación no se abre: explica por qué y lo pide
+      // (SCRUM-82).
+      builder: (context, state) =>
+          const RequierePermisoUbicacion(child: TrackingConActividadElegida()),
     ),
     // Resumen de la sesión recién finalizada (SCRUM-43). El id del
     // entrenamiento viaja en la ruta (SCRUM-122); sin sesión no hay id y se

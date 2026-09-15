@@ -35,6 +35,7 @@ class EstadoPermisos {
     this.salud = EstadoPermiso.desconocido,
     this.solicitandoUbicacion = false,
     this.solicitandoSalud = false,
+    this.consultado = false,
   });
 
   final EstadoPermiso ubicacion;
@@ -44,17 +45,24 @@ class EstadoPermisos {
   final bool solicitandoUbicacion;
   final bool solicitandoSalud;
 
+  /// Ya se le preguntó al sistema al menos una vez. Antes de eso
+  /// [EstadoPermiso.desconocido] no significa nada: evita mostrar un aviso de
+  /// "falta el permiso" durante el instante que tarda la consulta.
+  final bool consultado;
+
   EstadoPermisos copyWith({
     EstadoPermiso? ubicacion,
     EstadoPermiso? salud,
     bool? solicitandoUbicacion,
     bool? solicitandoSalud,
+    bool? consultado,
   }) {
     return EstadoPermisos(
       ubicacion: ubicacion ?? this.ubicacion,
       salud: salud ?? this.salud,
       solicitandoUbicacion: solicitandoUbicacion ?? this.solicitandoUbicacion,
       solicitandoSalud: solicitandoSalud ?? this.solicitandoSalud,
+      consultado: consultado ?? this.consultado,
     );
   }
 }

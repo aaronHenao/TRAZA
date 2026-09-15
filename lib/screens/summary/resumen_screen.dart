@@ -8,6 +8,7 @@ import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
+import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
 
 /// Resumen del entrenamiento recién finalizado (`screen-summary`, SCRUM-117).
@@ -138,6 +139,8 @@ class _ContenidoResumen extends ConsumerWidget {
               ),
               const SizedBox(height: 18),
               _Ritmo(valor: resumen.ritmo),
+              // Solo aparece si hay permiso y datos (SCRUM-79).
+              SeccionSalud.deResumen(resumen),
               const SizedBox(height: 18),
               const _Recorrido(),
               const SizedBox(height: 18),

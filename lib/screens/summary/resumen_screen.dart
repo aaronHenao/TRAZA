@@ -10,6 +10,7 @@ import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
+import '../../widgets/mapa_trayecto.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/trazado_recorrido.dart';
@@ -289,7 +290,8 @@ class _Ritmo extends StatelessWidget {
 
 /// `.summary-map`: el recuadro oscuro del recorrido, con el mismo degradado
 /// que la pantalla del entrenamiento en curso, y dentro el trazado de los
-/// puntos guardados (SCRUM-119).
+/// puntos guardados (SCRUM-119). Al tocarlo, el recorrido se abre sobre el
+/// mapa (SCRUM-120).
 class _Recorrido extends StatelessWidget {
   const _Recorrido({required this.puntos});
 
@@ -306,7 +308,216 @@ class _Recorrido extends StatelessWidget {
         decoration: const BoxDecoration(gradient: trazaTrackingGradient),
         child: trazado.estaVacio
             ? const _SinTrazado()
-            : TrazadoRecorrido(trazado: trazado),
+            : _TrazadoConMapa(trazado: trazado, puntos: puntos),
+      ),
+    );
+  }
+}
+
+/// El trazado del recorrido, que se puede tocar para verlo sobre el mapa.
+class _TrazadoConMapa extends StatelessWidget {
+  const _TrazadoConMapa({required this.trazado, required this.puntos});
+
+  final Trazado trazado;
+  final List<PuntoGps> puntos;
+
+  /// El mapa se abre a pantalla completa sobre el resumen: dentro del
+  /// recuadro no hay espacio para revisar la ruta, y un mapa que se arrastra
+  /// dentro de una lista le quita el gesto al desplazamiento.
+  void _abrirMapa(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      useSafeArea: false,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: TrazaColors.trackingTop,
+        child: _RecorridoEnMapa(puntos: puntos),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Ver el recorrido en el mapa',
+      excludeSemantics: true,
+      onTap: () => _abrirMapa(context),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () => _abrirMapa(context),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              TrazadoRecorrido(trazado: trazado),
+              const Positioned(right: 10, bottom: 10, child: _VerEnMapa()),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Aviso de que el recuadro se puede tocar.
+class _VerEnMapa extends StatelessWidget {
+  const _VerEnMapa();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.map_outlined, size: 14, color: Colors.white),
+          SizedBox(width: 5),
+          Text(
+            'Ver en el mapa',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El recorrido sobre el mapa, a pantalla completa (SCRUM-120).
+class _RecorridoEnMapa extends StatelessWidget {
+  const _RecorridoEnMapa({required this.puntos});
+
+  final List<PuntoGps> puntos;
+
+  @override
+  Widget build(BuildContext context) {
+    // Barras con fondo oscuro para que se lean sobre cualquier parte del mapa.
+    final fondoBarras = TrazaColors.trackingTop.withValues(alpha: 0.85);
+
+    return Stack(
+      children: [
+        Positioned.fill(child: MapaTrayecto(puntos: puntos)),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ColoredBox(
+            color: fondoBarras,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      tooltip: 'Cerrar mapa',
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      style: IconButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        fixedSize: const Size(36, 36),
+                        minimumSize: const Size(36, 36),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Recorrido',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 36),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              // Por encima de la atribución del mapa.
+              padding: const EdgeInsets.only(bottom: 34),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: fondoBarras,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PuntoLeyenda(color: Colors.white),
+                      SizedBox(width: 6),
+                      _TextoLeyenda('Partida'),
+                      SizedBox(width: 16),
+                      _PuntoLeyenda(color: AppColors.accent),
+                      SizedBox(width: 6),
+                      _TextoLeyenda('Llegada'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PuntoLeyenda extends StatelessWidget {
+  const _PuntoLeyenda({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+    );
+  }
+}
+
+class _TextoLeyenda extends StatelessWidget {
+  const _TextoLeyenda(this.texto);
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      texto,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
       ),
     );
   }

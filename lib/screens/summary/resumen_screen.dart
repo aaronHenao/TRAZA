@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/punto_gps.dart';
 import '../../models/resumen_entrenamiento.dart';
+import '../../models/trazado.dart';
 import '../../services/entrenamiento_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
@@ -10,6 +12,7 @@ import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
+import '../../widgets/trazado_recorrido.dart';
 
 /// Resumen del entrenamiento recién finalizado (`screen-summary`, SCRUM-117).
 ///
@@ -148,7 +151,7 @@ class _ContenidoResumen extends ConsumerWidget {
               // Solo aparece si hay permiso y datos (SCRUM-79).
               SeccionSalud.deResumen(resumen),
               const SizedBox(height: 18),
-              const _Recorrido(),
+              _Recorrido(puntos: resumen.puntos),
               const SizedBox(height: 18),
               // El entrenamiento ya quedó guardado al tocar "Finalizar"
               // (SCRUM-121), así que este botón solo cierra el resumen.
@@ -285,41 +288,55 @@ class _Ritmo extends StatelessWidget {
 }
 
 /// `.summary-map`: el recuadro oscuro del recorrido, con el mismo degradado
-/// que la pantalla del entrenamiento en curso.
-///
-/// SCRUM-120 dibuja aquí el trayecto con `ResumenEntrenamiento.puntos`; hasta
-/// entonces se muestra el recuadro vacío.
+/// que la pantalla del entrenamiento en curso, y dentro el trazado de los
+/// puntos guardados (SCRUM-119).
 class _Recorrido extends StatelessWidget {
-  const _Recorrido();
+  const _Recorrido({required this.puntos});
+
+  final List<PuntoGps> puntos;
 
   @override
   Widget build(BuildContext context) {
+    final trazado = Trazado.desdePuntos(puntos);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
         height: 160,
         decoration: const BoxDecoration(gradient: trazaTrackingGradient),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.route_rounded,
-                size: 26,
-                color: Colors.white.withValues(alpha: 0.45),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Recorrido no disponible',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
+        child: trazado.estaVacio
+            ? const _SinTrazado()
+            : TrazadoRecorrido(trazado: trazado),
+      ),
+    );
+  }
+}
+
+/// En la sesión no se registró ningún punto GPS.
+class _SinTrazado extends StatelessWidget {
+  const _SinTrazado();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.route_rounded,
+            size: 26,
+            color: Colors.white.withValues(alpha: 0.45),
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            'Sin recorrido registrado',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
       ),
     );
   }

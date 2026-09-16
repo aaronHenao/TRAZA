@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/models/distancia_en_vivo.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 
 /// Pruebas del formato de los datos que muestra el resumen (SCRUM-117).
@@ -107,6 +108,40 @@ void main() {
 
       expect(local.correspondeA(null), isTrue);
       expect(local.correspondeA('e-123'), isFalse);
+    });
+  });
+
+  group('coincide con lo que se vio durante la actividad (SCRUM-119)', () {
+    test('la distancia tiene el mismo formato que en la pantalla de '
+        'entrenamiento', () {
+      for (final metros in [0.0, 2843.7, 2845.0, 12345.0]) {
+        expect(
+          resumen(distanciaMetros: metros).distancia,
+          DistanciaEnVivo(metros: metros).kilometros,
+        );
+      }
+    });
+
+    test('el ritmo es el de la pantalla de entrenamiento, por kilómetro', () {
+      const duracion = Duration(minutes: 32, seconds: 17);
+
+      expect(
+        resumen(duracion: duracion, distanciaMetros: 5230.5).ritmo,
+        '${const DistanciaEnVivo(metros: 5230.5).ritmoPara(duracion)}/km',
+      );
+    });
+
+    test('usa el mismo mínimo de distancia para calcular el ritmo', () {
+      const minimo = DistanciaEnVivo.distanciaMinimaParaRitmoMetros;
+
+      expect(
+        resumen(distanciaMetros: minimo - 0.1).ritmo,
+        ResumenEntrenamiento.sinDato,
+      );
+      expect(
+        resumen(distanciaMetros: minimo).ritmo,
+        isNot(ResumenEntrenamiento.sinDato),
+      );
     });
   });
 }

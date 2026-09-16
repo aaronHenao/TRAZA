@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../models/estado_cronometro.dart';
 import '../../services/cronometro_provider.dart';
 import '../../services/recorrido_provider.dart';
 import '../../theme/traza_theme.dart';
@@ -84,8 +85,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
 
     // Los puntos se acumularon en local durante la actividad; ahora se
     // envían todos de una vez (SCRUM-110).
-    final sincronizado =
-        await ref.read(recorridoProvider.notifier).sincronizar();
+    final sincronizado = await ref
+        .read(recorridoProvider.notifier)
+        .sincronizar();
     if (!mounted) return;
 
     final onFinalizar = widget.onFinalizar;
@@ -128,7 +130,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
       onCancelar();
       return;
     }
-    await Navigator.of(context).maybePop();
+    final navegador = Navigator.of(context);
+    if (navegador.canPop()) navegador.pop();
   }
 
   void _mostrarAviso(String mensaje) {
@@ -160,27 +163,40 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
       cronometroProvider.select((estado) => estado.estaPausado),
     );
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        body: Container(
-          decoration: const BoxDecoration(gradient: trazaTrackingGradient),
-          child: SafeArea(
-            child: Column(
-              children: [
-                _BarraSuperior(
-                  titulo: widget.nombreActividad,
-                  onCerrar: _cancelar,
-                ),
-                MapaEntrenamiento(contenido: widget.mapa),
-                const CronometroEntrenamiento(),
-                const EstadisticasEntrenamiento(),
-                ControlesEntrenamiento(
-                  pausado: pausado,
-                  onPausar: _alternarPausa,
-                  onFinalizar: _finalizar,
-                ),
-              ],
+    // Con la actividad en curso no se sale por accidente: el recorrido vive
+    // en memoria hasta que se finaliza, así que un atrás sin más lo perdería
+    // y dejaría el entrenamiento abierto. Preguntar es además la forma de
+    // recordarle al usuario que sigue entrenando (SCRUM-98).
+    final enCurso =
+        ref.watch(cronometroProvider).marcha != MarchaCronometro.detenido;
+
+    return PopScope(
+      canPop: !enCurso,
+      onPopInvokedWithResult: (salio, _) {
+        if (!salio) _cancelar();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          body: Container(
+            decoration: const BoxDecoration(gradient: trazaTrackingGradient),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _BarraSuperior(
+                    titulo: widget.nombreActividad,
+                    onCerrar: _cancelar,
+                  ),
+                  MapaEntrenamiento(contenido: widget.mapa),
+                  const CronometroEntrenamiento(),
+                  const EstadisticasEntrenamiento(),
+                  ControlesEntrenamiento(
+                    pausado: pausado,
+                    onPausar: _alternarPausa,
+                    onFinalizar: _finalizar,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -213,7 +229,11 @@ class _BarraSuperior extends StatelessWidget {
                 child: const SizedBox(
                   width: 36,
                   height: 36,
-                  child: Icon(Icons.close_rounded, size: 20, color: Colors.white),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),

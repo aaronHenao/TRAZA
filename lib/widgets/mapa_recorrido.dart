@@ -70,15 +70,18 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.pinchZoom | InteractiveFlag.doubleTapZoom,
         ),
+        // Más allá el servicio no tiene mapa que dar.
+        maxZoom: zoomMaximoTiles,
         onMapReady: () => _mapaListo = true,
       ),
       children: [
         ColorFiltered(
           colorFilter: const ColorFilter.matrix(_matrizOscura),
           child: TileLayer(
-            urlTemplate: urlTilesOsm,
+            urlTemplate: urlTiles,
             userAgentPackageName: paqueteUserAgent,
             tileProvider: tiles,
+            maxNativeZoom: zoomMaximoTiles.toInt(),
           ),
         ),
         MarkerLayer(
@@ -97,9 +100,9 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
   }
 }
 
-/// Convierte los tiles claros de OSM al fondo oscuro del prototipo:
-/// pasa a escala de grises, invierte y baja un poco el brillo. Las
-/// calles (blancas en OSM) quedan gris oscuro y el trazo lima resalta.
+/// Oscurece los tiles claros de Esri para dejarlos como el fondo del
+/// prototipo: pasa a escala de grises, invierte y baja un poco el brillo. Las
+/// calles (blancas) quedan gris oscuro y el marcador lima resalta.
 const List<double> _matrizOscura = [
   -0.85 * 0.2126, -0.85 * 0.7152, -0.85 * 0.0722, 0, 232, //
   -0.85 * 0.2126, -0.85 * 0.7152, -0.85 * 0.0722, 0, 228, //
@@ -133,7 +136,7 @@ class _MarcadorPosicion extends StatelessWidget {
   }
 }
 
-/// Atribución que exige OpenStreetMap, discreta y sobre fondo oscuro.
+/// Atribución que exigen OpenStreetMap y CARTO, discreta sobre el mapa.
 class _Atribucion extends StatelessWidget {
   const _Atribucion();
 
@@ -149,7 +152,7 @@ class _Atribucion extends StatelessWidget {
           borderRadius: BorderRadius.circular(100),
         ),
         child: Text(
-          atribucionOsm,
+          atribucionMapa,
           style: GoogleFonts.inter(
             color: Colors.white.withValues(alpha: 0.6),
             fontSize: 9,

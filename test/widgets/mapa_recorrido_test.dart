@@ -109,21 +109,21 @@ void main() {
     expect(controlador(tester).camera.zoom, 15);
   });
 
-  testWidgets('usa los tiles de OpenStreetMap identificando la app',
+  testWidgets('usa los tiles de CARTO identificando la app',
       (tester) async {
     await montar(tester);
     await emitir(tester, puntoDePrueba());
 
     final capa = tester.widget<TileLayer>(find.byType(TileLayer));
-    expect(capa.urlTemplate, urlTilesOsm);
+    expect(capa.urlTemplate, urlTiles);
     expect(capa.tileProvider.headers['User-Agent'], contains(paqueteUserAgent));
     expect(tiles.tilesPedidos, greaterThan(0));
   });
 
-  testWidgets('muestra la atribución de OpenStreetMap', (tester) async {
+  testWidgets('muestra la atribución de OpenStreetMap y CARTO', (tester) async {
     await montar(tester);
     await emitir(tester, puntoDePrueba());
 
-    expect(find.text(atribucionOsm), findsOneWidget);
+    expect(find.text(atribucionMapa), findsOneWidget);
   });
 }

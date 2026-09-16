@@ -5,15 +5,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/punto_gps.dart';
 import '../models/recorrido.dart';
 import 'cronometro_provider.dart';
+import 'entrenamiento_actual_provider.dart';
 import 'puntos_gps_service.dart';
 import 'ubicacion_provider.dart';
 
-/// `id` del entrenamiento en curso, dueño de los puntos que se registran.
-///
-/// Crear el entrenamiento en Supabase es de SCRUM-45; esta HU lo asume
-/// existente. Mientras nadie lo provea, vale `null` y el recorrido se
-/// queda en local sin sincronizar.
-final entrenamientoActualProvider = Provider<String?>((ref) => null);
+// El `id` del entrenamiento dueño de los puntos lo fija el flujo de inicio
+// (SCRUM-99). Se re-exporta para que quien registre puntos no tenga que
+// saber de dónde sale.
+export 'entrenamiento_actual_provider.dart' show entrenamientoActualProvider;
 
 /// Persistencia real. Las pruebas la sobrescriben.
 final repositorioPuntosGpsProvider = Provider<RepositorioPuntosGps>(

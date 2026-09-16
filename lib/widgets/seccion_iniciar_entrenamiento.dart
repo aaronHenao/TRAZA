@@ -9,6 +9,7 @@ class SeccionIniciarEntrenamiento extends StatelessWidget {
     required this.actividad,
     required this.onIniciar,
     this.aviso,
+    this.iniciando = false,
     super.key,
   });
 
@@ -16,9 +17,13 @@ class SeccionIniciarEntrenamiento extends StatelessWidget {
   /// ninguna.
   final String? actividad;
 
-  /// Arranca el entrenamiento; se conecta en SCRUM-96. Mientras sea null, o
-  /// mientras no haya actividad, el botón queda deshabilitado.
+  /// Arranca el entrenamiento (SCRUM-96). Mientras sea null, o mientras no
+  /// haya actividad, el botón queda deshabilitado.
   final VoidCallback? onIniciar;
+
+  /// El entrenamiento se está creando: el botón espera en vez de responder a
+  /// otro toque (SCRUM-96, un solo toque).
+  final bool iniciando;
 
   /// Explica debajo del botón por qué todavía no se puede iniciar, cuando es
   /// algo que el usuario puede resolver (por ejemplo, iniciar sesión).
@@ -76,8 +81,17 @@ class SeccionIniciarEntrenamiento extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         FilledButton(
-          onPressed: actividad == null ? null : onIniciar,
-          child: const Text('Iniciar actividad'),
+          onPressed: actividad == null || iniciando ? null : onIniciar,
+          child: iniciando
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Iniciar actividad'),
         ),
         if (aviso != null) ...[
           const SizedBox(height: 10),

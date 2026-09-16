@@ -71,6 +71,10 @@ class ConfiguracionRastreo {
 /// permisos). La app usa [UbicacionGeolocator]; las pruebas inyectan
 /// una fuente falsa que emite las posiciones que la prueba quiera.
 abstract class FuenteUbicacion {
+  /// `false` si la ubicación del teléfono está apagada. Es distinto del
+  /// permiso: se puede tener concedido y aun así no haber GPS que escuchar.
+  Future<bool> servicioActivo();
+
   /// Stream de posiciones mientras haya alguien suscrito.
   Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion);
 }
@@ -82,6 +86,9 @@ const String textoNotificacionRastreo = 'Registrando tu recorrido';
 /// Implementación con `geolocator` (SCRUM-108).
 class UbicacionGeolocator implements FuenteUbicacion {
   const UbicacionGeolocator();
+
+  @override
+  Future<bool> servicioActivo() => Geolocator.isLocationServiceEnabled();
 
   @override
   Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion) async* {

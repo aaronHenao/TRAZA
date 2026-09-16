@@ -53,11 +53,25 @@ void main() {
       );
     });
 
-    testWidgets('"Iniciar actividad" sigue deshabilitado hasta que se conecte '
-        'en SCRUM-96', (tester) async {
+    testWidgets('"Iniciar actividad" queda listo para arrancar (SCRUM-96)', (
+      tester,
+    ) async {
       await _montar(tester);
 
+      expect(_botonIniciar(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('sin configuración de inicio el botón no arranca nada', (
+      tester,
+    ) async {
+      // Sin sesión el catálogo es el local, cuyos tipos no traen id.
+      await _montar(
+        tester,
+        repositorio: _RepositorioFalso(TipoActividad.catalogoLocal),
+      );
+
       expect(_botonIniciar(tester).onPressed, isNull);
+      expect(find.text(_avisoSinSesion), findsOneWidget);
     });
   });
 

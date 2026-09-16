@@ -16,7 +16,13 @@ class FuenteUbicacionFalsa implements FuenteUbicacion {
   int suscripcionesAbiertas = 0;
   ConfiguracionRastreo? ultimaConfiguracion;
 
+  /// Si la ubicación del teléfono está encendida.
+  bool servicio = true;
+
   late final StreamController<PuntoGps> _controlador;
+
+  @override
+  Future<bool> servicioActivo() async => servicio;
 
   @override
   Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion) {

@@ -257,6 +257,35 @@ void main() {
     expect(gps.suscripcionesAbiertas, 0);
   });
 
+  testWidgets('el boton atras del sistema no abandona la actividad en curso',
+      (tester) async {
+    await entrarAlEntrenamiento(tester);
+    await avanzar(tester, latitud: 6.2311, longitud: -75.6105);
+    await avanzar(tester, latitud: 6.2314, longitud: -75.6108);
+    expect(recorrido().puntos.length, 2);
+
+    // Atrás, como si el usuario lo pulsara sin pensar.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    // No se sale: se pregunta, que es la forma de recordarle que sigue
+    // entrenando (SCRUM-98).
+    expect(find.text('¿Descartar este entrenamiento?'), findsOneWidget);
+
+    await tester.tap(find.text('Seguir entrenando'));
+    await tester.pumpAndSettle();
+
+    // El recorrido sigue completo: sin esto se habria perdido en silencio.
+    expect(find.byType(TrackingScreen), findsOneWidget);
+    expect(recorrido().puntos.length, 2);
+    expect(container.read(cronometroProvider).estaEnCurso, isTrue);
+
+    await avanzar(tester, latitud: 6.2317, longitud: -75.6112);
+    expect(recorrido().puntos.length, 3);
+
+    detener();
+  });
+
   testWidgets('"seguir entrenando" en el diálogo no interrumpe nada',
       (tester) async {
     await entrarAlEntrenamiento(tester);

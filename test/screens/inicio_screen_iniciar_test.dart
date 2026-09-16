@@ -156,6 +156,37 @@ void main() {
     });
   });
 
+  group('la actividad en curso se nota en la pantalla (SCRUM-98)', () {
+    setUp(() => ubicacionEsta(EstadoPermiso.concedido));
+
+    testWidgets('al iniciar se pasa a la pantalla del entrenamiento', (
+      tester,
+    ) async {
+      await abrirInicio(tester);
+      expect(estaEnElEntrenamiento(tester), isFalse);
+
+      await tocarIniciar(tester);
+
+      expect(estaEnElEntrenamiento(tester), isTrue);
+    });
+
+    testWidgets('mientras dura, el inicio avisa y no deja cambiar de '
+        'actividad', (tester) async {
+      await abrirInicio(tester);
+      await tocarIniciar(tester);
+
+      // Se vuelve al inicio sin terminar la actividad, como haria el sistema
+      // al restaurar la app.
+      container.read(actividadSeleccionadaProvider.notifier)
+          .seleccionar(const TipoActividad(id: 'id-trote', nombre: 'Trote'));
+
+      // La actividad elegida no cambia: hay un entrenamiento en curso
+      // (SCRUM-94).
+      expect(container.read(actividadSeleccionadaProvider)?.nombre, 'Correr');
+      expect(container.read(actividadIniciadaProvider), isTrue);
+    });
+  });
+
   group('cuando falta el permiso de ubicación (SCRUM-97)', () {
     testWidgets('lo pide al tocar iniciar y, si lo conceden, arranca igual', (
       tester,

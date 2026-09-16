@@ -9,12 +9,16 @@ import 'package:traza/services/objetivos_service.dart'
     show SesionRequeridaException;
 import 'package:traza/services/tipos_actividad_service.dart';
 import 'package:traza/models/tipo_actividad.dart';
+import 'package:traza/services/ubicacion_provider.dart';
 
 /// Pruebas del inicio del entrenamiento (SCRUM-99): crear la fila de
 /// `entrenamientos` con la actividad elegida y dejar su id como el
 /// entrenamiento en curso, para que los puntos GPS tengan dueño.
+import '../utiles/fuente_ubicacion_falsa.dart';
+
 void main() {
   late _EntrenamientosFalso repositorio;
+  late FuenteUbicacionFalsa gps;
   late ProviderContainer container;
 
   /// Container con el catálogo de actividades cargado, como en la pantalla de
@@ -28,6 +32,7 @@ void main() {
     final c = ProviderContainer(
       overrides: [
         entrenamientoRepositoryProvider.overrideWithValue(repositorio),
+        fuenteUbicacionProvider.overrideWithValue(gps),
         tiposActividadRepositoryProvider.overrideWithValue(
           _TiposActividadFalso(catalogo),
         ),
@@ -49,6 +54,8 @@ void main() {
 
   setUp(() {
     repositorio = _EntrenamientosFalso();
+    gps = FuenteUbicacionFalsa();
+    addTearDown(() => gps.cerrar());
   });
 
   group('crear el entrenamiento', () {
@@ -131,6 +138,31 @@ void main() {
 
       expect(error, InicioEntrenamiento.sinSesion);
       expect(enCurso(), isNull);
+    });
+
+    test('con la ubicación del teléfono apagada no crea nada', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      gps.servicio = false;
+
+      final error = await iniciar();
+
+      expect(error, InicioEntrenamiento.ubicacionApagada);
+      expect(repositorio.creados, isEmpty);
+      expect(enCurso(), isNull);
+    });
+
+    test('al encender la ubicación se puede iniciar', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      gps.servicio = false;
+      expect(await iniciar(), InicioEntrenamiento.ubicacionApagada);
+
+      gps.servicio = true;
+      final error = await iniciar();
+
+      expect(error, isNull);
+      expect(repositorio.creados, ['id-correr']);
     });
 
     test('si la base falla avisa que se intente de nuevo', () async {

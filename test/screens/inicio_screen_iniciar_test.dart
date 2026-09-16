@@ -13,7 +13,11 @@ import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
+import 'package:traza/services/entrenamiento_provider.dart';
+import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/requiere_permiso_ubicacion.dart';
+
+import '../utiles/fuente_ubicacion_falsa.dart';
 
 class _MockPermisosService extends Mock implements PermisosService {}
 
@@ -23,11 +27,14 @@ class _MockPermisosService extends Mock implements PermisosService {}
 void main() {
   late _MockPermisosService permisos;
   late _EntrenamientosFalso entrenamientos;
+  late FuenteUbicacionFalsa gps;
   late ProviderContainer container;
 
   setUp(() {
     permisos = _MockPermisosService();
     entrenamientos = _EntrenamientosFalso();
+    gps = FuenteUbicacionFalsa();
+    addTearDown(() => gps.cerrar());
     // La salud no bloquea el inicio: se deja siempre sin conceder.
     when(
       () => permisos.estadoSalud(),
@@ -57,6 +64,7 @@ void main() {
           _PermisosUsuarioFalso(),
         ),
         entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
+        fuenteUbicacionProvider.overrideWithValue(gps),
         tiposActividadRepositoryProvider.overrideWithValue(
           const _CatalogoFalso(),
         ),
@@ -264,6 +272,19 @@ void main() {
         findsOneWidget,
       );
       expect(container.read(actividadIniciadaProvider), isFalse);
+    });
+
+    testWidgets('con la ubicación del teléfono apagada avisa y no crea nada', (
+      tester,
+    ) async {
+      gps.servicio = false;
+      await abrirInicio(tester);
+
+      await tocarIniciar(tester);
+
+      expect(find.text(InicioEntrenamiento.ubicacionApagada), findsOneWidget);
+      expect(entrenamientos.creados, isEmpty);
+      expect(estaEnElEntrenamiento(tester), isFalse);
     });
 
     testWidgets('tras el aviso se puede reintentar', (tester) async {

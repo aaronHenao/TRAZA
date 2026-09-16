@@ -7,6 +7,7 @@ import 'actividad_provider.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'entrenamiento_service.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
+import 'ubicacion_provider.dart';
 import 'reloj_provider.dart';
 
 /// Datos de un entrenamiento finalizado, leídos de Supabase por su id
@@ -40,6 +41,8 @@ class InicioEntrenamiento {
   static const sinSesion = 'Inicia sesión para empezar a entrenar.';
   static const noSePudo =
       'No se pudo iniciar el entrenamiento. Inténtalo de nuevo.';
+  static const ubicacionApagada =
+      'Activa la ubicación del teléfono para empezar a entrenar.';
 
   /// Devuelve null si el entrenamiento quedó creado y la actividad puede
   /// arrancar, o el mensaje para el usuario si no se pudo (SCRUM-100). En ese
@@ -51,6 +54,13 @@ class InicioEntrenamiento {
     if (configuracion == null) return sinSesion;
 
     try {
+      // Con el permiso concedido pero la ubicación del teléfono apagada no
+      // llegaría ni una lectura: el entrenamiento se quedaría vacío y
+      // abierto, buscando una señal que nunca va a existir.
+      if (!await _ref.read(fuenteUbicacionProvider).servicioActivo()) {
+        return ubicacionApagada;
+      }
+
       final entrenamientoId = await _ref
           .read(entrenamientoRepositoryProvider)
           .crear(tipoActividadId: configuracion.tipoActividadId);

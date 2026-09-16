@@ -203,6 +203,12 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   }) => throw UnimplementedError('El inicio no cierra entrenamientos');
 
   @override
+  Future<void> cancelar({
+    required String entrenamientoId,
+    required DateTime fechaFin,
+  }) => throw UnimplementedError('El inicio no descarta entrenamientos');
+
+  @override
   Future<ResumenEntrenamiento?> cargarFinalizado(String entrenamientoId) =>
       throw UnimplementedError('El inicio no lee entrenamientos');
 }

@@ -45,6 +45,16 @@ abstract interface class EntrenamientoRepository {
     double? distanciaMetros,
   });
 
+  /// Descarta el entrenamiento [entrenamientoId]: lo deja `cancelado` para
+  /// que no quede abierto en la base.
+  ///
+  /// El entrenamiento descartado no se guarda, así que no lleva duración ni
+  /// distancia; [fechaFin] solo deja constancia de cuándo se cerró la fila.
+  Future<void> cancelar({
+    required String entrenamientoId,
+    required DateTime fechaFin,
+  });
+
   /// Datos del entrenamiento [entrenamientoId] para el resumen (SCRUM-118),
   /// con su tipo de actividad y sus puntos GPS en orden.
   ///
@@ -127,6 +137,28 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
           ),
         )
         .eq('id', entrenamientoId)
+        .select('id');
+
+    if (filas.isEmpty) {
+      throw EntrenamientoNoEncontradoException(entrenamientoId);
+    }
+  }
+
+  @override
+  Future<void> cancelar({
+    required String entrenamientoId,
+    required DateTime fechaFin,
+  }) async {
+    final filas = await _cliente
+        .from(_tabla)
+        .update({
+          'fecha_fin': fechaFin.toUtc().toIso8601String(),
+          'estado': 'cancelado',
+        })
+        .eq('id', entrenamientoId)
+        // Solo el que sigue en curso: si ya se cerró, no hay nada que
+        // descartar.
+        .eq('estado', 'en_curso')
         .select('id');
 
     if (filas.isEmpty) {

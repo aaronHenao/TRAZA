@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -35,7 +37,22 @@ class TrackingConActividadElegida extends ConsumerWidget {
       nombreActividad: nombreActividad,
       onFinalizar: (duracion) =>
           _finalizar(context, ref, duracion, nombreActividad),
+      onCancelar: () => _descartar(context, ref),
     );
+  }
+
+  /// El usuario descartó la actividad: se deja el entrenamiento `cancelado`
+  /// y se suelta lo que fijó el inicio, para que pueda elegir otra y empezar
+  /// de nuevo (SCRUM-96).
+  void _descartar(BuildContext context, WidgetRef ref) {
+    // Sin await: volver al inicio no espera a la red.
+    unawaited(ref.read(descarteEntrenamientoProvider).descartar());
+    // Vuelve al inicio, de donde llegó con `push`.
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/inicio');
+    }
   }
 
   /// La pantalla de Aaron ya detuvo el cronómetro e intentó guardar los

@@ -65,6 +65,44 @@ class InicioEntrenamiento {
   }
 }
 
+/// Descarte del entrenamiento en curso (SCRUM-96).
+final descarteEntrenamientoProvider = Provider<DescarteEntrenamiento>(
+  DescarteEntrenamiento.new,
+);
+
+/// Descarta el entrenamiento cuando el usuario elige no guardarlo.
+///
+/// Deja la fila `cancelado` y libera la actividad, para que el usuario pueda
+/// elegir otra y empezar de nuevo.
+class DescarteEntrenamiento {
+  const DescarteEntrenamiento(this._ref);
+
+  final Ref _ref;
+
+  Future<void> descartar() async {
+    final entrenamientoId = _ref.read(entrenamientoActualProvider);
+
+    // Se suelta primero lo de la app: el usuario ya decidió descartar y la
+    // pantalla no debe quedarse esperando a la red.
+    _ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
+    _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
+
+    if (entrenamientoId == null) return;
+    try {
+      await _ref
+          .read(entrenamientoRepositoryProvider)
+          .cancelar(
+            entrenamientoId: entrenamientoId,
+            fechaFin: _ref.read(relojProvider)(),
+          );
+    } catch (error) {
+      // No se le avisa: el entrenamiento se descartó igual y no hay nada que
+      // el usuario pueda hacer. La fila queda `en_curso` en la base.
+      debugPrint('No se pudo marcar el entrenamiento como cancelado: $error');
+    }
+  }
+}
+
 /// Cierre del entrenamiento en curso (SCRUM-121).
 final cierreEntrenamientoProvider = Provider<CierreEntrenamiento>(
   CierreEntrenamiento.new,
@@ -116,6 +154,9 @@ class CierreEntrenamiento {
     }
 
     _ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
+    // Ya no hay entrenamiento en curso: el siguiente empieza con el suyo
+    // (SCRUM-96).
+    _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
     return null;
   }
 }

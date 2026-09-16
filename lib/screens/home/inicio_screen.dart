@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
+import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../services/actividad_provider.dart';
+import '../../services/entrenamiento_provider.dart';
 import '../../widgets/chips_tipo_actividad.dart';
 import '../../widgets/seccion_iniciar_entrenamiento.dart';
 
@@ -14,15 +16,48 @@ import '../../widgets/seccion_iniciar_entrenamiento.dart';
 /// actividad y arranca el entrenamiento.
 ///
 /// La estructura es de SCRUM-91, los chips con la actividad elegida de
-/// SCRUM-92, la configuración de inicio de SCRUM-93 y el bloqueo de la
-/// actividad durante el entrenamiento de SCRUM-94. Falta a propósito la
-/// acción de "Iniciar actividad", que se conecta en SCRUM-96 y hoy se pasa en
-/// null.
-class InicioScreen extends ConsumerWidget {
+/// SCRUM-92, la configuración de inicio de SCRUM-93, el bloqueo de la
+/// actividad durante el entrenamiento de SCRUM-94 y el inicio con un solo
+/// toque de SCRUM-96.
+class InicioScreen extends ConsumerStatefulWidget {
   const InicioScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InicioScreen> createState() => _InicioScreenState();
+}
+
+class _InicioScreenState extends ConsumerState<InicioScreen> {
+  /// El entrenamiento se está creando. Es estado de la pantalla, no del
+  /// dominio: solo sirve para que el botón espere y un segundo toque no cree
+  /// otro entrenamiento (SCRUM-96).
+  bool _iniciando = false;
+
+  /// Un toque y la actividad arranca: se crea el entrenamiento (SCRUM-99) y
+  /// se abre la pantalla del entrenamiento en curso, sin pasos intermedios.
+  Future<void> _iniciar() async {
+    if (_iniciando) return;
+    setState(() => _iniciando = true);
+
+    final error = await ref.read(inicioEntrenamientoProvider).iniciar();
+    if (!mounted) return;
+    setState(() => _iniciando = false);
+
+    // Sin entrenamiento creado la actividad no arranca: se explica por qué y
+    // el botón queda libre para volver a intentarlo (SCRUM-100).
+    if (error != null) {
+      mostrarToast(context, error);
+      return;
+    }
+
+    // Fija la actividad: mientras el entrenamiento dure no se puede cambiar
+    // (SCRUM-94).
+    ref.read(actividadIniciadaProvider.notifier).marcarIniciada();
+    // `push` y no `go`: al descartar la actividad se vuelve a esta pantalla.
+    context.push('/tracking');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final actividad = ref.watch(actividadSeleccionadaProvider);
     final configuracion = ref.watch(configuracionInicioProvider);
     final iniciada = ref.watch(actividadIniciadaProvider);
@@ -59,8 +94,11 @@ class InicioScreen extends ConsumerWidget {
               Expanded(
                 child: SeccionIniciarEntrenamiento(
                   actividad: actividad?.nombre,
-                  onIniciar: null,
+                  // Sin configuración no hay entrenamiento posible: el aviso
+                  // ya explica que hay que iniciar sesión.
+                  onIniciar: configuracion == null ? null : _iniciar,
                   aviso: aviso,
+                  iniciando: _iniciando,
                 ),
               ),
             ],

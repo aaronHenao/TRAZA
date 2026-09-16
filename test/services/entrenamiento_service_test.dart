@@ -79,6 +79,43 @@ void main() {
     );
   });
 
+  test('descarta el entrenamiento dejandolo cancelado', () async {
+    final supabase = _SupabaseFalso(
+      filasActualizadas: [
+        {'id': 'e-123'},
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    await supabase.repositorio.cancelar(
+      entrenamientoId: 'e-123',
+      fechaFin: DateTime.utc(2026, 1, 1, 13, 5),
+    );
+
+    final peticion = supabase.peticiones.single;
+    expect(peticion.method, 'PATCH');
+    expect(peticion.url.queryParameters['id'], 'eq.e-123');
+    // Solo toca el que sigue en curso: uno ya finalizado no se descarta.
+    expect(peticion.url.queryParameters['estado'], 'eq.en_curso');
+    expect(jsonDecode(peticion.body), {
+      'fecha_fin': '2026-01-01T13:05:00.000Z',
+      'estado': 'cancelado',
+    });
+  });
+
+  test('si el entrenamiento a descartar ya no está en curso, avisa', () async {
+    final supabase = _SupabaseFalso(filasActualizadas: []);
+    addTearDown(supabase.cerrar);
+
+    await expectLater(
+      supabase.repositorio.cancelar(
+        entrenamientoId: 'e-123',
+        fechaFin: DateTime.utc(2026, 1, 1, 13, 5),
+      ),
+      throwsA(isA<EntrenamientoNoEncontradoException>()),
+    );
+  });
+
   test('cierra el entrenamiento con fecha_fin, duración, distancia y estado '
       'finalizado', () async {
     final supabase = _SupabaseFalso(

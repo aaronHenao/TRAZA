@@ -199,7 +199,12 @@ void main() {
 
         expect(find.byType(ResumenScreen), findsNothing);
         expect(entorno.entrenamientos.cierres, isEmpty);
-        expect(entorno.ubicacion, '/tracking');
+        // Descartar devuelve al inicio y suelta la actividad, para poder
+        // elegir otra y empezar de nuevo (SCRUM-96).
+        expect(entorno.ubicacion, '/inicio');
+        expect(entorno.container.read(actividadIniciadaProvider), isFalse);
+        // La fila no se queda abierta en la base (SCRUM-96).
+        expect(entorno.entrenamientos.descartes, ['e-123']);
       },
     );
   });
@@ -233,7 +238,19 @@ typedef _Cierre = ({
 class _EntrenamientosFalso implements EntrenamientoRepository {
   final cierres = <_Cierre>[];
 
+  /// `id` de cada entrenamiento descartado, en orden.
+  final descartes = <String>[];
+
   bool fallar = false;
+
+  @override
+  Future<void> cancelar({
+    required String entrenamientoId,
+    required DateTime fechaFin,
+  }) async {
+    if (fallar) throw StateError('Supabase no disponible');
+    descartes.add(entrenamientoId);
+  }
 
   @override
   Future<String> crear({required String tipoActividadId}) =>
@@ -343,6 +360,11 @@ Future<_Entorno> _montar(
       GoRoute(
         path: '/tracking',
         builder: (_, _) => const TrackingConActividadElegida(),
+      ),
+      // Al descartar la actividad se vuelve al inicio (SCRUM-96).
+      GoRoute(
+        path: '/inicio',
+        builder: (_, _) => const Scaffold(body: Text('Pantalla Inicio')),
       ),
       // Las mismas rutas del resumen que en main.dart.
       GoRoute(

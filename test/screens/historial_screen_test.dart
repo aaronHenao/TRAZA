@@ -67,6 +67,11 @@ void main() {
           builder: (context, state) => const HistorialScreen(),
         ),
         GoRoute(
+          path: '/actividad',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Pantalla Actividad')),
+        ),
+        GoRoute(
           path: '/resumen/:entrenamientoId',
           builder: (context, state) => Scaffold(
             body: Text('Resumen ${state.pathParameters['entrenamientoId']}'),
@@ -113,7 +118,9 @@ void main() {
       await tester.tap(find.text('Iniciar mi primer entrenamiento'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pantalla Inicio'), findsOneWidget);
+      // Lleva a elegir la actividad, no a la portada: desde el historial
+      // vacío lo que falta es empezar a entrenar.
+      expect(find.text('Pantalla Actividad'), findsOneWidget);
     });
   });
 

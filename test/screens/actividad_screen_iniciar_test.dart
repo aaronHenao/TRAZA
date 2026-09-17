@@ -6,7 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
-import 'package:traza/screens/home/inicio_screen.dart';
+import 'package:traza/screens/home/actividad_screen.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
@@ -73,9 +73,12 @@ void main() {
     addTearDown(container.dispose);
 
     final router = GoRouter(
-      initialLocation: '/inicio',
+      initialLocation: '/actividad',
       routes: [
-        GoRoute(path: '/inicio', builder: (_, _) => const InicioScreen()),
+        GoRoute(
+          path: '/actividad',
+          builder: (_, _) => const ActividadScreen(),
+        ),
         GoRoute(
           path: '/tracking',
           builder: (_, _) =>
@@ -84,6 +87,10 @@ void main() {
         GoRoute(
           path: '/permisos',
           builder: (_, _) => const Scaffold(body: Text('Pantalla Permisos')),
+        ),
+        GoRoute(
+          path: '/inicio',
+          builder: (_, _) => const Scaffold(body: Text('Portada')),
         ),
       ],
     );
@@ -105,6 +112,20 @@ void main() {
 
   bool estaEnElEntrenamiento(WidgetTester tester) =>
       find.text('Entrenamiento en curso').evaluate().isNotEmpty;
+
+  group('salida de la pantalla', () {
+    testWidgets('la flecha vuelve a la portada sin arrancar nada', (
+      tester,
+    ) async {
+      await abrirInicio(tester);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Portada'), findsOneWidget);
+      expect(entrenamientos.creados, isEmpty);
+    });
+  });
 
   group('con el permiso de ubicación concedido', () {
     setUp(() => ubicacionEsta(EstadoPermiso.concedido));

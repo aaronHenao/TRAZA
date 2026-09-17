@@ -5,7 +5,7 @@ import 'package:traza/services/tipos_actividad_service.dart';
 import 'package:traza/models/configuracion_inicio.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
-import 'package:traza/screens/home/inicio_screen.dart';
+import 'package:traza/screens/home/actividad_screen.dart';
 import 'package:traza/widgets/chips_tipo_actividad.dart';
 import 'package:traza/widgets/seccion_iniciar_entrenamiento.dart';
 
@@ -441,7 +441,7 @@ class _RepositorioFalso implements TiposActividadRepository {
 Future<void> _montar(
   WidgetTester tester, {
   TiposActividadRepository? repositorio,
-  Widget pantalla = const InicioScreen(),
+  Widget pantalla = const ActividadScreen(),
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -472,7 +472,7 @@ Finder _enLaSeccion(String texto) => find.descendant(
 );
 
 ProviderContainer _contenedor(WidgetTester tester) =>
-    ProviderScope.containerOf(tester.element(find.byType(InicioScreen)));
+    ProviderScope.containerOf(tester.element(find.byType(ActividadScreen)));
 
 /// La actividad a realizar, leída del [ProviderScope] que monta la pantalla.
 TipoActividad? _seleccionada(WidgetTester tester) =>

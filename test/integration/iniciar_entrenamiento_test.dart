@@ -14,7 +14,7 @@ import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
-import 'package:traza/screens/home/inicio_screen.dart';
+import 'package:traza/screens/home/actividad_screen.dart';
 import 'package:traza/screens/tracking/tracking_con_actividad_elegida.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/actividad_provider.dart';
@@ -92,9 +92,12 @@ void main() {
     addTearDown(container.dispose);
 
     router = GoRouter(
-      initialLocation: '/inicio',
+      initialLocation: '/actividad',
       routes: [
-        GoRoute(path: '/inicio', builder: (_, _) => const InicioScreen()),
+        GoRoute(
+          path: '/actividad',
+          builder: (_, _) => const ActividadScreen(),
+        ),
         GoRoute(
           path: '/permisos',
           builder: (_, _) => const _Pantalla('Permisos'),
@@ -215,7 +218,7 @@ void main() {
     await tester.tap(find.text('Descartar'));
     await tester.pumpAndSettle();
 
-    expect(ubicacion(), '/inicio');
+    expect(ubicacion(), '/actividad');
     expect(entrenamientos.cancelados, ['entrenamiento-1']);
     expect(puntosGps.lotes, isEmpty, reason: 'un descarte no guarda nada');
     // Se puede elegir otra actividad y volver a empezar (SCRUM-94).
@@ -237,7 +240,7 @@ void main() {
     await tocarIniciar(tester);
 
     expect(entrenamientos.creados, isEmpty);
-    expect(ubicacion(), '/inicio');
+    expect(ubicacion(), '/actividad');
     expect(find.text(RequierePermisoUbicacion.mensaje), findsOneWidget);
     await tester.pumpAndSettle();
   });
@@ -249,7 +252,7 @@ void main() {
     await tocarIniciar(tester);
 
     expect(entrenamientos.creados, isEmpty);
-    expect(ubicacion(), '/inicio');
+    expect(ubicacion(), '/actividad');
     expect(find.text(InicioEntrenamiento.ubicacionApagada), findsOneWidget);
     await tester.pumpAndSettle();
   });
@@ -263,7 +266,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Del resumen se vuelve al inicio para empezar otro.
-    router.go('/inicio');
+    router.go('/actividad');
     await tester.pumpAndSettle();
     await tocarIniciar(tester);
     await avanzar(tester, latitud: 6.2400, longitud: -75.6200);

@@ -381,6 +381,31 @@ void main() {
     });
   });
 
+  group('perfil fuera del onboarding', () {
+    testWidgets('el botón guarda y vuelve a la portada, sin seguir a '
+        'permisos', (tester) async {
+      final repositorio = _RepositorioFalso();
+      await _montarPerfil(
+        tester,
+        repositorio: repositorio,
+        enOnboarding: false,
+      );
+
+      expect(find.text('Guardar cambios'), findsOneWidget);
+      expect(find.text('Guardar y continuar'), findsNothing);
+
+      await _marcarDistancia(tester);
+      await tester.enterText(_campoDe(TipoObjetivo.distancia), '8');
+      await tester.pump();
+      await tester.tap(find.text('Guardar cambios'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.guardado, {TipoObjetivo.distancia: 8.0});
+      expect(find.text('Portada'), findsOneWidget);
+      expect(find.byType(PermisosScreen), findsNothing);
+    });
+  });
+
   group('edición de objetivos ya configurados', () {
     testWidgets('precarga los objetivos guardados con sus valores', (
       tester,
@@ -574,6 +599,7 @@ FilledButton _botonGuardar(WidgetTester tester) =>
 Future<void> _montarPerfil(
   WidgetTester tester, {
   ObjetivosRepository? repositorio,
+  bool enOnboarding = true,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -583,8 +609,15 @@ Future<void> _montarPerfil(
   final router = GoRouter(
     initialLocation: '/perfil',
     routes: [
-      GoRoute(path: '/perfil', builder: (_, _) => const PerfilScreen()),
+      GoRoute(
+        path: '/perfil',
+        builder: (_, _) => PerfilScreen(enOnboarding: enOnboarding),
+      ),
       GoRoute(path: '/permisos', builder: (_, _) => const PermisosScreen()),
+      GoRoute(
+        path: '/inicio',
+        builder: (_, _) => const Scaffold(body: Text('Portada')),
+      ),
     ],
   );
 

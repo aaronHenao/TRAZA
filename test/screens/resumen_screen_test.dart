@@ -8,7 +8,9 @@ import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/widgets/trazado_recorrido.dart';
 
+import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/reloj_falso.dart';
 
 /// Pruebas de la pantalla de resumen: su diseño (SCRUM-117), que muestre solo
@@ -65,10 +67,38 @@ void main() {
       );
     });
 
-    testWidgets('tiene el recuadro del recorrido', (tester) async {
+    testWidgets('sin puntos GPS el recuadro dice que no hay recorrido', (
+      tester,
+    ) async {
       await _montar(tester, resumen: resumen);
 
-      expect(find.text('Recorrido no disponible'), findsOneWidget);
+      expect(find.text('Sin recorrido registrado'), findsOneWidget);
+      expect(find.byType(TrazadoRecorrido), findsNothing);
+    });
+
+    testWidgets('con puntos GPS dibuja el trazado del recorrido '
+        '(SCRUM-119)', (tester) async {
+      await _montar(
+        tester,
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: 'e-123',
+          nombreActividad: 'Trote',
+          fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+          duracion: const Duration(minutes: 32, seconds: 17),
+          distanciaMetros: 5230.5,
+          puntos: [
+            puntoDePrueba(latitud: 6.2311, longitud: -75.6105),
+            puntoDePrueba(latitud: 6.2320, longitud: -75.6100),
+            puntoDePrueba(latitud: 6.2332, longitud: -75.6108),
+          ],
+        ),
+      );
+
+      final dibujo = tester.widget<TrazadoRecorrido>(
+        find.byType(TrazadoRecorrido),
+      );
+      expect(dibujo.trazado.puntos, hasLength(3));
+      expect(find.text('Sin recorrido registrado'), findsNothing);
     });
 
     testWidgets('la X de la barra superior vuelve al inicio', (tester) async {

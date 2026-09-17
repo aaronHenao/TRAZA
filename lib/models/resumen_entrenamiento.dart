@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+import 'distancia_en_vivo.dart';
 import 'estado_cronometro.dart';
 import 'punto_gps.dart';
 
 /// Lo que muestra el resumen de un entrenamiento recién finalizado
-/// (`screen-summary`, SCRUM-117).
+/// (`screen-summary`, SCRUM-117): tiempo total, distancia total, ritmo y los
+/// puntos del trazado (SCRUM-119).
 @immutable
 class ResumenEntrenamiento {
   const ResumenEntrenamiento({
@@ -16,13 +18,9 @@ class ResumenEntrenamiento {
     this.puntos = const [],
   });
 
-  /// Lo que se muestra cuando un dato todavía no existe, por ejemplo la
-  /// distancia mientras no se calcule (SCRUM-111 y SCRUM-112).
+  /// Lo que se muestra cuando un dato no existe, por ejemplo la distancia de
+  /// un entrenamiento que se guardó sin ella.
   static const sinDato = '—';
-
-  /// Por debajo de esta distancia el ritmo no significa nada: con unos pocos
-  /// metros de ruido del GPS saldrían ritmos de horas por kilómetro.
-  static const distanciaMinimaParaRitmoMetros = 10.0;
 
   /// `id` de la fila de `entrenamientos` de esta sesión, o null si se entrenó
   /// sin sesión y no hay fila (hasta que exista SCRUM-99).
@@ -34,10 +32,12 @@ class ResumenEntrenamiento {
   /// Tiempo de la actividad sin contar las pausas, como lo dio el cronómetro.
   final Duration duracion;
 
-  /// null mientras la distancia no se calcule (SCRUM-111 y SCRUM-112).
+  /// La que se calculó durante la actividad (SCRUM-111 y SCRUM-112), o null
+  /// si el entrenamiento se guardó sin ella.
   final double? distanciaMetros;
 
-  /// Puntos GPS del recorrido, en orden de captura. Los dibuja SCRUM-120.
+  /// Puntos GPS del recorrido, en orden de captura. Con ellos se dibuja el
+  /// trazado (SCRUM-119).
   final List<PuntoGps> puntos;
 
   /// Si este es el resumen del entrenamiento [entrenamientoId] que pide la
@@ -48,25 +48,28 @@ class ResumenEntrenamiento {
   /// `HH:MM:SS`, igual que el cronómetro de la actividad.
   String get tiempo => formatearTiempoEntrenamiento(duracion);
 
+  // La distancia y el ritmo usan el mismo formato que la pantalla de la
+  // actividad en curso (DistanciaEnVivo, SCRUM-114), para que lo que el
+  // usuario ve al terminar coincida con lo que vio mientras entrenaba.
+
   /// Kilómetros con dos decimales, como el prototipo (`5.23 km`).
   String get distancia {
     final metros = distanciaMetros;
     if (metros == null) return sinDato;
-    return '${(metros / 1000).toStringAsFixed(2)} km';
+    return DistanciaEnVivo(metros: metros).kilometros;
   }
 
   /// Minutos y segundos por kilómetro, como el prototipo (`6'10"/km`).
+  ///
+  /// Con muy poca distancia, la actividad en curso muestra `0'00"`; el
+  /// resumen prefiere decir que no hay dato.
   String get ritmo {
     final metros = distanciaMetros;
-    if (metros == null || metros < distanciaMinimaParaRitmoMetros) {
+    if (metros == null ||
+        metros < DistanciaEnVivo.distanciaMinimaParaRitmoMetros) {
       return sinDato;
     }
-    // Se redondea el total antes de separar minutos y segundos, para que
-    // 5'59.9" quede en 6'00" y no en 5'60".
-    final segundosPorKm = (duracion.inMilliseconds / metros).round();
-    final minutos = segundosPorKm ~/ 60;
-    final segundos = (segundosPorKm % 60).toString().padLeft(2, '0');
-    return "$minutos'$segundos\"/km";
+    return '${DistanciaEnVivo(metros: metros).ritmoPara(duracion)}/km';
   }
 
   /// Actividad y cuándo terminó, como el prototipo (`Correr · hoy`).

@@ -6,15 +6,18 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/punto_gps.dart';
 import '../services/mapa_provider.dart';
+import '../services/recorrido_provider.dart';
 import '../services/ubicacion_provider.dart';
 import '../theme/traza_theme.dart';
 
-/// Mapa con la posición actual del usuario (SCRUM-109).
+/// Mapa con la posición actual del usuario y el trazo de su recorrido
+/// (SCRUM-109).
 ///
 /// Se dibuja cuando llega la primera lectura de [posicionEnVivoProvider]
 /// y, a partir de ahí, mueve el marcador y centra la cámara en cada
-/// lectura nueva. El trazo del recorrido es de otra HU: los puntos
-/// registrados están en `recorridoProvider`.
+/// lectura nueva. Detrás del marcador va quedando la línea que une los
+/// puntos que [recorridoProvider] registra: en pausa no se registran, así
+/// que el trazo se detiene aunque el marcador siga moviéndose.
 class MapaRecorrido extends ConsumerStatefulWidget {
   const MapaRecorrido({super.key});
 
@@ -22,6 +25,10 @@ class MapaRecorrido extends ConsumerStatefulWidget {
   static const double zoomInicial = 17;
 
   static const Key claveMarcador = Key('mapa-marcador');
+
+  /// Grosor del trazo, el mismo `stroke-width` del `#trackPath` del
+  /// prototipo.
+  static const double grosorTrazo = 3.5;
 
   @override
   ConsumerState<MapaRecorrido> createState() => _MapaRecorridoState();
@@ -51,6 +58,13 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
       final punto = siguiente.valueOrNull;
       if (punto != null) _seguir(punto);
     });
+
+    // Se observa desde el principio, antes de tener posición, para que el
+    // registro esté escuchando cuando llegue el primer fix y el trazo
+    // arranque en ese punto y no en el segundo.
+    final trazo = ref.watch(
+      recorridoProvider.select((recorrido) => recorrido.puntos),
+    );
 
     final punto = ref.watch(posicionEnVivoProvider).valueOrNull;
     // Sin posición no hay dónde centrar: la nota de "buscando" que pone
@@ -84,6 +98,20 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
             maxNativeZoom: zoomMaximoTiles.toInt(),
           ),
         ),
+        // Con un solo punto no hay línea que dibujar; la capa lo tolera,
+        // pero no vale la pena montarla.
+        if (trazo.length >= 2)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: [for (final punto in trazo) punto.aLatLng()],
+                color: TrazaColors.accent,
+                strokeWidth: MapaRecorrido.grosorTrazo,
+                strokeCap: StrokeCap.round,
+                strokeJoin: StrokeJoin.round,
+              ),
+            ],
+          ),
         MarkerLayer(
           markers: [
             Marker(

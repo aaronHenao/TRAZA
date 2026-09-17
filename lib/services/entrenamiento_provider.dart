@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -53,6 +55,11 @@ class InicioEntrenamiento {
     final configuracion = _ref.read(configuracionInicioProvider);
     if (configuracion == null) return sinSesion;
 
+    // Si algún descarte anterior no se pudo cerrar, este es buen momento:
+    // el usuario está empezando otro, así que lo más probable es que haya
+    // red. Sin esperar, para no retrasar el arranque.
+    unawaited(_ref.read(descarteEntrenamientoProvider).reintentarPendientes());
+
     try {
       // Con el permiso concedido pero la ubicación del teléfono apagada no
       // llegaría ni una lectura: el entrenamiento se quedaría vacío y
@@ -75,6 +82,41 @@ class InicioEntrenamiento {
   }
 }
 
+/// Un entrenamiento que el usuario descartó pero que todavía no se pudo
+/// cerrar en la base.
+///
+/// [fechaFin] es de cuándo lo descartó, no de cuándo se logró guardar.
+typedef DescartePendiente = ({String entrenamientoId, DateTime fechaFin});
+
+/// Descartes que quedaron sin cerrar, a la espera de otro intento.
+///
+/// Solo mientras la app esté abierta: si se cierra antes de conseguirlo, esas
+/// filas se quedan `en_curso` y hay que limpiarlas desde el dashboard.
+class DescartesPendientesNotifier extends Notifier<List<DescartePendiente>> {
+  @override
+  List<DescartePendiente> build() => const [];
+
+  void agregar(DescartePendiente descarte) {
+    if (state.any((p) => p.entrenamientoId == descarte.entrenamientoId)) return;
+    state = [...state, descarte];
+  }
+
+  void quitar(String entrenamientoId) => state = state
+      .where((pendiente) => pendiente.entrenamientoId != entrenamientoId)
+      .toList();
+}
+
+final descartesPendientesProvider =
+    NotifierProvider<DescartesPendientesNotifier, List<DescartePendiente>>(
+      DescartesPendientesNotifier.new,
+    );
+
+/// Cuánto se espera antes de reintentar un descarte. Las pruebas lo ponen en
+/// cero para no esperar de verdad.
+final esperaEntreIntentosProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 2),
+);
+
 /// Descarte del entrenamiento en curso (SCRUM-96).
 final descarteEntrenamientoProvider = Provider<DescarteEntrenamiento>(
   DescarteEntrenamiento.new,
@@ -89,6 +131,11 @@ class DescarteEntrenamiento {
 
   final Ref _ref;
 
+  /// Intentos seguidos antes de dejarlo para después. Un corte de red de unos
+  /// segundos —lo que más pasa— se resuelve aquí.
+  static const intentos = 3;
+
+
   Future<void> descartar() async {
     final entrenamientoId = _ref.read(entrenamientoActualProvider);
 
@@ -98,18 +145,60 @@ class DescarteEntrenamiento {
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
 
     if (entrenamientoId == null) return;
-    try {
-      await _ref
-          .read(entrenamientoRepositoryProvider)
-          .cancelar(
-            entrenamientoId: entrenamientoId,
-            fechaFin: _ref.read(relojProvider)(),
-          );
-    } catch (error) {
-      // No se le avisa: el entrenamiento se descartó igual y no hay nada que
-      // el usuario pueda hacer. La fila queda `en_curso` en la base.
-      debugPrint('No se pudo marcar el entrenamiento como cancelado: $error');
+    await _cerrar((
+      entrenamientoId: entrenamientoId,
+      fechaFin: _ref.read(relojProvider)(),
+    ));
+  }
+
+  /// Vuelve a intentar los descartes que quedaron sin cerrar.
+  ///
+  /// La llama el inicio del siguiente entrenamiento: si el usuario está
+  /// empezando otro, lo más probable es que ya haya red.
+  Future<void> reintentarPendientes() async {
+    for (final pendiente in [..._ref.read(descartesPendientesProvider)]) {
+      await _cerrar(pendiente, intentos: 1);
     }
+  }
+
+  /// Marca la fila como cancelada, reintentando si la red falla. Si aun así
+  /// no lo consigue, la anota para el próximo intento.
+  Future<void> _cerrar(
+    DescartePendiente descarte, {
+    int intentos = DescarteEntrenamiento.intentos,
+  }) async {
+    final pendientes = _ref.read(descartesPendientesProvider.notifier);
+
+    for (var intento = 1; intento <= intentos; intento++) {
+      try {
+        await _ref
+            .read(entrenamientoRepositoryProvider)
+            .cancelar(
+              entrenamientoId: descarte.entrenamientoId,
+              fechaFin: descarte.fechaFin,
+            );
+        pendientes.quitar(descarte.entrenamientoId);
+        return;
+      } on EntrenamientoNoEncontradoException {
+        // Ya no estaba en curso: alguien lo cerró antes. No hay nada que
+        // reintentar.
+        pendientes.quitar(descarte.entrenamientoId);
+        return;
+      } catch (error) {
+        debugPrint(
+          'Intento $intento de descartar ${descarte.entrenamientoId}: $error',
+        );
+        if (intento < intentos) {
+          await Future.delayed(
+            _ref.read(esperaEntreIntentosProvider) * intento,
+          );
+        }
+      }
+    }
+
+    // Se queda anotado: al usuario no se le avisa porque ya descartó y no hay
+    // nada que pueda hacer.
+    pendientes.agregar(descarte);
   }
 }
 

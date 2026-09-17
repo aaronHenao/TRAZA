@@ -2,151 +2,52 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/resumen_entrenamiento.dart';
+import '../../models/resumen_semana.dart';
+import '../../services/inicio_provider.dart';
+import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
-import '../../widgets/boton_cerrar_sesion.dart';
-import '../../widgets/traza_toast.dart';
-import '../../widgets/traza_top_bar.dart';
-import '../../models/estado_permisos.dart';
-import '../../services/actividad_provider.dart';
-import '../../services/entrenamiento_provider.dart';
-import '../../services/permisos_provider.dart';
-import '../../widgets/requiere_permiso_ubicacion.dart';
-import '../../widgets/chips_tipo_actividad.dart';
-import '../../widgets/seccion_iniciar_entrenamiento.dart';
+import '../../widgets/navegacion_principal.dart';
+import '../../widgets/traza_card.dart';
 
-/// Pantalla de inicio (`screen-home` del prototipo): el usuario elige su
-/// actividad y arranca el entrenamiento.
+/// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
+/// el usuario al entrar y desde donde arranca todo.
 ///
-/// La estructura es de SCRUM-91, los chips con la actividad elegida de
-/// SCRUM-92, la configuración de inicio de SCRUM-93, el bloqueo de la
-/// actividad durante el entrenamiento de SCRUM-94 y el inicio con un solo
-/// toque de SCRUM-96.
-class InicioScreen extends ConsumerStatefulWidget {
+/// Del prototipo se toman el saludo, el bloque de progreso y el botón "+".
+/// El nivel, los retos y las rutas quedan fuera: son historias que todavía no
+/// existen. En su lugar, el progreso muestra lo que el usuario sí tiene hoy:
+/// el objetivo semanal del perfil y sus últimos entrenamientos.
+class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
   @override
-  ConsumerState<InicioScreen> createState() => _InicioScreenState();
-}
-
-class _InicioScreenState extends ConsumerState<InicioScreen> {
-  /// El entrenamiento se está creando. Es estado de la pantalla, no del
-  /// dominio: solo sirve para que el botón espere y un segundo toque no cree
-  /// otro entrenamiento (SCRUM-96).
-  bool _iniciando = false;
-
-  /// Un toque y la actividad arranca: se comprueban los permisos (SCRUM-97),
-  /// se crea el entrenamiento (SCRUM-99) y se abre la pantalla del
-  /// entrenamiento en curso, sin pasos intermedios.
-  Future<void> _iniciar() async {
-    if (_iniciando) return;
-    setState(() => _iniciando = true);
-    try {
-      // Antes de crear nada: sin ubicación no hay recorrido que registrar, y
-      // un entrenamiento que nadie va a usar quedaría abierto en la base.
-      if (!await _hayPermisoDeUbicacion()) return;
-
-      final error = await ref.read(inicioEntrenamientoProvider).iniciar();
-      if (!mounted) return;
-
-      // Sin entrenamiento creado la actividad no arranca: se explica por qué
-      // y el botón queda libre para volver a intentarlo (SCRUM-100).
-      if (error != null) {
-        _avisar(error);
-        return;
-      }
-
-      // Fija la actividad: mientras el entrenamiento dure no se puede
-      // cambiar (SCRUM-94).
-      ref.read(actividadIniciadaProvider.notifier).marcarIniciada();
-      // `push` y no `go`: al descartar se vuelve a esta pantalla. Se espera a
-      // esa vuelta, así el botón sigue ocupado mientras dura la actividad y
-      // dos toques seguidos no pueden crear dos entrenamientos.
-      await context.push('/tracking');
-    } finally {
-      if (mounted) setState(() => _iniciando = false);
-    }
-  }
-
-  /// El permiso de ubicación es obligatorio (SCRUM-97): si falta se pide en
-  /// el momento, para que conceder no sea un paso más del flujo.
-  ///
-  /// El de datos de salud no se toca aquí: es opcional y lo ofrece la propia
-  /// pantalla de entrenamiento (SCRUM-83) antes de empezar.
-  Future<bool> _hayPermisoDeUbicacion() async {
-    final permisos = ref.read(permisosProvider.notifier);
-    // Si todavía no se le preguntó al sistema, `desconocido` no significa que
-    // falte: se consulta antes de mostrarle nada al usuario.
-    if (!ref.read(permisosProvider).consultado) await permisos.actualizar();
-
-    var ubicacion = ref.read(permisosProvider).ubicacion;
-
-    // Bloqueado no: ahí el sistema ya no muestra su ventana y pedirlo otra
-    // vez no haría nada.
-    if (ubicacion != EstadoPermiso.concedido &&
-        ubicacion != EstadoPermiso.bloqueado) {
-      ubicacion = await permisos.solicitarUbicacion();
-    }
-    if (ubicacion == EstadoPermiso.concedido) return true;
-    if (!mounted) return false;
-
-    _avisar(RequierePermisoUbicacion.mensaje);
-    // Si está bloqueado solo se puede reactivar desde los ajustes, y a ellos
-    // se llega desde la pantalla de permisos.
-    if (ubicacion == EstadoPermiso.bloqueado) context.push('/permisos');
-    return false;
-  }
-
-  /// Por encima de "Iniciar actividad", para que se pueda volver a tocar
-  /// mientras el aviso sigue visible.
-  void _avisar(String mensaje) =>
-      mostrarToast(context, mensaje, separacionInferior: 90);
-
-  @override
-  Widget build(BuildContext context) {
-    final actividad = ref.watch(actividadSeleccionadaProvider);
-    final configuracion = ref.watch(configuracionInicioProvider);
-    final iniciada = ref.watch(actividadIniciadaProvider);
-
-    final String? aviso;
-    if (iniciada) {
-      aviso = 'Hay un entrenamiento en curso: no puedes cambiar la actividad.';
-    } else if (actividad != null && configuracion == null) {
-      // Hay actividad elegida, pero viene del catálogo local porque no hay
-      // sesión: sin id no se puede crear el entrenamiento (ver
-      // ConfiguracionInicio.para).
-      aviso = 'Inicia sesión para empezar a entrenar.';
-    } else {
-      aviso = null;
-    }
-
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          // `.home-wrap` del prototipo.
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.lg,
-            AppSpacing.xl,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const _Cabecera(),
-              const SizedBox(height: 24),
-              const ChipsTipoActividad(),
-              const SizedBox(height: 24),
-              Expanded(
-                child: SeccionIniciarEntrenamiento(
-                  actividad: actividad?.nombre,
-                  // Sin configuración no hay entrenamiento posible: el aviso
-                  // ya explica que hay que iniciar sesión.
-                  onIniciar: configuracion == null ? null : _iniciar,
-                  aviso: aviso,
-                  iniciando: _iniciando,
-                ),
-              ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return NavegacionPrincipal(
+      seccion: SeccionPrincipal.inicio,
+      // El "+" del prototipo lleva a elegir la actividad y arrancar.
+      onNuevaActividad: () => context.push('/actividad'),
+      child: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(resumenSemanaProvider);
+            ref.invalidate(ultimosEntrenamientosProvider);
+          },
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              // Hueco para que el botón "+" no tape la última tarjeta.
+              96,
+            ),
+            children: const [
+              _Saludo(),
+              SizedBox(height: AppSpacing.lg),
+              _ProgresoSemanal(),
+              SizedBox(height: AppSpacing.lg),
+              _UltimosEntrenamientos(),
             ],
           ),
         ),
@@ -155,54 +56,278 @@ class _InicioScreenState extends ConsumerState<InicioScreen> {
   }
 }
 
-/// Saludo y accesos al historial, los permisos y cerrar sesión (`.home-head`
-/// del prototipo).
-class _Cabecera extends StatelessWidget {
-  const _Cabecera();
+/// `.greet-row` del prototipo: el saludo con el nombre de la persona.
+class _Saludo extends ConsumerWidget {
+  const _Saludo();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nombre = ref.watch(nombreUsuarioProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          nombre == null ? 'Hola' : 'Hola, $nombre',
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.19,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Vamos por tu meta semanal',
+          style: TextStyle(fontSize: 13, color: AppColors.ink2),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lo que lleva esta semana frente a su objetivo de distancia, con la barra
+/// de progreso del prototipo (`.lv-track`).
+class _ProgresoSemanal extends ConsumerWidget {
+  const _ProgresoSemanal();
+
+  static const claveAvance = Key('inicio-avance-semanal');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resumen = ref.watch(resumenSemanaProvider);
+
+    return TrazaCard(
+      child: switch (resumen) {
+        AsyncData(:final value) => _Avance(resumen: value),
+        AsyncError() => const _AvisoTarjeta(
+          'No pudimos cargar tu progreso de esta semana.',
+        ),
+        _ => const _AvisoTarjeta('Cargando tu progreso…'),
+      },
+    );
+  }
+}
+
+class _Avance extends StatelessWidget {
+  const _Avance({required this.resumen});
+
+  final ResumenSemana resumen;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final progreso = resumen.progreso;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Listo para entrenar',
-                style: TextStyle(
-                  fontSize: 19,
+        const Text(
+          'ESTA SEMANA',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.66,
+            color: AppColors.ink2,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Flexible(
+              child: Text(
+                resumen.avanceTexto,
+                key: _ProgresoSemanal.claveAvance,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.19,
                   color: AppColors.ink,
                 ),
               ),
-              SizedBox(height: 2),
-              Text(
-                'Elige tu actividad y comienza',
-                style: TextStyle(fontSize: 13, color: AppColors.ink2),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            // Expanded y no Spacer: el conteo queda igual contra el borde
+            // derecho, pero con el texto del sistema en grande cede espacio
+            // en vez de desbordar la tarjeta.
+            Expanded(
+              child: Text(
+                resumen.entrenamientos == 1
+                    ? '1 entrenamiento'
+                    : '${resumen.entrenamientos} entrenamientos',
+                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
               ),
+            ),
+          ],
+        ),
+        if (progreso != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: LinearProgressIndicator(
+              value: progreso,
+              minHeight: 8,
+              backgroundColor: AppColors.bgAlt,
+              valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: AppSpacing.sm),
+          const Text(
+            'Ponte una meta de distancia en tu perfil para seguirla desde aquí.',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.ink2,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Los últimos entrenamientos, con acceso al historial completo.
+class _UltimosEntrenamientos extends ConsumerWidget {
+  const _UltimosEntrenamientos();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ultimos = ref.watch(ultimosEntrenamientosProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'ÚLTIMOS ENTRENAMIENTOS',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.52,
+                  color: AppColors.ink2,
+                ),
+              ),
+            ),
+            if (ultimos.valueOrNull?.isNotEmpty ?? false)
+              GestureDetector(
+                onTap: () => context.go('/historial'),
+                child: const Text(
+                  'Ver todos',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        switch (ultimos) {
+          AsyncData(value: final lista) when lista.isEmpty =>
+            const _AvisoTarjeta(
+              'Todavía no has entrenado. Toca el botón + para empezar.',
+            ),
+          AsyncData(value: final lista) => Column(
+            children: [
+              for (final entrenamiento in lista) ...[
+                _FilaEntrenamiento(entrenamiento: entrenamiento),
+                if (entrenamiento != lista.last)
+                  const SizedBox(height: AppSpacing.sm),
+              ],
             ],
           ),
-        ),
-        // Historial de entrenamientos (SCRUM-125). push: "atrás" vuelve a
-        // Inicio.
-        TrazaIconButton(
-          icon: Icons.schedule,
-          onPressed: () => context.push('/historial'),
-          tooltip: 'Historial',
-        ),
-        const SizedBox(width: 8),
-        // Revisar y conceder permisos después del onboarding (SCRUM-85).
-        // push: "atrás" vuelve a Inicio.
-        TrazaIconButton(
-          icon: Icons.shield_outlined,
-          onPressed: () => context.push('/permisos'),
-          tooltip: 'Permisos',
-        ),
-        const SizedBox(width: 8),
-        const BotonCerrarSesion(),
+          AsyncError() => const _AvisoTarjeta(
+            'No pudimos cargar tus entrenamientos.',
+          ),
+          _ => const _AvisoTarjeta('Cargando…'),
+        },
       ],
+    );
+  }
+}
+
+/// Una línea del historial, con el mismo formato que la pantalla completa.
+class _FilaEntrenamiento extends ConsumerWidget {
+  const _FilaEntrenamiento({required this.entrenamiento});
+
+  final ResumenEntrenamiento entrenamiento;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ahora = ref.read(relojProvider)();
+
+    return TrazaCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 12,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryTint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.directions_run,
+              size: 20,
+              color: AppColors.secondaryDark,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entrenamiento.subtitulo(ahora),
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${entrenamiento.distancia} · ${entrenamiento.tiempo}',
+                  style: const TextStyle(fontSize: 12, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Mensaje corto dentro de una tarjeta, para los estados sin datos.
+class _AvisoTarjeta extends StatelessWidget {
+  const _AvisoTarjeta(this.mensaje);
+
+  final String mensaje;
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      child: Text(
+        mensaje,
+        style: const TextStyle(
+          fontSize: 12.5,
+          color: AppColors.ink2,
+          height: 1.4,
+        ),
+      ),
     );
   }
 }

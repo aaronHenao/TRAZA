@@ -109,16 +109,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const MarcaTraza(),
-          const SizedBox(height: 36),
-          const Text(
-            'Crea tu cuenta',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: colorTextoPrincipal,
-            ),
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 24),
           const Text(
             'Regístrate para empezar a registrar tus entrenamientos.',
             style: TextStyle(

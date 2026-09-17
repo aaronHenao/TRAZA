@@ -17,17 +17,24 @@ import '../../widgets/mis_objetivos_section.dart';
 /// Es el primer paso después del registro: el usuario configura sus objetivos
 /// y desde aquí continúa hacia la pantalla de permisos. Si ya los había
 /// configurado antes, la pantalla llega con sus valores precargados.
+///
+/// Terminado el onboarding es además una sección fija de la barra inferior:
+/// se entra a mirar o cambiar los objetivos y se vuelve a la portada.
 class PerfilScreen extends StatelessWidget {
-  const PerfilScreen({super.key});
+  const PerfilScreen({this.enOnboarding = false, super.key});
+
+  /// Si viene del registro, guardar sigue hacia Permisos. Si no, guardar es
+  /// solo guardar y se vuelve a la portada.
+  final bool enOnboarding;
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            TrazaTopBar(titulo: 'Perfil', accion: BotonCerrarSesion()),
-            Expanded(child: _Cuerpo()),
+            const TrazaTopBar(titulo: 'Perfil', accion: BotonCerrarSesion()),
+            Expanded(child: _Cuerpo(enOnboarding: enOnboarding)),
           ],
         ),
       ),
@@ -36,7 +43,9 @@ class PerfilScreen extends StatelessWidget {
 }
 
 class _Cuerpo extends ConsumerWidget {
-  const _Cuerpo();
+  const _Cuerpo({required this.enOnboarding});
+
+  final bool enOnboarding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,14 +71,14 @@ class _Cuerpo extends ConsumerWidget {
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
               AppSpacing.sm,
               AppSpacing.lg,
               AppSpacing.lg,
             ),
-            child: _BotonGuardar(),
+            child: _BotonGuardar(enOnboarding: enOnboarding),
           ),
         ],
       ),
@@ -138,13 +147,16 @@ class _ErrorDeCarga extends ConsumerWidget {
   }
 }
 
-/// Guarda los objetivos y, si todo sale bien, sigue hacia permisos.
+/// Guarda los objetivos y, si todo sale bien, sigue hacia permisos (en el
+/// onboarding) o vuelve a la portada.
 ///
 /// Queda deshabilitado mientras no haya ningún objetivo marcado, mientras algún
 /// valor sea inválido o mientras el guardado esté en curso. En los tres casos
 /// la pantalla ya explica el motivo (estado vacío o error bajo el campo).
 class _BotonGuardar extends ConsumerWidget {
-  const _BotonGuardar();
+  const _BotonGuardar({required this.enOnboarding});
+
+  final bool enOnboarding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -161,7 +173,7 @@ class _BotonGuardar extends ConsumerWidget {
                 color: Colors.white,
               ),
             )
-          : const Text('Guardar y continuar'),
+          : Text(enOnboarding ? 'Guardar y continuar' : 'Guardar cambios'),
     );
   }
 
@@ -171,7 +183,7 @@ class _BotonGuardar extends ConsumerWidget {
 
     mostrarToast(context, error ?? 'Objetivos guardados');
     if (error == null) {
-      context.go('/permisos');
+      context.go(enOnboarding ? '/permisos' : '/inicio');
     }
   }
 }

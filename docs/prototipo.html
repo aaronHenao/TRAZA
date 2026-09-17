@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>TRAZA — Autenticación y registro de entrenamiento</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#613DC1;
+  --primary-dark:#4C2F9C;
+  --primary-tint:#EFEAFC;
+  --secondary:#858AE3;
+  --secondary-dark:#5B60B0;
+  --secondary-tint:#EFF0FB;
+  --accent:#D7F204;
+  --accent-ink:#57611A;
+  --accent-tint:#F8FCDA;
+  --danger:#E5484D;
+  --danger-tint:#FDECEC;
+  --bg:#FFFFFF;
+  --bg-alt:#F6F6F9;
+  --line:#EAEAF0;
+  --ink:#0D0D0D;
+  --ink-2:#6B6B70;
+  --ink-3:#A3A3A8;
+  --radius-lg:20px;
+  --radius-md:14px;
+  --radius-sm:10px;
+  --shadow:0 1px 2px rgba(13,13,13,.04), 0 8px 24px rgba(13,13,13,.07);
+
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;
+  background:#EEEEF1;
+  color:var(--ink);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:40px 16px 80px;
+}
+
+/* ---------- Presentation chrome ---------- */
+.deck-header{ text-align:center; margin-bottom:28px; max-width:560px; }
+.deck-header .kicker{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--primary); background:var(--primary-tint); padding:6px 12px; border-radius:100px; margin-bottom:14px;
+}
+.deck-header h1{ font-size:28px; font-weight:800; margin:0 0 8px; letter-spacing:-.02em; }
+.deck-header p{ font-size:14.5px; color:var(--ink-2); margin:0; line-height:1.6; }
+
+.jump-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:640px; margin:22px 0 34px; }
+.jump-chip{
+  border:1px solid var(--line); background:#fff; color:var(--ink-2);
+  font-family:inherit; font-size:12.5px; font-weight:600; padding:8px 14px;
+  border-radius:100px; cursor:pointer; transition:all .15s ease;
+}
+.jump-chip:hover{ border-color:var(--primary); color:var(--primary); background:var(--primary-tint); }
+.jump-chip.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+
+
+/* ---------- Phone frame ---------- */
+.device{ width:375px; height:812px; background:#0C0C0C; border-radius:52px; padding:14px; box-shadow:0 30px 60px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.15); position:relative; flex-shrink:0; }
+.device::before{ content:""; position:absolute; top:34px; left:50%; transform:translateX(-50%); width:120px; height:26px; background:#0C0C0C; border-radius:20px; z-index:40; }
+.screen-frame{ width:100%; height:100%; background:var(--bg); border-radius:38px; overflow:hidden; position:relative; }
+.status-bar{ position:absolute; top:0; left:0; right:0; height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 26px; z-index:30; pointer-events:none; font-size:14px; font-weight:600; color:var(--ink); }
+.status-bar.on-dark{ color:#fff; }
+.status-bar .sb-icons{ display:flex; gap:5px; align-items:center; }
+
+.viewport{ position:absolute; inset:0; overflow:hidden; }
+.screen{ position:absolute; inset:0; display:none; flex-direction:column; background:var(--bg); }
+.screen.active{ display:flex; }
+.scroll{ flex:1; overflow-y:auto; -ms-overflow-style:none; scrollbar-width:none; }
+.scroll::-webkit-scrollbar{ display:none; }
+.top-space{ height:44px; flex-shrink:0; }
+
+.topbar{ display:flex; align-items:center; justify-content:space-between; padding:10px 20px 14px; flex-shrink:0; background:var(--bg); }
+.topbar h1{ font-size:17px; font-weight:700; margin:0; letter-spacing:-.01em; }
+.icon-btn{ width:36px; height:36px; border-radius:100px; border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink); flex-shrink:0; }
+.icon-btn:active{ transform:scale(.94); }
+.icon-btn.on-dark{ background:rgba(255,255,255,.1); border-color:transparent; color:#fff; }
+
+.toast{ position:absolute; left:20px; right:20px; bottom:24px; z-index:80; background:var(--ink); color:#fff; font-size:13px; font-weight:600; padding:13px 16px; border-radius:100px; text-align:center; opacity:0; transform:translateY(10px); transition:all .25s ease; pointer-events:none; }
+.toast.show{ opacity:1; transform:translateY(0); }
+
+.card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius-md); padding:16px; box-shadow:var(--shadow); }
+.section-title{ font-size:13px; font-weight:700; color:var(--ink-2); text-transform:uppercase; letter-spacing:.04em; margin:0 0 12px; }
+.divider{ height:1px; background:var(--line); border:none; margin:0; }
+svg.i{ display:block; }
+
+.btn{ font-family:inherit; font-weight:700; font-size:14.5px; border-radius:100px; border:none; cursor:pointer; padding:14px 20px; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:transform .12s ease; }
+.btn:active{ transform:scale(.97); }
+
+.btn-block{ width:100%; }
+.btn-primary{ background:var(--primary); color:#fff; }
+.btn-primary:disabled{ background:var(--ink-3); cursor:not-allowed; }
+.btn-outline{ background:#fff; border:1.5px solid var(--line); color:var(--ink); }
+.btn-text{ background:none; color:var(--primary); padding:8px 4px; }
+.btn-sm{ padding:9px 14px; font-size:13px; }
+
+/* ---------- Auth form components ---------- */
+.auth-wrap{ padding:28px 24px 32px; display:flex; flex-direction:column; gap:22px; }
+.brand-lockup{ display:flex; align-items:center; gap:8px; }
+.brand-lockup .mark{ width:30px; height:30px; border-radius:9px; background:var(--primary); display:flex; align-items:center; justify-content:center; }
+.brand-lockup .mark svg{ width:16px; height:16px; color:#fff; }
+.brand-lockup span{ font-size:16px; font-weight:800; letter-spacing:-.01em; }
+
+.auth-head h1{ font-size:22px; font-weight:800; margin:0 0 6px; letter-spacing:-.01em; }
+.auth-head p{ font-size:13.5px; color:var(--ink-2); margin:0; line-height:1.5; }
+
+.field{ margin-bottom:16px; }
+.field:last-child{ margin-bottom:0; }
+.field label{ display:block; font-size:12.5px; font-weight:700; color:var(--ink); margin-bottom:7px; }
+.field-input-wrap{ position:relative; }
+.field input{
+  width:100%; font-family:inherit; font-size:14.5px; color:var(--ink);
+  border:1.5px solid var(--line); border-radius:var(--radius-sm); padding:13px 14px;
+  background:#fff; outline:none; transition:border-color .12s ease;
+}
+.field input::placeholder{ color:var(--ink-3); }
+.field input:focus{ border-color:var(--primary); }
+.field.error input{ border-color:var(--danger); background:var(--danger-tint); }
+.field .pw-eye{
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; border:none; background:none; color:var(--ink-3); cursor:pointer;
+
+  display:flex; align-items:center; justify-content:center;
+}
+.field-hint{ display:none; font-size:12px; color:var(--danger); margin-top:6px; line-height:1.4; }
+.field.error .field-hint{ display:block; }
+.field-hint.static{ display:block; color:var(--ink-2); }
+
+.auth-alert{
+  display:flex; gap:10px; align-items:flex-start; background:var(--danger-tint); border-radius:var(--radius-sm);
+  padding:12px 14px; font-size:12.5px; color:#9A2E32; line-height:1.5; display:none;
+}
+.auth-alert.show{ display:flex; }
+.auth-alert svg{ width:16px; height:16px; flex-shrink:0; margin-top:1px; }
+.auth-alert .recover-link{ color:var(--primary); font-weight:700; cursor:pointer; text-decoration:underline; }
+
+.auth-confirm{
+  display:flex; gap:10px; align-items:flex-start; background:var(--accent-tint); border-radius:var(--radius-sm);
+  padding:12px 14px; font-size:12.5px; color:var(--accent-ink); line-height:1.5;
+}
+.auth-confirm svg{ width:16px; height:16px; flex-shrink:0; margin-top:1px; }
+
+.divider-row{ display:flex; align-items:center; gap:10px; color:var(--ink-3); font-size:12px; font-weight:600; }
+.divider-row::before, .divider-row::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+.btn-google{ background:#fff; border:1.5px solid var(--line); color:var(--ink); }
+.btn-google svg{ width:18px; height:18px; }
+
+.req-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.req-item{ display:flex; align-items:center; gap:7px; font-size:12px; color:var(--ink-3); font-weight:600; }
+.req-item .dot{ width:14px; height:14px; border-radius:100px; border:1.5px solid var(--ink-3); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.req-item.met{ color:var(--accent-ink); }
+.req-item.met .dot{ background:var(--accent); border-color:var(--accent); }
+.req-item.met .dot svg{ width:9px; height:9px; color:var(--ink); }
+
+
+.auth-footer{ text-align:center; font-size:13px; color:var(--ink-2); }
+.auth-footer .link-text{ color:var(--primary); font-weight:700; cursor:pointer; }
+.link-text{ color:var(--primary); font-weight:700; cursor:pointer; }
+.link-right{ text-align:right; font-size:12.5px; margin-top:-6px; }
+
+/* ---------- Google modal ---------- */
+.modal-overlay{
+  position:absolute; inset:0; background:rgba(13,13,13,.5); z-index:70;
+  display:none; align-items:flex-end; justify-content:center;
+}
+.modal-overlay.show{ display:flex; }
+.modal-sheet{ width:100%; background:#fff; border-radius:24px 24px 0 0; padding:10px 22px 26px; }
+.modal-handle{ width:36px; height:4px; border-radius:100px; background:var(--line); margin:6px auto 16px; }
+.modal-sheet h2{ font-size:16px; font-weight:800; margin:0 0 4px; }
+.modal-sheet .sub{ font-size:12.5px; color:var(--ink-2); margin:0 0 16px; }
+.google-row{ display:flex; align-items:center; gap:12px; padding:12px 6px; border-radius:var(--radius-sm); cursor:pointer; }
+.google-row:active{ background:var(--bg-alt); }
+.google-row .avatar{ width:38px; height:38px; border-radius:100px; background:var(--secondary-tint); color:var(--secondary-dark); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+.google-row .name{ font-size:14px; font-weight:700; }
+.google-row .mail{ font-size:12px; color:var(--ink-2); }
+.modal-secondary{ display:flex; align-items:center; gap:12px; padding:12px 6px; cursor:pointer; color:var(--ink-2); font-size:13.5px; font-weight:600; }
+.modal-secondary .icon-circle{ width:38px; height:38px; border-radius:100px; background:var(--bg-alt); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.modal-loading{ display:flex; align-items:center; justify-content:center; gap:10px; padding:30px 0; font-size:13.5px; color:var(--ink-2); font-weight:600; }
+.spinner{ width:18px; height:18px; border-radius:100px; border:2.5px solid var(--line); border-top-color:var(--primary); animation:spin .7s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* ---------- Permissions ---------- */
+.perm-wrap{ padding:20px 20px 28px; display:flex; flex-direction:column; gap:14px; }
+.permission-card{ display:flex; flex-direction:column; gap:12px; }
+.permission-card .perm-head{ display:flex; gap:12px; align-items:flex-start; }
+.permission-card .perm-ic{ width:42px; height:42px; border-radius:12px; background:var(--secondary-tint); color:var(--secondary-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+.permission-card .perm-ic svg{ width:20px; height:20px; }
+.permission-card .perm-title{ font-size:14.5px; font-weight:700; margin-bottom:3px; }
+.permission-card .perm-desc{ font-size:12.5px; color:var(--ink-2); line-height:1.5; }
+.permission-card.granted{ border-color:var(--primary); background:var(--primary-tint); }
+.permission-card.granted .perm-ic{ background:var(--primary); color:#fff; }
+.perm-actions{ display:flex; align-items:center; justify-content:space-between; }
+.perm-granted-tag{ display:none; align-items:center; gap:6px; color:var(--primary-dark); font-weight:700; font-size:13px; }
+.perm-granted-tag svg{ width:16px; height:16px; }
+.permission-card.granted .perm-granted-tag{ display:flex; }
+.permission-card.granted .perm-btn-row{ display:none; }
+.perm-skip{ background:none; border:none; color:var(--ink-3); font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; }
+
+/* ---------- Goals ---------- */
+.goals-wrap{ padding:20px 20px 28px; display:flex; flex-direction:column; gap:14px; }
+.goal-card{ cursor:pointer; }
+.goal-card-head{ display:flex; align-items:center; justify-content:space-between; }
+.goal-card-head .txt{ font-size:14.5px; font-weight:700; }
+.goal-card-head .desc{ font-size:12px; color:var(--ink-2); margin-top:3px; }
+.goal-check{ width:22px; height:22px; border-radius:100px; border:2px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.goal-check svg{ width:12px; height:12px; color:#fff; display:none; }
+.goal-card.selected{ border-color:var(--primary); background:var(--primary-tint); }
+.goal-card.selected .goal-check{ background:var(--primary); border-color:var(--primary); }
+.goal-card.selected .goal-check svg{ display:block; }
+.goal-input-row{ display:none; align-items:center; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+.goal-card.selected .goal-input-row{ display:flex; }
+.goal-input-row input{ width:72px; font-family:inherit; font-size:15px; font-weight:700; text-align:center; border:1.5px solid var(--line); border-radius:var(--radius-sm); padding:9px; outline:none; }
+.goal-input-row input:focus{ border-color:var(--primary); }
+.goal-input-row .unit{ font-size:13px; color:var(--ink-2); font-weight:600; }
+
+/* ---------- Home / seleccionar actividad ---------- */
+.home-wrap{ padding:8px 20px 28px; display:flex; flex-direction:column; gap:24px; flex:1; }
+.home-head{ display:flex; align-items:center; justify-content:space-between; }
+
+.home-head .hi{ font-size:19px; font-weight:800; letter-spacing:-.01em; }
+.home-head .sub{ font-size:13px; color:var(--ink-2); margin-top:2px; }
+.activity-chip-row{ display:flex; gap:8px; }
+.activity-chip{ flex:1; text-align:center; padding:13px 8px; border-radius:var(--radius-sm); font-size:13.5px; font-weight:700; background:var(--bg-alt); color:var(--ink-2); cursor:pointer; border:1.5px solid transparent; }
+.activity-chip.on{ background:var(--primary); color:#fff; }
+.home-center{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; }
+.home-center .big-ic{ width:88px; height:88px; border-radius:100px; background:var(--primary-tint); display:flex; align-items:center; justify-content:center; margin-bottom:6px; }
+.home-center .big-ic svg{ width:38px; height:38px; color:var(--primary); }
+.home-center h2{ font-size:16px; font-weight:700; margin:0; }
+.home-center p{ font-size:13px; color:var(--ink-2); margin:0; max-width:230px; }
+
+/* ---------- Tracking ---------- */
+#screen-tracking{ background:linear-gradient(160deg,#18142B,#241D3D); }
+.track-topbar{ display:flex; align-items:center; justify-content:space-between; padding:14px 18px; flex-shrink:0; }
+.track-topbar .lbl{ color:#fff; font-weight:700; font-size:14px; }
+.track-map{ flex:1; margin:6px 18px; border-radius:22px; background:rgba(255,255,255,.04); position:relative; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
+.track-map svg{ position:absolute; inset:0; width:100%; height:100%; }
+.track-perm-note{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:0 30px; }
+.track-perm-note.show{ display:flex; }
+.track-perm-note svg{ width:30px; height:30px; color:rgba(255,255,255,.5); }
+.track-perm-note p{ color:rgba(255,255,255,.7); font-size:12.5px; margin:0; line-height:1.5; }
+.track-timer{ text-align:center; padding:18px 18px 2px; }
+.track-timer .time{ color:#fff; font-size:44px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+.track-timer .lbl{ color:rgba(255,255,255,.45); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin-top:2px; }
+.track-stats{ padding:8px 18px 4px; display:grid; grid-template-columns:1fr 1fr; gap:8px; text-align:center; }
+.track-stats .num{ color:#fff; font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; }
+.track-stats .lbl{ color:rgba(255,255,255,.45); font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; margin-top:2px; }
+.track-controls{ display:flex; align-items:center; justify-content:center; gap:22px; padding:22px 18px 34px; }
+.rec-btn{ width:74px; height:74px; border-radius:100px; background:var(--primary); border:none; color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 24px rgba(97,61,193,.4); cursor:pointer; }
+.rec-btn svg{ width:26px; height:26px; }
+.side-btn{ width:56px; height:56px; border-radius:100px; background:rgba(255,255,255,.1); border:none; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.side-btn svg{ width:22px; height:22px; }
+
+.track-pill{ position:absolute; top:14px; left:18px; background:rgba(255,255,255,.12); color:#fff; font-size:11px; font-weight:700; padding:5px 11px; border-radius:100px; display:flex; align-items:center; gap:5px; }
+.track-pill .rdot{ width:6px; height:6px; border-radius:100px; background:var(--accent); }
+
+/* ---------- Summary ---------- */
+.summary-hero{ background:var(--primary-tint); padding:34px 24px 26px; text-align:center; }
+.summary-hero .check{ width:64px; height:64px; border-radius:100px; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+.summary-hero .check svg{ width:30px; height:30px; }
+.summary-hero h2{ margin:0 0 4px; font-size:19px; font-weight:800; }
+.summary-hero p{ margin:0; font-size:13px; color:var(--ink-2); }
+.summary-body{ padding:20px; display:flex; flex-direction:column; gap:18px; }
+.summary-stats{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.summary-stats .stat-box{ background:var(--bg-alt); border-radius:var(--radius-sm); padding:14px 10px; text-align:center; }
+.summary-stats .num{ font-size:19px; font-weight:800; }
+.summary-stats .lbl{ font-size:10.5px; color:var(--ink-2); font-weight:600; margin-top:2px; }
+.summary-pace{ text-align:center; font-size:12.5px; color:var(--ink-2); }
+.summary-pace b{ color:var(--ink); font-weight:700; }
+.summary-map{ border-radius:var(--radius-md); overflow:hidden; background:linear-gradient(160deg,#18142B,#241D3D); }
+.summary-map svg{ display:block; width:100%; height:110px; }
+
+/* ---------- History ---------- */
+.history-wrap{ padding:6px 20px 28px; display:flex; flex-direction:column; gap:4px; }
+.history-list-row{ display:flex; align-items:center; gap:12px; padding:13px 0; cursor:pointer; }
+.history-list-row .ic{ width:42px; height:42px; border-radius:12px; background:var(--secondary-tint); color:var(--secondary-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.history-list-row .ic svg{ width:20px; height:20px; }
+.history-list-row .info{ flex:1; min-width:0; }
+.history-list-row .type-date{ font-size:13.5px; font-weight:700; }
+.history-list-row .meta{ font-size:12px; color:var(--ink-2); margin-top:2px; }
+.history-empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:0 30px; }
+.history-empty .big-ic{ width:72px; height:72px; border-radius:100px; background:var(--bg-alt); display:flex; align-items:center; justify-content:center; }
+.history-empty .big-ic svg{ width:30px; height:30px; color:var(--ink-3); }
+.history-empty h2{ font-size:15px; font-weight:700; margin:0; }
+.history-empty p{ font-size:12.5px; color:var(--ink-2); margin:0; }
+
+
+@media (max-width:420px){ .device{ transform:scale(.92); } }
+</style>
+</head>
+<body>
+
+<div class="deck-header">
+  <span class="kicker">Prototipo · Autenticación y registro de entrenamiento</span>
+  <h1>TRAZA</h1>
+  <p>Alcance reducido a partir del prototipo completo: inicio de sesión y registro, permisos, objetivos, selección de actividad, cronómetro y ubicación en tiempo real, resumen e historial.</p>
+</div>
+
+<div class="jump-row" id="jumpRow"></div>
+
+<div class="device">
+  <div class="screen-frame">
+
+    <div class="status-bar" id="statusBar">
+      <span>9:41</span>
+      <span class="sb-icons">
+        <svg class="i" width="17" height="11" viewBox="0 0 17 11" fill="none"><rect x="0" y="1" width="13" height="9" rx="2" stroke="currentColor" stroke-width="1"/><rect x="14.3" y="3.3" width="1.4" height="4.4" rx="0.7" fill="currentColor"/><rect x="1.3" y="2.3" width="10.4" height="6.4" rx="1" fill="currentColor"/></svg>
+      </span>
+    </div>
+
+    <div class="viewport" id="screenViewport">
+
+      <!-- ================= LOGIN ================= -->
+      <section class="screen active" id="screen-login">
+        <div class="top-space"></div>
+        <div class="scroll">
+          <div class="auth-wrap">
+            <div class="brand-lockup">
+
+              <div class="mark"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg></div>
+              <span>TRAZA</span>
+            </div>
+            <div class="auth-head">
+              <h1>Bienvenido de nuevo</h1>
+              <p>Inicia sesión para continuar tu entrenamiento.</p>
+            </div>
+
+            <div class="auth-alert" id="loginAlert">
+              <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Correo o contraseña incorrectos. <span class="recover-link" onclick="goTo('forgot'); resetForgot();">Recuperar contraseña</span></span>
+            </div>
+
+            <div>
+              <div class="field" id="loginEmailField">
+                <label>Correo electrónico</label>
+                <div class="field-input-wrap"><input type="email" id="loginEmail" placeholder="nombre@correo.com"></div>
+                <div class="field-hint" id="loginEmailHint">Ingresa un correo válido, ej: nombre@correo.com</div>
+              </div>
+              <div class="field" id="loginPasswordField">
+                <label>Contraseña</label>
+                <div class="field-input-wrap">
+                  <input type="password" id="loginPassword" placeholder="Tu contraseña">
+                  <button class="pw-eye" onclick="togglePw('loginPassword', this)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                </div>
+                <div class="field-hint" id="loginPasswordHint">Ingresa tu contraseña</div>
+              </div>
+              <div class="link-right"><span class="link-text" onclick="goTo('forgot'); resetForgot();">¿Olvidaste tu contraseña?</span></div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <button class="btn btn-primary btn-block" onclick="attemptLogin()">Iniciar sesión</button>
+
+              <div class="divider-row">o continúa con</div>
+              <button class="btn btn-google btn-block" onclick="openGoogleModal('login')">
+                <svg class="i" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.57-5.17 3.57-8.8z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.93l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.95H1.27v3.09C3.25 21.3 7.29 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54V6.64H1.27a12 12 0 0 0 0 10.72l4-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.45-3.45C17.95 1.19 15.24 0 12 0 7.29 0 3.25 2.7 1.27 6.64l4 3.09c.95-2.84 3.6-4.98 6.73-4.98z"/></svg>
+                Continuar con Google
+              </button>
+            </div>
+
+            <div class="auth-footer">¿No tienes cuenta? <span class="link-text" onclick="goTo('register')">Regístrate</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= REGISTER ================= -->
+      <section class="screen" id="screen-register">
+        <div class="top-space"></div>
+        <div class="scroll">
+          <div class="auth-wrap">
+            <div class="brand-lockup">
+              <div class="mark"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg></div>
+              <span>TRAZA</span>
+            </div>
+            <div class="auth-head">
+              <h1>Crea tu cuenta</h1>
+              <p>Regístrate para empezar a registrar tus entrenamientos.</p>
+            </div>
+
+            <div class="auth-alert" id="registerAlert">
+              <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span id="registerAlertText">El correo ingresado ya está asociado a una cuenta. <span class="recover-link" onclick="goTo('login')">Inicia sesión</span></span>
+            </div>
+
+            <div>
+
+              <div class="field" id="registerEmailField">
+                <label>Correo electrónico</label>
+                <div class="field-input-wrap"><input type="email" id="registerEmail" placeholder="nombre@correo.com"></div>
+                <div class="field-hint" id="registerEmailHint">Ingresa un correo válido, ej: nombre@correo.com</div>
+              </div>
+              <div class="field" id="registerPasswordField">
+                <label>Contraseña</label>
+                <div class="field-input-wrap">
+                  <input type="password" id="registerPassword" placeholder="Crea una contraseña" oninput="updatePwChecklist()">
+                  <button class="pw-eye" onclick="togglePw('registerPassword', this)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                </div>
+                <div class="field-hint" id="registerPasswordHint">La contraseña no cumple los requisitos</div>
+                <div class="req-list">
+                  <div class="req-item" id="reqLen"><span class="dot"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Mínimo 8 caracteres</div>
+                  <div class="req-item" id="reqUpper"><span class="dot"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Una letra mayúscula</div>
+                  <div class="req-item" id="reqSpecial"><span class="dot"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Un carácter especial (no espacio)</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <button class="btn btn-primary btn-block" onclick="attemptRegister()">Crear cuenta</button>
+              <div class="divider-row">o</div>
+              <button class="btn btn-google btn-block" onclick="openGoogleModal('register')">
+                <svg class="i" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.57-5.17 3.57-8.8z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.93l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.95H1.27v3.09C3.25 21.3 7.29 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54V6.64H1.27a12 12 0 0 0 0 10.72l4-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.45-3.45C17.95 1.19 15.24 0 12 0 7.29 0 3.25 2.7 1.27 6.64l4 3.09c.95-2.84 3.6-4.98 6.73-4.98z"/></svg>
+                Registrarte con Google
+              </button>
+            </div>
+
+            <div class="auth-footer">¿Ya tienes cuenta? <span class="link-text" onclick="goTo('login')">Inicia sesión</span></div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= RECUPERAR CONTRASEÑA ================= -->
+      <section class="screen" id="screen-forgot">
+        <div class="top-space"></div>
+        <div class="topbar">
+          <button class="icon-btn" onclick="goTo('login')"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <h1>Recuperar contraseña</h1>
+          <span style="width:36px;"></span>
+        </div>
+        <div class="scroll">
+          <div class="auth-wrap" style="padding-top:6px;">
+
+            <!-- Paso 1: solicitar -->
+            <div id="forgotStep1">
+              <p style="font-size:13.5px; color:var(--ink-2); line-height:1.6; margin:0 0 4px;">Ingresa el correo asociado a tu cuenta y te enviaremos instrucciones para restablecer tu contraseña.</p>
+              <div class="field" id="forgotEmailField">
+                <label>Correo electrónico</label>
+                <div class="field-input-wrap"><input type="email" id="forgotEmail" placeholder="nombre@correo.com"></div>
+                <div class="field-hint" id="forgotEmailHint">No se encontró una cuenta asociada a este correo</div>
+              </div>
+              <button class="btn btn-primary btn-block" onclick="attemptForgotRequest()">Enviar instrucciones</button>
+            </div>
+
+            <!-- Confirmación de envío -->
+            <div id="forgotConfirm" style="display:none; flex-direction:column; gap:16px;">
+              <div class="auth-confirm">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><polyline points="22 6 12 13 2 6"/></svg>
+                <span>Enviamos instrucciones a <b id="forgotSentEmail"></b>. Revisa tu bandeja de entrada.</span>
+              </div>
+              <button class="btn btn-outline btn-block" onclick="goToForgotStep2()">Ya tengo el código, continuar</button>
+            </div>
+
+
+            <!-- Paso 2: nueva contraseña -->
+            <div id="forgotStep2" style="display:none; flex-direction:column; gap:16px;">
+              <p style="font-size:13.5px; color:var(--ink-2); line-height:1.6; margin:0;">Ingresa y confirma tu nueva contraseña.</p>
+              <div class="field" id="newPasswordField">
+                <label>Nueva contraseña</label>
+                <div class="field-input-wrap">
+                  <input type="password" id="newPassword" placeholder="Nueva contraseña" oninput="updateResetPwChecklist()">
+                  <button class="pw-eye" onclick="togglePw('newPassword', this)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                </div>
+                <div class="field-hint" id="newPasswordHint">La contraseña no cumple los requisitos</div>
+                <div class="req-list">
+                  <div class="req-item" id="resetReqLen"><span class="dot"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Mínimo 8 caracteres</div>
+                  <div class="req-item" id="resetReqUpper"><span class="dot"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Una letra mayúscula</div>
+                  <div class="req-item" id="resetReqSpecial"><span class="dot"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Un carácter especial (no espacio)</div>
+                </div>
+              </div>
+              <div class="field" id="confirmPasswordField">
+                <label>Confirmar contraseña</label>
+                <div class="field-input-wrap"><input type="password" id="confirmPassword" placeholder="Repite la nueva contraseña"></div>
+                <div class="field-hint" id="confirmPasswordHint">Las contraseñas no coinciden</div>
+              </div>
+              <button class="btn btn-primary btn-block" onclick="attemptResetPassword()">Actualizar contraseña</button>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PERMISOS ================= -->
+      <section class="screen" id="screen-permissions">
+        <div class="top-space"></div>
+
+        <div class="topbar"><h1>Permisos</h1><span style="width:36px;"></span></div>
+        <div class="scroll">
+          <div class="perm-wrap">
+            <p style="font-size:13px; color:var(--ink-2); line-height:1.6; margin:0 0 4px;">TRAZA necesita estos permisos para registrar tus entrenamientos. Puedes concederlos ahora o más adelante.</p>
+
+            <div class="card permission-card" id="permLocationCard">
+              <div class="perm-head">
+                <div class="perm-ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+                <div>
+                  <div class="perm-title">Ubicación</div>
+                  <div class="perm-desc">Necesaria para trazar tu recorrido y calcular la distancia mientras entrenas.</div>
+                </div>
+              </div>
+              <div class="perm-actions">
+                <div class="perm-btn-row"><button class="btn btn-outline btn-sm" onclick="grantPermission('location')">Permitir ubicación</button></div>
+                <div class="perm-granted-tag"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Permiso concedido</div>
+                <button class="perm-skip" onclick="showToast('Podrás activarlo luego cuando lo necesites')">Ahora no</button>
+              </div>
+            </div>
+
+            <div class="card permission-card" id="permHealthCard">
+              <div class="perm-head">
+                <div class="perm-ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></div>
+                <div>
+                  <div class="perm-title">Datos de salud</div>
+                  <div class="perm-desc">Con tu permiso, TRAZA registrará métricas de salud durante tus entrenamientos.</div>
+                </div>
+              </div>
+              <div class="perm-actions">
+                <div class="perm-btn-row"><button class="btn btn-outline btn-sm" onclick="grantPermission('health')">Permitir acceso</button></div>
+                <div class="perm-granted-tag"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Permiso concedido</div>
+                <button class="perm-skip" onclick="showToast('Podrás activarlo luego cuando lo necesites')">Ahora no</button>
+
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block" style="margin-top:4px;" onclick="goTo('goals')">Continuar</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= OBJETIVOS ================= -->
+      <section class="screen" id="screen-goals">
+        <div class="top-space"></div>
+        <div class="topbar">
+          <button class="icon-btn" onclick="goTo('permissions')"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <h1>Objetivos</h1>
+          <span style="width:36px;"></span>
+        </div>
+        <div class="scroll">
+          <div class="goals-wrap">
+            <p style="font-size:13px; color:var(--ink-2); line-height:1.6; margin:0 0 4px;">Elige uno o varios objetivos para personalizar tu experiencia. Podrás modificarlos cuando quieras.</p>
+
+            <div class="card goal-card" id="goalDistanceCard" onclick="toggleGoal('distance')">
+              <div class="goal-card-head">
+                <div><div class="txt">Distancia semanal</div><div class="desc">Define cuántos km quieres correr por semana</div></div>
+                <div class="goal-check"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+              </div>
+              <div class="goal-input-row" onclick="event.stopPropagation()">
+                <input type="number" id="goalDistanceValue" value="10" min="1">
+                <span class="unit">km por semana</span>
+              </div>
+            </div>
+
+            <div class="card goal-card" id="goalFrequencyCard" onclick="toggleGoal('frequency')">
+
+              <div class="goal-card-head">
+                <div><div class="txt">Frecuencia de entrenamiento</div><div class="desc">Define cuántas veces por semana quieres entrenar</div></div>
+                <div class="goal-check"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+              </div>
+              <div class="goal-input-row" onclick="event.stopPropagation()">
+                <input type="number" id="goalFrequencyValue" value="3" min="1" max="7">
+                <span class="unit">veces por semana</span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block" style="margin-top:4px;" onclick="attemptSaveGoals()">Guardar objetivos</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= HOME / SELECCIONAR ACTIVIDAD ================= -->
+      <section class="screen" id="screen-home">
+        <div class="top-space"></div>
+        <div class="home-wrap">
+          <div class="home-head">
+            <div>
+              <div class="hi">Listo para entrenar</div>
+              <div class="sub">Elige tu actividad y comienza</div>
+            </div>
+            <button class="icon-btn" onclick="goTo('history')"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+          </div>
+
+          <div class="activity-chip-row" id="activityChipRow">
+            <div class="activity-chip on" data-type="Correr" onclick="selectActivity('Correr', this)">Correr</div>
+            <div class="activity-chip" data-type="Ciclismo" onclick="selectActivity('Ciclismo', this)">Ciclismo</div>
+            <div class="activity-chip" data-type="Caminar" onclick="selectActivity('Caminar', this)">Caminar</div>
+          </div>
+
+
+          <div class="home-center">
+            <div class="big-ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg></div>
+            <h2 id="homeActivityLabel">Correr</h2>
+            <p>Al iniciar verás el cronómetro, tu ubicación y la distancia recorrida en tiempo real.</p>
+          </div>
+
+          <button class="btn btn-primary btn-block" onclick="attemptStartActivity()">Iniciar actividad</button>
+        </div>
+      </section>
+
+      <!-- ================= REGISTRAR ENTRENAMIENTO ================= -->
+      <section class="screen" id="screen-tracking">
+        <div class="top-space"></div>
+        <div class="track-topbar">
+          <button class="icon-btn on-dark" onclick="cancelTracking()"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <span class="lbl" id="trackActivityLabel">Correr</span>
+          <span style="width:36px;"></span>
+        </div>
+        <div class="track-map">
+          <span class="track-pill" id="trackLivePill"><span class="rdot"></span>Ubicación en vivo</span>
+          <svg viewBox="0 0 300 300" fill="none">
+            <path id="trackPath" d="M40 240 C 80 180, 60 140, 110 120 C 160 100, 170 60, 230 50 C 260 40, 250 90, 210 110 C 170 130, 190 190, 240 210 C 270 225, 220 260, 170 240 C 130 224, 90 250, 60 220 C 40 200, 30 260, 40 240 Z" stroke="#D7F204" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle id="trackMarker" cx="40" cy="240" r="6" fill="#D7F204"/>
+          </svg>
+          <div class="track-perm-note" id="trackPermNote">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <p>Sin permiso de ubicación no se puede mostrar tu recorrido en el mapa.</p>
+          </div>
+        </div>
+        <div class="track-timer">
+          <div class="time" id="trackTime">00:00:00</div>
+
+          <div class="lbl">Tiempo</div>
+        </div>
+        <div class="track-stats">
+          <div><div class="num" id="trackDistance">0.00 km</div><div class="lbl">Distancia</div></div>
+          <div><div class="num" id="trackPace">0'00"</div><div class="lbl">Ritmo /km</div></div>
+        </div>
+        <div class="track-controls">
+          <button class="side-btn" id="trackPauseBtn" onclick="togglePauseTracking()">
+            <svg class="i" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          <button class="rec-btn" onclick="finishTracking()">
+            <svg class="i" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= RESUMEN ================= -->
+      <section class="screen" id="screen-summary">
+        <div class="top-space"></div>
+        <div class="topbar"><span></span><h1>Resumen</h1>
+          <button class="icon-btn" id="summaryCloseBtn" onclick="closeSummary()"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="scroll">
+          <div class="summary-hero">
+            <div class="check"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <h2 id="summaryTitle">¡Entrenamiento completado!</h2>
+            <p id="summarySubtitle">Correr · hoy</p>
+          </div>
+          <div class="summary-body">
+            <div class="summary-stats">
+              <div class="stat-box"><div class="num" id="summaryTime">00:00:00</div><div class="lbl">Tiempo</div></div>
+              <div class="stat-box"><div class="num" id="summaryDistance">0.00 km</div><div class="lbl">Distancia</div></div>
+
+            </div>
+            <div class="summary-pace">Ritmo promedio: <b id="summaryPace">0'00"/km</b></div>
+            <div class="summary-map">
+              <svg viewBox="0 0 300 110" fill="none">
+                <path d="M20 90 C 50 60, 40 40, 80 35 C 120 30, 130 15, 170 20 C 210 25, 200 55, 240 60 C 260 62, 270 45, 280 30" stroke="#D7F204" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="20" cy="90" r="5" fill="#fff"/>
+                <circle cx="280" cy="30" r="5" fill="#D7F204"/>
+              </svg>
+            </div>
+            <button class="btn btn-primary btn-block" id="summarySaveBtn" onclick="saveTraining()">Guardar entrenamiento</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= HISTORIAL ================= -->
+      <section class="screen" id="screen-history">
+        <div class="top-space"></div>
+        <div class="topbar">
+          <button class="icon-btn" onclick="goTo('home')"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <h1>Historial de entrenamientos</h1>
+          <span style="width:36px;"></span>
+        </div>
+        <div class="scroll">
+          <div class="history-wrap" id="historyList"></div>
+          <div class="history-empty" id="historyEmpty" style="display:none;">
+            <div class="big-ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <h2>Aún no tienes entrenamientos</h2>
+            <p>Cuando termines tu primer entrenamiento, aparecerá aquí.</p>
+            <button class="btn btn-primary btn-sm" onclick="goTo('home')">Iniciar mi primer entrenamiento</button>
+          </div>
+        </div>
+      </section>
+
+
+    </div>
+
+    <!-- ================= GOOGLE MODAL ================= -->
+    <div class="modal-overlay" id="googleModal">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div id="googleModalChoice">
+          <h2>Elegir una cuenta</h2>
+          <p class="sub">para continuar en TRAZA</p>
+          <div class="google-row" onclick="selectGoogleAccount()">
+            <div class="avatar">VR</div>
+            <div><div class="name">Valentina Ríos</div><div class="mail">valentina.rios@gmail.com</div></div>
+          </div>
+          <div class="modal-secondary" onclick="selectGoogleAccount()">
+            <div class="icon-circle"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+            Usar otra cuenta
+          </div>
+        </div>
+        <div id="googleModalLoading" style="display:none;">
+          <div class="modal-loading"><div class="spinner"></div>Verificando cuenta…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+const SCREEN_LABELS = {
+  login:'Inicio de sesión', register:'Registro', forgot:'Recuperar contraseña', permissions:'Permisos',
+
+  goals:'Objetivos', home:'Seleccionar actividad', tracking:'Registrar entrenamiento', summary:'Resumen', history:'Historial'
+};
+const DARK_SCREENS = ['tracking'];
+
+const DEMO_ACCOUNT = { email:'demo@traza.app', password:'Traza123!' };
+const TAKEN_EMAILS = ['demo@traza.app'];
+
+let current = 'login';
+let googleFlow = null;
+let permissions = { location:false, health:false };
+let goals = { distance:false, distanceValue:10, frequency:false, frequencyValue:3 };
+let activityType = 'Correr';
+let isNewUserFlow = false;
+
+let tracking = { seconds:0, distanceKm:0, paused:false, intervalId:null, pathLen:0, pathProgress:0 };
+let history = [
+  { type:'Correr', when:'hace 2 días', distanceKm:5.10, seconds:28*60+14 },
+  { type:'Caminar', when:'hace 5 días', distanceKm:3.20, seconds:32*60+5 }
+];
+let viewingHistoryIndex = null;
+
+function showScreen(id){
+  current = id;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  document.querySelectorAll('.jump-chip').forEach(c => c.classList.toggle('on', c.dataset.id === id));
+  document.getElementById('statusBar').classList.toggle('on-dark', DARK_SCREENS.includes(id));
+}
+function goTo(id){ showScreen(id); }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+/* ---------- field helpers ---------- */
+function setError(fieldId, hintId, message){
+  document.getElementById(fieldId).classList.add('error');
+  if (message) document.getElementById(hintId).textContent = message;
+}
+function clearError(fieldId){
+  document.getElementById(fieldId).classList.remove('error');
+}
+function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+function pwRules(v){
+  return { len: v.length >= 8, upper: /[A-Z]/.test(v), special: /[^A-Za-z0-9\s]/.test(v) };
+}
+function pwValid(v){ const r = pwRules(v); return r.len && r.upper && r.special; }
+function togglePw(inputId, btn){
+  const el = document.getElementById(inputId);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+/* ---------- LOGIN ---------- */
+function attemptLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  let ok = true;
+  clearError('loginEmailField'); clearError('loginPasswordField');
+  document.getElementById('loginAlert').classList.remove('show');
+
+
+  if (!email){ setError('loginEmailField','loginEmailHint','Ingresa tu correo electrónico'); ok = false; }
+  else if (!isValidEmail(email)){ setError('loginEmailField','loginEmailHint','Ingresa un correo válido, ej: nombre@correo.com'); ok = false; }
+
+  if (!pass){ setError('loginPasswordField','loginPasswordHint','Ingresa tu contraseña'); ok = false; }
+
+  if (!ok) return;
+
+  if (email.toLowerCase() === DEMO_ACCOUNT.email && pass === DEMO_ACCOUNT.password){
+    isNewUserFlow = false;
+    goTo('home');
+  } else {
+    document.getElementById('loginAlert').classList.add('show');
+  }
+}
+
+/* ---------- REGISTER ---------- */
+function updatePwChecklist(){
+  const v = document.getElementById('registerPassword').value;
+  const r = pwRules(v);
+  document.getElementById('reqLen').classList.toggle('met', r.len);
+  document.getElementById('reqUpper').classList.toggle('met', r.upper);
+  document.getElementById('reqSpecial').classList.toggle('met', r.special);
+}
+function attemptRegister(){
+  const email = document.getElementById('registerEmail').value.trim();
+  const pass = document.getElementById('registerPassword').value;
+  let ok = true;
+  clearError('registerEmailField'); clearError('registerPasswordField');
+  document.getElementById('registerAlert').classList.remove('show');
+
+  if (!email){ setError('registerEmailField','registerEmailHint','Ingresa tu correo electrónico'); ok = false; }
+  else if (!isValidEmail(email)){ setError('registerEmailField','registerEmailHint','Ingresa un correo válido, ej: nombre@correo.com'); ok = false; }
+
+  else if (TAKEN_EMAILS.includes(email.toLowerCase())){
+    document.getElementById('registerAlertText').innerHTML = `El correo ingresado ya está asociado a una cuenta. <span class="recover-link" onclick="goTo('login')">Inicia sesión</span>`;
+    document.getElementById('registerAlert').classList.add('show');
+    ok = false;
+  }
+
+  if (!pwValid(pass)){ setError('registerPasswordField','registerPasswordHint','La contraseña no cumple los requisitos'); ok = false; }
+
+  if (!ok) return;
+
+  isNewUserFlow = true;
+  goTo('permissions');
+}
+
+/* ---------- FORGOT PASSWORD ---------- */
+function resetForgot(){
+  document.getElementById('forgotStep1').style.display = 'block';
+  document.getElementById('forgotConfirm').style.display = 'none';
+  document.getElementById('forgotStep2').style.display = 'none';
+  document.getElementById('forgotEmail').value = '';
+  clearError('forgotEmailField');
+}
+function attemptForgotRequest(){
+  const email = document.getElementById('forgotEmail').value.trim();
+  clearError('forgotEmailField');
+  if (!email){ setError('forgotEmailField','forgotEmailHint','Ingresa tu correo electrónico'); return; }
+  if (email.toLowerCase() !== DEMO_ACCOUNT.email){
+    setError('forgotEmailField','forgotEmailHint','No se encontró una cuenta asociada a este correo');
+    return;
+  }
+  document.getElementById('forgotSentEmail').textContent = email;
+  document.getElementById('forgotStep1').style.display = 'none';
+
+  document.getElementById('forgotConfirm').style.display = 'flex';
+}
+function goToForgotStep2(){
+  document.getElementById('forgotConfirm').style.display = 'none';
+  document.getElementById('forgotStep2').style.display = 'flex';
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+  clearError('newPasswordField'); clearError('confirmPasswordField');
+  updateResetPwChecklist();
+}
+function updateResetPwChecklist(){
+  const v = document.getElementById('newPassword').value;
+  const r = pwRules(v);
+  document.getElementById('resetReqLen').classList.toggle('met', r.len);
+  document.getElementById('resetReqUpper').classList.toggle('met', r.upper);
+  document.getElementById('resetReqSpecial').classList.toggle('met', r.special);
+}
+function attemptResetPassword(){
+  const pass = document.getElementById('newPassword').value;
+  const confirm = document.getElementById('confirmPassword').value;
+  let ok = true;
+  clearError('newPasswordField'); clearError('confirmPasswordField');
+
+  if (!pwValid(pass)){ setError('newPasswordField','newPasswordHint','La contraseña no cumple los requisitos'); ok = false; }
+  if (pass !== confirm || !confirm){ setError('confirmPasswordField','confirmPasswordHint','Las contraseñas no coinciden'); ok = false; }
+
+  if (!ok) return;
+  showToast('Contraseña actualizada');
+  goTo('login');
+}
+
+/* ---------- GOOGLE MODAL ---------- */
+
+function openGoogleModal(flow){
+  googleFlow = flow;
+  document.getElementById('googleModalChoice').style.display = 'block';
+  document.getElementById('googleModalLoading').style.display = 'none';
+  document.getElementById('googleModal').classList.add('show');
+}
+function closeGoogleModal(){
+  document.getElementById('googleModal').classList.remove('show');
+}
+function selectGoogleAccount(){
+  document.getElementById('googleModalChoice').style.display = 'none';
+  document.getElementById('googleModalLoading').style.display = 'block';
+  setTimeout(() => {
+    closeGoogleModal();
+    if (googleFlow === 'register'){
+      isNewUserFlow = true;
+      goTo('permissions');
+    } else {
+      isNewUserFlow = false;
+      goTo('home');
+    }
+  }, 900);
+}
+
+/* ---------- PERMISSIONS ---------- */
+function grantPermission(kind){
+  permissions[kind] = true;
+  const cardId = kind === 'location' ? 'permLocationCard' : 'permHealthCard';
+  document.getElementById(cardId).classList.add('granted');
+  showToast(kind === 'location' ? 'Permiso de ubicación concedido' : 'Permiso de datos de salud concedido');
+}
+
+
+/* ---------- GOALS ---------- */
+function toggleGoal(kind){
+  goals[kind] = !goals[kind];
+  const cardId = kind === 'distance' ? 'goalDistanceCard' : 'goalFrequencyCard';
+  document.getElementById(cardId).classList.toggle('selected', goals[kind]);
+}
+function attemptSaveGoals(){
+  if (!goals.distance && !goals.frequency){
+    showToast('Selecciona al menos un objetivo');
+    return;
+  }
+  goals.distanceValue = parseInt(document.getElementById('goalDistanceValue').value) || 10;
+  goals.frequencyValue = parseInt(document.getElementById('goalFrequencyValue').value) || 3;
+  showToast('Objetivos guardados');
+  goTo('home');
+}
+
+/* ---------- HOME ---------- */
+function selectActivity(type, el){
+  activityType = type;
+  document.querySelectorAll('#activityChipRow .activity-chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('homeActivityLabel').textContent = type;
+}
+function attemptStartActivity(){
+  if (!permissions.location){
+    showToast('Para iniciar un recorrido debes aceptar el permiso de ubicación');
+    goTo('permissions');
+    return;
+  }
+  startTracking();
+}
+
+
+/* ---------- TRACKING ---------- */
+function startTracking(){
+  tracking.seconds = 0;
+  tracking.distanceKm = 0;
+  tracking.paused = false;
+  tracking.pathProgress = 0;
+  document.getElementById('trackActivityLabel').textContent = activityType;
+  document.getElementById('trackTime').textContent = '00:00:00';
+  document.getElementById('trackDistance').textContent = '0.00 km';
+  document.getElementById('trackPace').textContent = `0'00"`;
+  document.getElementById('trackPermNote').classList.remove('show');
+  document.getElementById('trackLivePill').style.display = 'flex';
+  setPauseBtnIcon(false);
+
+  const pathEl = document.getElementById('trackPath');
+  tracking.pathLen = pathEl.getTotalLength();
+
+  goTo('tracking');
+
+  if (tracking.intervalId) clearInterval(tracking.intervalId);
+  tracking.intervalId = setInterval(tickTracking, 1000);
+}
+function tickTracking(){
+  if (tracking.paused) return;
+  tracking.seconds += 1;
+  tracking.distanceKm += 0.003 + Math.random() * 0.002;
+
+  document.getElementById('trackTime').textContent = formatTime(tracking.seconds);
+  document.getElementById('trackDistance').textContent = tracking.distanceKm.toFixed(2) + ' km';
+  document.getElementById('trackPace').textContent = calcPace(tracking.seconds, tracking.distanceKm);
+
+
+  tracking.pathProgress = (tracking.pathProgress + 5) % tracking.pathLen;
+  const pathEl = document.getElementById('trackPath');
+  const pt = pathEl.getPointAtLength(tracking.pathProgress);
+  document.getElementById('trackMarker').setAttribute('cx', pt.x);
+  document.getElementById('trackMarker').setAttribute('cy', pt.y);
+}
+function formatTime(totalSeconds){
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return [h,m,s].map(n => String(n).padStart(2,'0')).join(':');
+}
+function calcPace(seconds, km){
+  if (km <= 0) return `0'00"`;
+  const paceSec = seconds / km;
+  const m = Math.floor(paceSec / 60);
+  const s = Math.round(paceSec % 60);
+  return m + "'" + String(s).padStart(2,'0') + '"';
+}
+function setPauseBtnIcon(paused){
+  const btn = document.getElementById('trackPauseBtn');
+  btn.innerHTML = paused
+    ? '<svg class="i" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>'
+    : '<svg class="i" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+}
+function togglePauseTracking(){
+  tracking.paused = !tracking.paused;
+  setPauseBtnIcon(tracking.paused);
+  showToast(tracking.paused ? 'Actividad en pausa' : 'Actividad reanudada');
+}
+function cancelTracking(){
+  if (!confirm('¿Descartar este entrenamiento? El progreso no se guardará.')) return;
+
+  clearInterval(tracking.intervalId);
+  goTo('home');
+}
+function finishTracking(){
+  clearInterval(tracking.intervalId);
+  viewingHistoryIndex = null;
+  document.getElementById('summaryTitle').textContent = '¡Entrenamiento completado!';
+  document.getElementById('summarySubtitle').textContent = activityType + ' · hoy';
+  document.getElementById('summaryTime').textContent = formatTime(tracking.seconds);
+  document.getElementById('summaryDistance').textContent = tracking.distanceKm.toFixed(2) + ' km';
+  document.getElementById('summaryPace').textContent = calcPace(tracking.seconds, tracking.distanceKm) + '/km';
+  document.getElementById('summarySaveBtn').style.display = 'inline-flex';
+  goTo('summary');
+}
+
+/* ---------- SUMMARY ---------- */
+function saveTraining(){
+  history.unshift({ type:activityType, when:'hoy', distanceKm:tracking.distanceKm, seconds:tracking.seconds });
+  showToast('Entrenamiento guardado');
+  goTo('home');
+}
+function closeSummary(){
+  if (viewingHistoryIndex !== null){
+    goTo('history');
+  } else {
+    goTo('home');
+  }
+}
+
+/* ---------- HISTORY ---------- */
+function activityIcon(type){
+  if (type === 'Ciclismo') return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
+
+  if (type === 'Caminar') return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M6 21l2-6 3-2 1-4-4 1-2 4M12 13l3 2 3 6"/></svg>';
+  return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>';
+}
+function renderHistory(){
+  const list = document.getElementById('historyList');
+  const empty = document.getElementById('historyEmpty');
+  if (history.length === 0){
+    list.style.display = 'none';
+    empty.style.display = 'flex';
+    return;
+  }
+  list.style.display = 'flex';
+  list.style.flexDirection = 'column';
+  empty.style.display = 'none';
+  list.innerHTML = history.map((h, i) => `
+    <div class="history-list-row" onclick="viewHistoryEntry(${i})">
+      <div class="ic">${activityIcon(h.type)}</div>
+      <div class="info">
+        <div class="type-date">${h.type} · ${h.when}</div>
+        <div class="meta">${h.distanceKm.toFixed(2)} km · ${formatTime(h.seconds)}</div>
+      </div>
+      <svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`).join('');
+}
+function viewHistoryEntry(i){
+  viewingHistoryIndex = i;
+  const h = history[i];
+  document.getElementById('summaryTitle').textContent = 'Entrenamiento guardado';
+  document.getElementById('summarySubtitle').textContent = h.type + ' · ' + h.when;
+  document.getElementById('summaryTime').textContent = formatTime(h.seconds);
+  document.getElementById('summaryDistance').textContent = h.distanceKm.toFixed(2) + ' km';
+  document.getElementById('summaryPace').textContent = calcPace(h.seconds, h.distanceKm) + '/km';
+
+  document.getElementById('summarySaveBtn').style.display = 'none';
+  goTo('summary');
+}
+
+/* ---------- Jump row (presentation only) ---------- */
+const jumpRow = document.getElementById('jumpRow');
+jumpRow.innerHTML = Object.entries(SCREEN_LABELS).map(([id,label]) =>
+  `<button class="jump-chip" data-id="${id}" onclick="jumpTo('${id}')">${label}</button>`
+).join('');
+function jumpTo(id){
+  if (id === 'history') renderHistory();
+  showScreen(id);
+}
+
+renderHistory();
+showScreen('login');
+</script>
+
+</body>
+</html>

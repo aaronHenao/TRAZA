@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>Confirma tu cuenta de TRAZA</title>
+</head>
+<!--
+  Plantilla "Confirm sign up" de Supabase (Authentication > Emails > Templates).
+  Se copia al dashboard a mano: este archivo solo la versiona. Mismo diseño que
+  recuperar_password.html.
+
+  Variables de Supabase: {{ .ConfirmationURL }} el enlace, {{ .Email }} el correo.
+-->
+<body style="margin:0;padding:0;background-color:#F6F6F9;">
+
+  <!-- Texto que aparece junto al asunto en la bandeja de entrada -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+    Confirma tu correo para empezar a registrar tus entrenamientos en TRAZA.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F6F9;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#FFFFFF;border:1px solid #EAEAF0;border-radius:24px;">
+
+          <!-- Marca -->
+          <tr>
+            <td style="padding:36px 36px 0 36px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="36" height="36" align="center" valign="middle" style="width:36px;height:36px;background-color:#613DC1;border-radius:10px;font-size:18px;line-height:36px;">&#128506;&#65039;</td>
+                  <td style="padding-left:10px;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:800;letter-spacing:0.5px;color:#0D0D0D;">TRAZA</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Título -->
+          <tr>
+            <td style="padding:32px 36px 0 36px;font-family:Arial,Helvetica,sans-serif;">
+              <h1 style="margin:0;font-size:24px;font-weight:800;line-height:1.3;color:#0D0D0D;">Confirma tu correo</h1>
+              <p style="margin:12px 0 0 0;font-size:15px;line-height:1.6;color:#6B6B70;">
+                Gracias por registrarte en TRAZA. Confirma que
+                <strong style="color:#0D0D0D;">{{ .Email }}</strong>
+                es tu correo para empezar a registrar tus entrenamientos.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Botón: tabla + enlace, la forma que funciona en todos los clientes -->
+          <tr>
+            <td align="center" style="padding:28px 36px 0 36px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="background-color:#613DC1;border-radius:999px;">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:14px 36px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:999px;">
+                      Confirmar mi correo
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Vencimiento -->
+          <tr>
+            <td style="padding:24px 36px 0 36px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F8FCDA;border-radius:12px;">
+                <tr>
+                  <td style="padding:12px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#57611A;">
+                    &#9201;&#65039; El enlace vence en <strong>1 hora</strong>. Después tendrás que registrarte de nuevo.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Enlace de respaldo y seguridad -->
+          <tr>
+            <td style="padding:24px 36px 36px 36px;font-family:Arial,Helvetica,sans-serif;">
+              <p style="margin:0;padding-top:20px;border-top:1px solid #EAEAF0;font-size:13px;line-height:1.6;color:#6B6B70;">
+                ¿El botón no funciona? Copia este enlace en tu navegador:
+              </p>
+              <p style="margin:6px 0 0 0;font-size:12px;line-height:1.5;word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#613DC1;">{{ .ConfirmationURL }}</a>
+              </p>
+              <p style="margin:16px 0 0 0;font-size:13px;line-height:1.6;color:#6B6B70;">
+                ¿No creaste una cuenta en TRAZA? Ignora este correo.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+        <!-- Pie -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+          <tr>
+            <td align="center" style="padding:20px 16px 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#A3A3A8;">
+              TRAZA · App de running<br>
+              Este es un correo automático, por favor no lo respondas.
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

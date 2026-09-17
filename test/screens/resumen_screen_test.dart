@@ -7,10 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/services/entrenamiento_service.dart';
+import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/trazado_recorrido.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 
 /// Pruebas de la pantalla de resumen: su diseño (SCRUM-117), que muestre solo
@@ -99,6 +102,48 @@ void main() {
       );
       expect(dibujo.trazado.puntos, hasLength(3));
       expect(find.text('Sin recorrido registrado'), findsNothing);
+    });
+
+    testWidgets('al tocar el recorrido lo muestra sobre el mapa y se puede '
+        'volver al resumen (SCRUM-120)', (tester) async {
+      final puntos = [
+        puntoDePrueba(latitud: 6.2311, longitud: -75.6105),
+        puntoDePrueba(latitud: 6.2320, longitud: -75.6100),
+        puntoDePrueba(latitud: 6.2332, longitud: -75.6108),
+      ];
+      await _montar(
+        tester,
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: 'e-123',
+          nombreActividad: 'Trote',
+          fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+          duracion: const Duration(minutes: 32, seconds: 17),
+          distanciaMetros: 5230.5,
+          puntos: puntos,
+        ),
+      );
+      expect(find.byType(MapaTrayecto), findsNothing);
+
+      await tester.tap(find.text('Ver en el mapa'));
+      await tester.pumpAndSettle();
+
+      final mapa = tester.widget<MapaTrayecto>(find.byType(MapaTrayecto));
+      expect(mapa.puntos, puntos);
+      expect(find.text('Recorrido'), findsOneWidget);
+      expect(find.text('Partida'), findsOneWidget);
+      expect(find.text('Llegada'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Cerrar mapa'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MapaTrayecto), findsNothing);
+      expect(find.text('¡Entrenamiento completado!'), findsOneWidget);
+    });
+
+    testWidgets('sin puntos GPS no ofrece ver el mapa', (tester) async {
+      await _montar(tester, resumen: resumen);
+
+      expect(find.text('Ver en el mapa'), findsNothing);
     });
 
     testWidgets('la X de la barra superior vuelve al inicio', (tester) async {
@@ -391,6 +436,8 @@ Future<_EntrenamientosFalso> _montar(
           RelojFalso(DateTime(2026, 1, 1, 9)).call,
         ),
         entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
+        // El mapa del recorrido no descarga tiles reales.
+        proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

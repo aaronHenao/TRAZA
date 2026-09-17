@@ -1,491 +1,279 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:traza/services/tipos_actividad_service.dart';
-import 'package:traza/models/configuracion_inicio.dart';
-import 'package:traza/models/tipo_actividad.dart';
-import 'package:traza/services/actividad_provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/screens/home/inicio_screen.dart';
-import 'package:traza/widgets/chips_tipo_actividad.dart';
-import 'package:traza/widgets/seccion_iniciar_entrenamiento.dart';
-
-/// Pruebas de la pantalla de inicio: su diseño (SCRUM-91), los chips de tipo
-/// de actividad (SCRUM-92), la configuración de inicio (SCRUM-93) y el cambio
-/// de actividad solo antes de iniciar (SCRUM-94).
-void main() {
-  group('diseño de la pantalla', () {
-    testWidgets('muestra la cabecera del prototipo', (tester) async {
-      await _montar(tester);
-
-      expect(find.text('Listo para entrenar'), findsOneWidget);
-      expect(find.text('Elige tu actividad y comienza'), findsOneWidget);
-    });
-
-    testWidgets('muestra la sección para iniciar el entrenamiento', (
-      tester,
-    ) async {
-      await _montar(tester);
-
-      expect(
-        find.text(
-          'Al iniciar verás el cronómetro, tu ubicación y la distancia '
-          'recorrida en tiempo real.',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.widgetWithText(FilledButton, 'Iniciar actividad'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('el historial está disponible (SCRUM-125)', (tester) async {
-      await _montar(tester);
-
-      expect(find.byTooltip('Historial'), findsOneWidget);
-      expect(
-        tester
-            .widget<IconButton>(
-              find.widgetWithIcon(IconButton, Icons.schedule),
-            )
-            .onPressed,
-        isNotNull,
-      );
-    });
-
-    testWidgets('"Iniciar actividad" queda listo para arrancar (SCRUM-96)', (
-      tester,
-    ) async {
-      await _montar(tester);
-
-      expect(_botonIniciar(tester).onPressed, isNotNull);
-    });
-
-    testWidgets('sin configuración de inicio el botón no arranca nada', (
-      tester,
-    ) async {
-      // Sin sesión el catálogo es el local, cuyos tipos no traen id.
-      await _montar(
-        tester,
-        repositorio: _RepositorioFalso(TipoActividad.catalogoLocal),
-      );
-
-      expect(_botonIniciar(tester).onPressed, isNull);
-      expect(find.text(_avisoSinSesion), findsOneWidget);
-    });
-  });
-
-  group('chips de tipo de actividad', () {
-    testWidgets('muestra un chip por cada tipo del catálogo', (tester) async {
-      await _montar(tester);
-
-      expect(_chip('Correr'), findsOneWidget);
-      expect(_chip('Trote'), findsOneWidget);
-      expect(_chip('Caminar'), findsOneWidget);
-    });
-
-    testWidgets('arranca con el primer tipo marcado, como en el prototipo', (
-      tester,
-    ) async {
-      await _montar(tester);
-
-      expect(_seleccionada(tester)?.nombre, 'Correr');
-      expect(_enLaSeccion('Correr'), findsOneWidget);
-    });
-
-    testWidgets('al tocar un chip lo guarda como la actividad a realizar', (
-      tester,
-    ) async {
-      await _montar(tester);
-
-      await tester.tap(_chip('Trote'));
-      await tester.pump();
-
-      expect(_seleccionada(tester)?.nombre, 'Trote');
-      expect(_enLaSeccion('Trote'), findsOneWidget);
-      expect(_enLaSeccion('Correr'), findsNothing);
-    });
-
-    testWidgets('elegir otro chip reemplaza la selección anterior', (
-      tester,
-    ) async {
-      await _montar(tester);
-
-      await tester.tap(_chip('Trote'));
-      await tester.pump();
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-
-      expect(_seleccionada(tester)?.nombre, 'Caminar');
-      expect(_enLaSeccion('Caminar'), findsOneWidget);
-      expect(_enLaSeccion('Trote'), findsNothing);
-    });
-
-    testWidgets('la actividad elegida queda disponible con su id para el '
-        'flujo de inicio', (tester) async {
-      await _montar(tester);
-
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-
-      // El flujo de inicio (SCRUM-93 y SCRUM-96) necesita el id para crear
-      // el entrenamiento en `entrenamientos.tipo_actividad_id`.
-      expect(_seleccionada(tester)?.id, 'id-caminar');
-    });
-
-    testWidgets('con el catálogo vacío lo avisa y no hay actividad elegida', (
-      tester,
-    ) async {
-      await _montar(tester, repositorio: _RepositorioFalso([]));
-
-      expect(find.text('No hay actividades disponibles.'), findsOneWidget);
-      expect(_seleccionada(tester), isNull);
-      expect(_enLaSeccion('Ninguna actividad seleccionada'), findsOneWidget);
-    });
-
-    testWidgets('si el catálogo falla lo avisa y permite reintentar', (
-      tester,
-    ) async {
-      final repositorio = _RepositorioFalso()..error = Exception('sin red');
-      await _montar(tester, repositorio: repositorio);
-
-      expect(find.text('No pudimos cargar las actividades.'), findsOneWidget);
-      expect(_enLaSeccion('Ninguna actividad seleccionada'), findsOneWidget);
-
-      repositorio.error = null;
-      await tester.tap(find.text('Reintentar'));
-      await tester.pumpAndSettle();
-
-      expect(_chip('Correr'), findsOneWidget);
-      expect(_seleccionada(tester)?.nombre, 'Correr');
-    });
-  });
-
-  group('configuración de inicio', () {
-    testWidgets('toma el id y el nombre del tipo marcado por defecto', (
-      tester,
-    ) async {
-      await _montar(tester);
-
-      expect(
-        _configuracion(tester),
-        const ConfiguracionInicio(
-          tipoActividadId: 'id-correr',
-          nombreActividad: 'Correr',
-        ),
-      );
-    });
-
-    testWidgets('sigue al chip que el usuario elige', (tester) async {
-      await _montar(tester);
-
-      await tester.tap(_chip('Trote'));
-      await tester.pump();
-
-      expect(
-        _configuracion(tester),
-        const ConfiguracionInicio(
-          tipoActividadId: 'id-trote',
-          nombreActividad: 'Trote',
-        ),
-      );
-    });
-
-    testWidgets('sin sesión no hay configuración y la pantalla lo avisa', (
-      tester,
-    ) async {
-      // Sin sesión el repositorio devuelve el catálogo local, sin ids.
-      await _montar(
-        tester,
-        repositorio: _RepositorioFalso(TipoActividad.catalogoLocal),
-      );
-
-      expect(_seleccionada(tester)?.nombre, 'Correr');
-      expect(_configuracion(tester), isNull);
-      expect(find.text(_avisoSinSesion), findsOneWidget);
-    });
-
-    testWidgets('con sesión no muestra el aviso', (tester) async {
-      await _montar(tester);
-
-      expect(find.text(_avisoSinSesion), findsNothing);
-    });
-
-    testWidgets('sin actividad elegida no hay configuración ni aviso', (
-      tester,
-    ) async {
-      await _montar(tester, repositorio: _RepositorioFalso([]));
-
-      expect(_configuracion(tester), isNull);
-      expect(find.text(_avisoSinSesion), findsNothing);
-    });
-  });
-
-  group('cambio de actividad antes de iniciar', () {
-    testWidgets('antes de iniciar, otro chip reemplaza la actividad y la '
-        'configuración que se usará', (tester) async {
-      await _montar(tester);
-
-      await tester.tap(_chip('Trote'));
-      await tester.pump();
-
-      expect(_seleccionada(tester)?.nombre, 'Trote');
-      expect(_configuracion(tester)?.tipoActividadId, 'id-trote');
-    });
-
-    testWidgets('con el entrenamiento iniciado la actividad no cambia', (
-      tester,
-    ) async {
-      await _montar(tester);
-      _iniciada(tester).marcarIniciada();
-      await tester.pump();
-
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-
-      expect(_seleccionada(tester)?.nombre, 'Correr');
-      expect(_configuracion(tester)?.tipoActividadId, 'id-correr');
-    });
-
-    testWidgets('con el entrenamiento iniciado los chips se deshabilitan y la '
-        'pantalla lo explica', (tester) async {
-      await _montar(tester);
-      _iniciada(tester).marcarIniciada();
-      await tester.pump();
-
-      expect(find.text(_avisoEnCurso), findsOneWidget);
-      for (final nombre in ['Correr', 'Trote', 'Caminar']) {
-        final chip = tester.widget<InkWell>(
-          find.ancestor(of: _chip(nombre), matching: find.byType(InkWell)),
-        );
-        expect(chip.onTap, isNull, reason: nombre);
-      }
-    });
-
-    testWidgets('al terminar el entrenamiento se puede volver a cambiar', (
-      tester,
-    ) async {
-      await _montar(tester);
-      _iniciada(tester).marcarIniciada();
-      await tester.pump();
-      _iniciada(tester).marcarTerminada();
-      await tester.pump();
-
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-
-      expect(_seleccionada(tester)?.nombre, 'Caminar');
-      expect(find.text(_avisoEnCurso), findsNothing);
-    });
-
-    testWidgets('no se puede marcar como iniciada sin configuración de '
-        'inicio', (tester) async {
-      await _montar(
-        tester,
-        repositorio: _RepositorioFalso(TipoActividad.catalogoLocal),
-      );
-
-      expect(() => _iniciada(tester).marcarIniciada(), throwsStateError);
-      expect(_contenedor(tester).read(actividadIniciadaProvider), isFalse);
-    });
-  });
-
-  group('validación del flujo de selección (SCRUM-95)', () {
-    // Recorren la selección tal como la vive el usuario, de principio a fin.
-    //
-    // Pendiente al traer `develop` (parte B de SCRUM-93): comprobar también
-    // que la pantalla del entrenamiento en curso (`TrackingScreen`, de Aaron)
-    // muestre la actividad elegida. Hoy esa pantalla no existe en esta rama.
-
-    testWidgets('se elige, se cambia antes de iniciar y al iniciar se aplica '
-        'la configuración elegida', (tester) async {
-      await _montar(tester);
-
-      // 1. La actividad seleccionada se registra: Correr viene marcado.
-      expect(_seleccionada(tester)?.nombre, 'Correr');
-      expect(_enLaSeccion('Correr'), findsOneWidget);
-
-      // 2. El cambio antes de iniciar actualiza la selección.
-      await tester.tap(_chip('Trote'));
-      await tester.pump();
-      expect(_seleccionada(tester)?.nombre, 'Trote');
-      expect(_enLaSeccion('Trote'), findsOneWidget);
-
-      // 3. Al iniciar se aplica la configuración de lo elegido...
-      _iniciada(tester).marcarIniciada();
-      await tester.pump();
-      const trote = ConfiguracionInicio(
-        tipoActividadId: 'id-trote',
-        nombreActividad: 'Trote',
-      );
-      expect(_configuracion(tester), trote);
-
-      // ...y no cambia mientras dura el entrenamiento.
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-      expect(_seleccionada(tester)?.nombre, 'Trote');
-      expect(_configuracion(tester), trote);
-      expect(_enLaSeccion('Trote'), findsOneWidget);
-
-      // Al terminar, la actividad se puede volver a cambiar.
-      _iniciada(tester).marcarTerminada();
-      await tester.pump();
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-      expect(_seleccionada(tester)?.nombre, 'Caminar');
-    });
-
-    testWidgets('al iniciar se aplica la configuración del último chip '
-        'elegido', (tester) async {
-      await _montar(tester);
-
-      await tester.tap(_chip('Trote'));
-      await tester.pump();
-      await tester.tap(_chip('Caminar'));
-      await tester.pump();
-      _iniciada(tester).marcarIniciada();
-      await tester.pump();
-
-      expect(
-        _configuracion(tester),
-        const ConfiguracionInicio(
-          tipoActividadId: 'id-caminar',
-          nombreActividad: 'Caminar',
-        ),
-      );
-    });
-  });
-
-  group('sección para iniciar el entrenamiento', () {
-    testWidgets('con una actividad la muestra y habilita el botón', (
-      tester,
-    ) async {
-      var iniciado = false;
-      await _montar(
-        tester,
-        pantalla: Scaffold(
-          body: SeccionIniciarEntrenamiento(
-            actividad: 'Correr',
-            onIniciar: () => iniciado = true,
-          ),
-        ),
-      );
-
-      expect(find.text('Correr'), findsOneWidget);
-      expect(find.text('Ninguna actividad seleccionada'), findsNothing);
-
-      await tester.tap(find.text('Iniciar actividad'));
-      expect(iniciado, isTrue);
-    });
-
-    testWidgets('con actividad pero sin acción conectada sigue deshabilitado', (
-      tester,
-    ) async {
-      await _montar(
-        tester,
-        pantalla: const Scaffold(
-          body: SeccionIniciarEntrenamiento(
-            actividad: 'Correr',
-            onIniciar: null,
-          ),
-        ),
-      );
-
-      expect(_botonIniciar(tester).onPressed, isNull);
-    });
-
-    testWidgets('muestra el aviso que se le pase debajo del botón', (
-      tester,
-    ) async {
-      await _montar(
-        tester,
-        pantalla: const Scaffold(
-          body: SeccionIniciarEntrenamiento(
-            actividad: 'Correr',
-            onIniciar: null,
-            aviso: 'Un aviso de prueba',
-          ),
-        ),
-      );
-
-      expect(find.text('Un aviso de prueba'), findsOneWidget);
-    });
-  });
-}
-
-const _avisoSinSesion = 'Inicia sesión para empezar a entrenar.';
-const _avisoEnCurso =
-    'Hay un entrenamiento en curso: no puedes cambiar la actividad.';
-
-const _catalogo = [
-  TipoActividad(id: 'id-correr', nombre: 'Correr'),
-  TipoActividad(id: 'id-trote', nombre: 'Trote'),
-  TipoActividad(id: 'id-caminar', nombre: 'Caminar'),
-];
-
-/// Repositorio de mentira: devuelve el catálogo que se le configure o finge un
-/// fallo.
-class _RepositorioFalso implements TiposActividadRepository {
-  _RepositorioFalso([this.tipos = _catalogo]);
-
-  final List<TipoActividad> tipos;
-  Object? error;
+import 'package:traza/services/historial_service.dart';
+import 'package:traza/services/inicio_provider.dart';
+import 'package:traza/services/objetivos_service.dart';
+import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/widgets/navegacion_principal.dart';
+
+/// Historial de mentira: responde lo que la prueba le indique.
+class _HistorialFalso implements HistorialRepository {
+  _HistorialFalso(this.respuesta);
+
+  Future<List<ResumenEntrenamiento>> Function() respuesta;
 
   @override
-  Future<List<TipoActividad>> cargar() async {
-    if (error case final error?) throw error;
-    return tipos;
-  }
+  Future<List<ResumenEntrenamiento>> cargar() => respuesta();
 }
 
-Future<void> _montar(
-  WidgetTester tester, {
-  TiposActividadRepository? repositorio,
-  Widget pantalla = const InicioScreen(),
-}) async {
-  tester.view.physicalSize = const Size(390 * 3, 844 * 3);
-  tester.view.devicePixelRatio = 3;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
+/// Objetivos de mentira: solo se le pregunta por la meta de distancia.
+class _ObjetivosFalsos implements ObjetivosRepository {
+  _ObjetivosFalsos(this.respuesta);
 
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        tiposActividadRepositoryProvider.overrideWithValue(
-          repositorio ?? _RepositorioFalso(),
+  Future<Map<TipoObjetivo, num>> Function() respuesta;
+
+  @override
+  Future<Map<TipoObjetivo, num>> cargar() => respuesta();
+
+  @override
+  Future<void> guardar(Map<TipoObjetivo, num> objetivos) async {}
+}
+
+/// Pruebas de la portada: el saludo, el avance de la semana contra el
+/// objetivo del perfil, los últimos entrenamientos y las salidas hacia
+/// actividad, historial y perfil.
+void main() {
+  final ahora = DateTime(2026, 9, 16, 10);
+
+  final entrenamientos = [
+    ResumenEntrenamiento(
+      entrenamientoId: 'e3',
+      nombreActividad: 'Correr',
+      fechaFin: DateTime(2026, 9, 16, 7),
+      duracion: const Duration(minutes: 28, seconds: 14),
+      distanciaMetros: 5100,
+    ),
+    ResumenEntrenamiento(
+      entrenamientoId: 'e2',
+      nombreActividad: 'Trote',
+      fechaFin: DateTime(2026, 9, 15, 7),
+      duracion: const Duration(minutes: 20),
+      distanciaMetros: 3000,
+    ),
+    ResumenEntrenamiento(
+      entrenamientoId: 'e1',
+      nombreActividad: 'Caminar',
+      fechaFin: DateTime(2026, 9, 14, 18),
+      duracion: const Duration(minutes: 32, seconds: 5),
+      distanciaMetros: 2000,
+    ),
+    // Semana anterior: no entra en el avance ni cabe en los últimos.
+    ResumenEntrenamiento(
+      entrenamientoId: 'e0',
+      nombreActividad: 'Correr',
+      fechaFin: DateTime(2026, 9, 11, 18),
+      duracion: const Duration(minutes: 15),
+      distanciaMetros: 9000,
+    ),
+  ];
+
+  Future<void> abrirPortada(
+    WidgetTester tester, {
+    Future<List<ResumenEntrenamiento>> Function()? historial,
+    Future<Map<TipoObjetivo, num>> Function()? objetivos,
+    String? nombre = 'Ana',
+    bool esperar = true,
+  }) async {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final router = GoRouter(
+      initialLocation: '/inicio',
+      routes: [
+        GoRoute(path: '/inicio', builder: (_, _) => const InicioScreen()),
+        GoRoute(
+          path: '/actividad',
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Actividad')),
+        ),
+        GoRoute(
+          path: '/historial',
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Historial')),
+        ),
+        GoRoute(
+          path: '/perfil',
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Perfil')),
         ),
       ],
-      child: MaterialApp(home: pantalla),
-    ),
-  );
-  await tester.pumpAndSettle();
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          historialRepositoryProvider.overrideWithValue(
+            _HistorialFalso(historial ?? () async => entrenamientos),
+          ),
+          objetivosRepositoryProvider.overrideWithValue(
+            _ObjetivosFalsos(
+              objetivos ?? () async => {TipoObjetivo.distancia: 15},
+            ),
+          ),
+          // El nombre sale de la sesión de Supabase, que en las pruebas no
+          // existe.
+          nombreUsuarioProvider.overrideWithValue(nombre),
+          relojProvider.overrideWithValue(() => ahora),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    if (esperar) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+    }
+  }
+
+  group('saludo', () {
+    testWidgets('saluda con el nombre de la persona', (tester) async {
+      await abrirPortada(tester);
+
+      expect(find.text('Hola, Ana'), findsOneWidget);
+      expect(find.text('Vamos por tu meta semanal'), findsOneWidget);
+    });
+
+    testWidgets('sin nombre saluda igual, sin dejar el hueco', (tester) async {
+      await abrirPortada(tester, nombre: null);
+
+      expect(find.text('Hola'), findsOneWidget);
+    });
+  });
+
+  group('avance de la semana', () {
+    testWidgets('muestra lo recorrido contra la meta del perfil', (
+      tester,
+    ) async {
+      await abrirPortada(tester);
+
+      expect(find.text('ESTA SEMANA'), findsOneWidget);
+      // 5.1 + 3.0 + 2.0 km desde el lunes; el de la semana pasada no entra.
+      expect(find.text('10.1 / 15 km'), findsOneWidget);
+      expect(find.text('3 entrenamientos'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    });
+
+    testWidgets('sin meta de distancia invita a ponerse una', (tester) async {
+      await abrirPortada(tester, objetivos: () async => {});
+
+      expect(find.text('10.1 km'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(
+        find.text(
+          'Ponte una meta de distancia en tu perfil para seguirla desde aquí.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('si los objetivos fallan el avance se muestra igual', (
+      tester,
+    ) async {
+      await abrirPortada(tester, objetivos: () async => throw Exception('x'));
+
+      expect(find.text('10.1 km'), findsOneWidget);
+      expect(
+        find.text('No pudimos cargar tu progreso de esta semana.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('con un solo entrenamiento el conteo va en singular', (
+      tester,
+    ) async {
+      await abrirPortada(tester, historial: () async => [entrenamientos.first]);
+
+      expect(find.text('1 entrenamiento'), findsOneWidget);
+    });
+
+    testWidgets('mientras carga lo dice, y si falla también', (tester) async {
+      final pendiente = Completer<List<ResumenEntrenamiento>>();
+      await abrirPortada(
+        tester,
+        historial: () => pendiente.future,
+        esperar: false,
+      );
+
+      expect(find.text('Cargando tu progreso…'), findsOneWidget);
+
+      pendiente.completeError(Exception('sin red'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('No pudimos cargar tu progreso de esta semana.'),
+        findsOneWidget,
+      );
+      expect(find.text('No pudimos cargar tus entrenamientos.'), findsOneWidget);
+    });
+  });
+
+
+  group('últimos entrenamientos', () {
+    testWidgets('asoma los tres más recientes', (tester) async {
+      await abrirPortada(tester);
+
+      expect(find.text('ÚLTIMOS ENTRENAMIENTOS'), findsOneWidget);
+      expect(find.text('Correr · hoy'), findsOneWidget);
+      expect(find.text('5.10 km · 00:28:14'), findsOneWidget);
+      expect(find.text('Trote · ayer'), findsOneWidget);
+      expect(find.text('Caminar · 14 sep'), findsOneWidget);
+      // El cuarto es de la semana pasada: para verlo está "Ver todos".
+      expect(find.text('Correr · 11 sep'), findsNothing);
+    });
+
+    testWidgets('sin entrenamientos invita a empezar y no ofrece el '
+        'historial', (tester) async {
+      await abrirPortada(tester, historial: () async => []);
+
+      expect(
+        find.text('Todavía no has entrenado. Toca el botón + para empezar.'),
+        findsOneWidget,
+      );
+      expect(find.text('Ver todos'), findsNothing);
+    });
+
+    testWidgets('"Ver todos" abre el historial completo', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.text('Ver todos'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Historial'), findsOneWidget);
+    });
+  });
+
+  group('salidas de la portada', () {
+    testWidgets('el "+" lleva a elegir la actividad', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.byKey(NavegacionPrincipal.claveBoton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Actividad'), findsOneWidget);
+    });
+
+    testWidgets('la barra lleva al perfil', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.text('Perfil'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Perfil'), findsOneWidget);
+    });
+
+    testWidgets('la barra lleva al historial', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.text('Historial'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Historial'), findsOneWidget);
+    });
+  });
 }
-
-Finder _chip(String nombre) => find.descendant(
-  of: find.byType(ChipsTipoActividad),
-  matching: find.text(nombre),
-);
-
-Finder _enLaSeccion(String texto) => find.descendant(
-  of: find.byType(SeccionIniciarEntrenamiento),
-  matching: find.text(texto),
-);
-
-ProviderContainer _contenedor(WidgetTester tester) =>
-    ProviderScope.containerOf(tester.element(find.byType(InicioScreen)));
-
-/// La actividad a realizar, leída del [ProviderScope] que monta la pantalla.
-TipoActividad? _seleccionada(WidgetTester tester) =>
-    _contenedor(tester).read(actividadSeleccionadaProvider);
-
-/// La configuración de inicio, leída del mismo [ProviderScope].
-ConfiguracionInicio? _configuracion(WidgetTester tester) =>
-    _contenedor(tester).read(configuracionInicioProvider);
-
-/// Lo que usará el flujo de inicio (SCRUM-96) para marcar y liberar el
-/// entrenamiento en curso.
-ActividadIniciadaNotifier _iniciada(WidgetTester tester) =>
-    _contenedor(tester).read(actividadIniciadaProvider.notifier);
-
-FilledButton _botonIniciar(WidgetTester tester) =>
-    tester.widget<FilledButton>(find.byType(FilledButton));

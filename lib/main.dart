@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
+import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
+import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
 import 'screens/summary/resumen_screen.dart';
@@ -56,16 +58,40 @@ final _navegacion = GoRouter(
   routes: [
     // Login, registro y recuperación de contraseña (SCRUM-32 a SCRUM-36).
     ...rutasAuth,
-    GoRoute(path: '/perfil', builder: (context, state) => const PerfilScreen()),
+    GoRoute(
+      path: '/perfil',
+      builder: (context, state) {
+        // Durante el onboarding no lleva barra: la portada todavía no es un
+        // destino válido y el flujo sigue a Permisos.
+        if (AuthService.requiereOnboardingDe(
+          Supabase.instance.client.auth.currentUser,
+        )) {
+          return const PerfilScreen(enOnboarding: true);
+        }
+        return const NavegacionPrincipal(
+          seccion: SeccionPrincipal.perfil,
+          child: PerfilScreen(),
+        );
+      },
+    ),
     GoRoute(
       path: '/permisos',
       builder: (context, state) => const PermisosScreen(),
     ),
+    // Portada: a donde se llega al entrar y terminar el onboarding.
     GoRoute(path: '/inicio', builder: (context, state) => const InicioScreen()),
+    // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
+    GoRoute(
+      path: '/actividad',
+      builder: (context, state) => const ActividadScreen(),
+    ),
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(
       path: '/historial',
-      builder: (context, state) => const HistorialScreen(),
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.historial,
+        child: HistorialScreen(),
+      ),
     ),
     // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
     // usuario eligió en los chips del inicio (SCRUM-93).

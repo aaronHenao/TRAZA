@@ -20,12 +20,16 @@ class HistorialScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void volver() => context.canPop() ? context.pop() : context.go('/inicio');
+    // Como sección de la barra inferior no lleva flecha: se sale por la
+    // barra. Abierto encima de otra pantalla (el "+" de un resumen, por
+    // ejemplo) sí, para poder devolverse.
+    final volver = context.canPop() ? context.pop : null;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
+            const SizedBox(height: 12),
             TrazaTopBar(titulo: 'Historial de entrenamientos', onAtras: volver),
             Expanded(
               // SCRUM-127: carga, error y datos.
@@ -53,7 +57,7 @@ class HistorialScreen extends ConsumerWidget {
                                 'Cuando termines tu primer entrenamiento, '
                                 'aparecerá aquí.',
                             accion: FilledButton(
-                              onPressed: () => context.go('/inicio'),
+                              onPressed: () => context.go('/actividad'),
                               child: const Text(
                                 'Iniciar mi primer entrenamiento',
                               ),

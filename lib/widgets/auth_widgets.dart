@@ -12,7 +12,7 @@ const _colorFondoPantallaGrande = Color(0xFFF0F0F3);
 const _colorBordeTarjeta = Color(0xFFE8E8EC);
 
 /// Ancho máximo del formulario: más ancho, los campos se vuelven incómodos.
-const _anchoFormulario = 400.0;
+const _anchoFormulario = 360.0;
 
 /// Desde este tamaño se usa la tarjeta centrada en vez del diseño de celular.
 const _breakpointAncho = 600.0;
@@ -20,12 +20,27 @@ const _breakpointAlto = 600.0;
 
 /// Estructura común de las pantallas de autenticación.
 ///
-/// En celular, fondo blanco de borde a borde y contenido pegado arriba. En
-/// tablet y computador, tarjeta blanca centrada sobre fondo gris.
+/// En celular, fondo blanco de borde a borde y contenido centrado. En tablet
+/// y computador, tarjeta blanca centrada sobre fondo gris.
 class AuthLayout extends StatelessWidget {
   const AuthLayout({super.key, required this.child});
 
   final Widget child;
+
+  /// Campos un poco más bajos que los del resto de la app: aquí hay muchos
+  /// seguidos y la pantalla se ve más despejada.
+  static ThemeData _tema(BuildContext context) {
+    final tema = Theme.of(context);
+    return tema.copyWith(
+      inputDecorationTheme: tema.inputDecorationTheme.copyWith(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+        isDense: true,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,17 +51,29 @@ class AuthLayout extends StatelessWidget {
         pantalla.width >= _breakpointAncho &&
         pantalla.height >= _breakpointAlto;
 
+    final child = Theme(data: _tema(context), child: this.child);
+
     if (!esPantallaGrande) {
       return Scaffold(
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: Align(
-              alignment: Alignment.topCenter,
+          // El contenido va centrado en la pantalla mientras quepa; si no
+          // cabe (pantalla pequeña o teclado abierto), se desplaza.
+          child: LayoutBuilder(
+            builder: (context, restricciones) => SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _anchoFormulario),
-                child: child,
+                constraints: BoxConstraints(
+                  minHeight: restricciones.maxHeight - 48,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: _anchoFormulario,
+                    ),
+                    child: child,
+                  ),
+                ),
               ),
             ),
           ),
@@ -79,34 +106,28 @@ class AuthLayout extends StatelessWidget {
   }
 }
 
-/// Logo y nombre de la app.
+/// Logo de la marca, centrado. El archivo ya trae el nombre, así que no lleva
+/// texto al lado.
 class MarcaTraza extends StatelessWidget {
   const MarcaTraza({super.key});
 
+  /// Recortado del original que está al lado (`TRAZA MORADO NOMBRE.png`),
+  /// sin los márgenes en blanco que traía y con el fondo transparente.
+  static const rutaLogo = 'lib/theme/logos/traza_nombre_morado.png';
+
+  /// Contenido y no cover: el logo es muy apaisado y no se puede recortar.
+  static const _ancho = 230.0;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.map_outlined, color: Colors.white, size: 18),
-        ),
-        const SizedBox(width: 10),
-        const Text(
-          'TRAZA',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.4,
-            color: colorTextoPrincipal,
-          ),
-        ),
-      ],
+    return Center(
+      child: Image.asset(
+        rutaLogo,
+        width: _ancho,
+        fit: BoxFit.contain,
+        // Quien no pueda verlo igual sabe en qué app está.
+        semanticLabel: 'TRAZA',
+      ),
     );
   }
 }

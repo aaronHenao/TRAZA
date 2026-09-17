@@ -353,6 +353,17 @@ class AuthService {
   /// Lo mismo para el usuario con la sesión abierta.
   bool get requiereOnboarding => requiereOnboardingDe(_auth.currentUser);
 
+  /// Nombre para saludar en la portada, o null si la cuenta no tiene ninguno.
+  ///
+  /// Sale de `full_name`, el mismo metadato del que el trigger
+  /// `handle_new_user` saca `perfiles.nombre`.
+  String? get nombreUsuario {
+    final nombre = _auth.currentUser?.userMetadata?['full_name'];
+    if (nombre is! String) return null;
+    final limpio = nombre.trim();
+    return limpio.isEmpty ? null : limpio;
+  }
+
   /// Marca que el usuario terminó Perfil y Permisos. Si falla la red no se
   /// propaga: lo peor es que la próxima vez vuelva a ver esas pantallas.
   Future<void> completarOnboarding() async {

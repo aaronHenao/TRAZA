@@ -121,23 +121,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const MarcaTraza(),
               const SizedBox(height: 36),
               const Text(
-                'Inicia sesión',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: colorTextoPrincipal,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
                 'Ingresa para continuar con tus entrenamientos.',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,
                   color: colorTextoSecundario,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 26),
 
               const EtiquetaCampo('Correo electrónico'),
               TextFormField(
@@ -150,7 +142,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   hintText: 'nombre@correo.com',
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
               const EtiquetaCampo('Contraseña'),
               TextFormField(
@@ -177,7 +169,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -185,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: const Text('¿Olvidaste tu contraseña?'),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               FilledButton(
                 onPressed: enviando ? null : _onIniciarSesion,
@@ -207,13 +199,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       )
                     : const Text('Iniciar sesión'),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
               const DivisorO(),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
               const BotonGoogle(texto: 'Continuar con Google'),
-              const SizedBox(height: 26),
+              const SizedBox(height: 22),
 
               Wrap(
                 alignment: WrapAlignment.center,

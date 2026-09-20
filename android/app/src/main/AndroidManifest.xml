@@ -1,4 +1,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ubicación durante la actividad (SCRUM-108). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Rastreo con la pantalla bloqueada: servicio en primer plano con
+         notificación persistente (lo levanta geolocator). No hace falta
+         ACCESS_BACKGROUND_LOCATION: la actividad la inicia el usuario con
+         la app abierta. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Android 13+: sin este permiso la notificación del servicio no se
+         ve en la bandeja (el rastreo funciona igual). Pedirlo en tiempo de
+         ejecución es de la HU de permisos. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Tiles del mapa y Supabase. Debug/profile ya lo traen; la release no. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Datos de salud desde Health Connect (SCRUM-78). Solo lectura: la app
+         muestra lo que midió el reloj o el teléfono, no escribe nada. -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
     <application
         android:label="traza"
         android:name="${applicationName}"
@@ -29,6 +52,18 @@
             </intent-filter>
             
         </activity>
+        <!-- Android 14+: Health Connect abre esta entrada desde su pantalla de
+             permisos para explicar el uso de los datos (SCRUM-78). -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -41,6 +76,11 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Saber si Health Connect está instalado (SCRUM-78). -->
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

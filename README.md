@@ -41,12 +41,14 @@ lib/
 │   ├── tracking/                  # cronómetro + mapa + distancia en vivo
 │   ├── summary/                   # resumen del entrenamiento
 │   └── history/                   # historial de entrenamientos
+├── theme/                         # colores, tipografía y tema del prototipo
 └── widgets/                       # componentes reutilizables (chips, cards, botones)
 
 supabase/
 └── migrations/                    # historial versionado del esquema, en orden
     ├── 0001_init_sprint1.sql
-    └── 0002_perfiles.sql
+    ├── 0002_perfiles.sql
+    └── 0003_objetivos_unicos.sql
 ```
 
 ## Base de datos (Supabase)

@@ -1,6 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'screens/auth/rutas_auth.dart';
+import 'screens/history/historial_screen.dart';
+import 'screens/home/actividad_screen.dart';
+import 'screens/home/inicio_screen.dart';
+import 'widgets/navegacion_principal.dart';
+import 'screens/onboarding/perfil_screen.dart';
+import 'screens/onboarding/permisos_screen.dart';
+import 'screens/summary/resumen_screen.dart';
+import 'screens/tracking/tracking_con_actividad_elegida.dart';
+import 'services/auth_service.dart';
 import 'supabase_config.dart';
+import 'theme/app_theme.dart';
+import 'widgets/ofrece_permiso_salud.dart';
+import 'widgets/requiere_permiso_ubicacion.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -8,122 +24,111 @@ Future<void> main() async {
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
   );
-  runApp(MyApp());
+  runApp(const ProviderScope(child: TrazaApp()));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// Pantalla con la que abre la app. Por defecto, el login.
+///
+/// En un celular o emulador no hay barra de direcciones. Para abrir directo
+/// otra pantalla se elige al ejecutar:
+///
+/// ```bash
+/// flutter run --dart-define=RUTA_INICIAL=/tracking
+/// ```
+const _rutaInicial = String.fromEnvironment(
+  'RUTA_INICIAL',
+  defaultValue: '/login',
+);
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+/// Navegación entre pantallas de la app (no son endpoints: el backend es
+/// Supabase).
+final _navegacion = GoRouter(
+  initialLocation: _rutaInicial,
+  // Se evalúa en cada cambio de pantalla. Supabase guarda la sesión en el
+  // dispositivo y la restaura en `Supabase.initialize`, así que al abrir la
+  // app ya se sabe si hay alguien con sesión iniciada.
+  redirect: (context, state) {
+    final auth = Supabase.instance.client.auth;
+    return redireccionPorSesion(
+      haySesion: auth.currentSession != null,
+      ruta: state.matchedLocation,
+      requiereOnboarding: AuthService.requiereOnboardingDe(auth.currentUser),
     );
-  }
-}
+  },
+  routes: [
+    // Login, registro y recuperación de contraseña (SCRUM-32 a SCRUM-36).
+    ...rutasAuth,
+    GoRoute(
+      path: '/perfil',
+      builder: (context, state) {
+        // Durante el onboarding no lleva barra: la portada todavía no es un
+        // destino válido y el flujo sigue a Permisos.
+        if (AuthService.requiereOnboardingDe(
+          Supabase.instance.client.auth.currentUser,
+        )) {
+          return const PerfilScreen(enOnboarding: true);
+        }
+        return const NavegacionPrincipal(
+          seccion: SeccionPrincipal.perfil,
+          child: PerfilScreen(),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/permisos',
+      builder: (context, state) => const PermisosScreen(),
+    ),
+    // Portada: a donde se llega al entrar y terminar el onboarding.
+    GoRoute(path: '/inicio', builder: (context, state) => const InicioScreen()),
+    // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
+    GoRoute(
+      path: '/actividad',
+      builder: (context, state) => const ActividadScreen(),
+    ),
+    // Entrenamientos anteriores (SCRUM-44).
+    GoRoute(
+      path: '/historial',
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.historial,
+        child: HistorialScreen(),
+      ),
+    ),
+    // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
+    // usuario eligió en los chips del inicio (SCRUM-93).
+    GoRoute(
+      path: '/tracking',
+      // Sin permiso de ubicación no se abre: explica por qué y lo pide
+      // (SCRUM-82). Después ofrece el de salud, que es opcional (SCRUM-83).
+      builder: (context, state) => const RequierePermisoUbicacion(
+        child: OfrecePermisoSalud(child: TrackingConActividadElegida()),
+      ),
+    ),
+    // Resumen de la sesión recién finalizada (SCRUM-43). El id del
+    // entrenamiento viaja en la ruta (SCRUM-122); sin sesión no hay id y se
+    // usa `/resumen` a secas.
+    GoRoute(
+      path: '/resumen',
+      builder: (context, state) => ResumenScreen.desdeRuta(state),
+      routes: [
+        GoRoute(
+          path: ':entrenamientoId',
+          builder: (context, state) => ResumenScreen.desdeRuta(state),
+        ),
+      ],
+    ),
+  ],
+);
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class TrazaApp extends StatelessWidget {
+  const TrazaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+    return MaterialApp.router(
+      title: 'TRAZA',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      routerConfig: _navegacion,
     );
   }
 }

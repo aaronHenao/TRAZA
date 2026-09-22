@@ -189,10 +189,67 @@ void main() {
       expect(calc.ultimoPuntoAceptado, isNull);
     });
 
+    test('con señal buena el umbral es el mínimo de siempre', () {
+      // 5-6 m de error es lo normal al aire libre: el umbral adaptativo
+      // no se nota.
+      expect(calc.umbralPara(5), 3);
+      expect(calc.umbralPara(null), 3);
+    });
+
+    test('con señal mala hay que moverse más para creerse el movimiento', () {
+      // Con 20 m de error, 5 m de "avance" pueden ser solo el error.
+      expect(calc.umbralPara(20), 10);
+    });
+
+    test('el umbral adaptativo tiene tope', () {
+      // Sin tope, una lectura mala dejaría la distancia congelada
+      // demasiado tiempo al arrancar de nuevo (SCRUM-116).
+      expect(calc.umbralPara(100), 15);
+    });
+
+    test('con señal regular el ancla no se va con el jitter', () {
+      final c = CalculadoraDistancia();
+      // Quieto, con 20 m de error: saltos de ~4.4 m a cada lado.
+      c.agregar(_punto(lat: 6.24420, segundos: 0, precision: 20));
+      expect(
+        c.agregar(_punto(lat: 6.24424, segundos: 1, precision: 20)),
+        isFalse,
+      );
+      expect(
+        c.agregar(_punto(lat: 6.24416, segundos: 2, precision: 20)),
+        isFalse,
+      );
+
+      expect(c.distanciaMetros, 0);
+      // El ancla sigue en el punto original: si se hubiera corrido, el
+      // siguiente tramo real se mediría desde un sitio equivocado.
+      expect(c.ultimoPuntoAceptado!.latitud, 6.24420);
+    });
+
+    test('el tramo aceptado guarda distancia e instantes', () {
+      calc.agregar(_punto(segundos: 0));
+      calc.agregar(_punto(lat: 6.2452, segundos: 30));
+
+      final tramo = calc.ultimoTramo!;
+      expect(tramo.metros, closeTo(_metrosPorMiliGrado, 0.5));
+      expect(tramo.inicio, _t0);
+      expect(tramo.fin, _t0.add(const Duration(seconds: 30)));
+      expect(tramo.duracion, const Duration(seconds: 30));
+    });
+
+    test('sin tramos aceptados todavía no hay tramo', () {
+      calc.agregar(_punto(segundos: 0));
+
+      expect(calc.ultimoTramo, isNull);
+    });
+
     test('parámetros personalizados se respetan', () {
       final c = CalculadoraDistancia(
         precisionMaximaMetros: 100,
         desplazamientoMinimoMetros: 0,
+        // Sin esto, una lectura de 80 m de error exigiría el umbral
+        // adaptativo completo y no se aceptaría el punto.
+        factorRuidoPrecision: 0,
       );
       c.agregar(_punto(segundos: 0, precision: 80));
       expect(

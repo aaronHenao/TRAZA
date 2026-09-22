@@ -106,6 +106,33 @@ void main() {
       expect(recorrido().puntos.length, 3);
     });
 
+    test('descarta el jitter del GPS con el usuario quieto', () async {
+      await montar();
+
+      await emitir(6.2311, -75.6105);
+      // ~1 m y ~2 m del anterior: por debajo del mínimo de registro. Antes
+      // este filtro lo hacía el sistema; ahora entregan todas las lecturas
+      // para que el marcador y el detector de reposo no se queden
+      // esperando (SCRUM-116).
+      await emitir(6.23111, -75.6105);
+      await emitir(6.231118, -75.6105);
+
+      expect(recorrido().puntos.length, 1);
+    });
+
+    test('en auto-pausa sigue registrando, a diferencia de la pausa manual',
+        () async {
+      await montar();
+      await emitir(6.2311, -75.6105);
+
+      container.read(cronometroProvider.notifier).autoPausar();
+      await emitir(6.2312, -75.6106);
+
+      // El usuario no pidió parar: si se dejara de escuchar, no habría
+      // forma de enterarse de que volvió a moverse.
+      expect(recorrido().puntos.length, 2);
+    });
+
     test('tras finalizar la actividad ya no registra', () async {
       await montar();
       await emitir(6.2311, -75.6105);

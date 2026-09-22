@@ -105,17 +105,42 @@ void main() {
     detener();
   });
 
-  testWidgets('el ritmo se calcula con el tiempo del cronómetro', (
+  testWidgets('el ritmo es el de los últimos segundos, no el promedio', (
     tester,
   ) async {
     await montar(tester);
 
     await emitir(tester, 6.2311, segundos: 0);
-    await correr(tester, const Duration(minutes: 5));
-    await emitir(tester, 6.2321, segundos: 300); // ≈111 m en 5 min
+    await correr(tester, const Duration(seconds: 30));
+    await emitir(tester, 6.2321, segundos: 30); // ≈111 m en 30 s
 
-    // 300 s / 0.11119 km ≈ 2698 s/km → 44'58".
-    expect(find.text("44'58\""), findsOneWidget);
+    // 30 s / 0.11119 km ≈ 270 s/km → 4'30".
+    expect(find.text("4'30\""), findsOneWidget);
+
+    detener();
+  });
+
+  testWidgets('parado, el ritmo deja de contar en vez de dispararse', (
+    tester,
+  ) async {
+    await montar(tester);
+
+    await emitir(tester, 6.2311, segundos: 0);
+    await correr(tester, const Duration(seconds: 30));
+    await emitir(tester, 6.2321, segundos: 30);
+    expect(find.text("4'30\""), findsOneWidget);
+
+    // El usuario se queda quieto: no llegan puntos nuevos. Antes el ritmo
+    // seguía creciendo con el cronómetro porque era el promedio de toda
+    // la actividad (SCRUM-116).
+    await correr(tester, const Duration(seconds: 20));
+    expect(find.text("7'30\""), findsOneWidget);
+
+    // Pasada la ventana ya no queda recorrido reciente que medir.
+    await correr(tester, const Duration(seconds: 20));
+    expect(find.text("0'00\""), findsOneWidget);
+    // La distancia recorrida no se pierde por estar parado.
+    expect(find.text('0.11 km'), findsOneWidget);
 
     detener();
   });

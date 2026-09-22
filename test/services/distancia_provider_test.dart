@@ -6,6 +6,7 @@ import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/distancia_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
+import 'package:traza/services/ubicacion_service.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/reloj_falso.dart';
@@ -108,12 +109,14 @@ void main() {
     await emitir(6.2321, segundos: 1);
     // Jitter: ~1 m respecto al ancla.
     await emitir(6.23111, segundos: 2);
-    // Precisión de 40 m (peor que 25 m).
+    // Precisión de 40 m (peor que el tope de 30 m).
     await emitir(6.2331, segundos: 60, precisionMetros: 40);
 
     expect(distancia().metros, 0);
-    // El recorrido sí los registró: el filtro de distancia es aparte.
-    expect(container.read(recorridoProvider).puntos, hasLength(4));
+    // El teleport y el jitter llegaron al recorrido (el trazo los pinta y
+    // el filtro fino es de la calculadora), pero la lectura de 40 m no:
+    // esa la descarta el filtro de precisión antes de la pantalla.
+    expect(container.read(recorridoProvider).puntos, hasLength(3));
   });
 
   test('sin lecturas del GPS la distancia es 0, no un dato vacío', () async {
@@ -192,9 +195,14 @@ void main() {
   );
 
   test('la calculadora se puede sustituir', () async {
-    // Con umbral de precisión 100 m, la lectura de 40 m sí cuenta.
+    // Con umbral de precisión 100 m, la lectura de 40 m sí cuenta. El
+    // umbral va en la configuración de rastreo: es el mismo número para
+    // el filtro de lecturas y para la calculadora (SCRUM-116).
     await montar(
       extra: [
+        configuracionRastreoProvider.overrideWithValue(
+          const ConfiguracionRastreo(precisionMaximaMetros: 100),
+        ),
         fabricaCalculadoraDistanciaProvider.overrideWithValue(
           () => CalculadoraDistancia(precisionMaximaMetros: 100),
         ),

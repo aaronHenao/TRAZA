@@ -5,22 +5,32 @@ import '../models/punto_gps.dart';
 
 /// Frecuencia y calidad con las que se procesa la ubicación (SCRUM-110).
 ///
-/// Se filtra por distancia, no por tiempo: corriendo a 12 km/h (~3 m/s)
-/// llega una lectura cada 1-2 s, y parado no llega ninguna. Sin ese
-/// filtro el GPS "baila" 2-3 m en reposo y el recorrido acumula puntos
-/// fantasma.
+/// El sistema entrega **todas** las lecturas
+/// ([distanciaMinimaSistemaMetros] en 0) y el filtrado se hace en Dart.
+/// Delegarlo en el `distanceFilter` del SO salía caro: con el usuario
+/// quieto Android deja de entregar lecturas y baja el ritmo del GNSS, así
+/// que al volver a moverse la app tardaba varios segundos en enterarse
+/// (SCRUM-116). Recibiendo todo, el marcador y el detector de reposo
+/// reaccionan al instante, y el ruido se descarta aquí:
+/// [distanciaMinimaRegistroMetros] para lo que se guarda como recorrido.
 class ConfiguracionRastreo {
   const ConfiguracionRastreo({
-    this.distanciaMinimaMetros = 5,
+    this.distanciaMinimaSistemaMetros = 0,
+    this.distanciaMinimaRegistroMetros = 5,
     this.altaPrecision = true,
-    this.precisionMaximaMetros = 50,
+    this.precisionMaximaMetros = 30,
     this.antiguedadMaxima = const Duration(seconds: 30),
     this.enSegundoPlano = true,
   });
 
-  /// Desplazamiento mínimo entre dos lecturas para que el sistema
-  /// entregue una nueva. `0` = todas las lecturas.
-  final int distanciaMinimaMetros;
+  /// Desplazamiento mínimo que se le pide al sistema entre dos lecturas.
+  /// `0` = todas las lecturas, que es lo que queremos.
+  final int distanciaMinimaSistemaMetros;
+
+  /// Desplazamiento mínimo entre dos puntos del recorrido, en metros.
+  /// Por debajo de esto la lectura es jitter del GPS con el usuario
+  /// quieto y no se registra: si no, el trazo acumula puntos fantasma.
+  final double distanciaMinimaRegistroMetros;
 
   /// `true` pide la mejor precisión disponible (más batería).
   final bool altaPrecision;
@@ -28,6 +38,11 @@ class ConfiguracionRastreo {
   /// Radio de error máximo aceptado. Una lectura peor que esto (típico
   /// al arrancar bajo techo) pondría el punto a cuadras de distancia,
   /// así que se descarta. `null` = aceptar todo.
+  ///
+  /// Es el **único** umbral de precisión de la app: `CalculadoraDistancia`
+  /// recibe este mismo valor. Cuando eran dos distintos (50 aquí, 25 allá)
+  /// las lecturas intermedias movían el marcador sin sumar distancia, y el
+  /// usuario veía el punto avanzar con los kilómetros parados (SCRUM-116).
   final double? precisionMaximaMetros;
 
   /// Edad máxima de una lectura. Al abrir el stream, Android entrega
@@ -115,7 +130,7 @@ class UbicacionGeolocator implements FuenteUbicacion {
   static LocationSettings ajustesBasicos(ConfiguracionRastreo configuracion) {
     return LocationSettings(
       accuracy: _precision(configuracion),
-      distanceFilter: configuracion.distanciaMinimaMetros,
+      distanceFilter: configuracion.distanciaMinimaSistemaMetros,
     );
   }
 
@@ -129,7 +144,7 @@ class UbicacionGeolocator implements FuenteUbicacion {
     TargetPlatform plataforma,
   ) {
     final precision = _precision(configuracion);
-    final distancia = configuracion.distanciaMinimaMetros;
+    final distancia = configuracion.distanciaMinimaSistemaMetros;
 
     switch (plataforma) {
       case TargetPlatform.android:

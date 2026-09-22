@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/punto_gps.dart';
+import 'package:traza/services/calculadora_distancia.dart';
 import 'package:traza/services/puntos_gps_service.dart';
 import 'package:traza/services/ubicacion_service.dart';
 
@@ -79,14 +80,28 @@ void main() {
     // Las lecturas de prueba se capturan a las 08:00; "ahora" es lo mismo.
     final ahora = DateTime(2026, 1, 1, 8);
 
-    test('por defecto filtra cada 5 m, precision alta, tope 50 m y 30 s',
-        () {
+    test('por defecto recibe todas las lecturas y registra cada 5 m', () {
       const config = ConfiguracionRastreo();
 
-      expect(config.distanciaMinimaMetros, 5);
+      // El sistema no filtra: filtrar allí dejaba a la app sin lecturas
+      // con el usuario quieto y tardaba en reaccionar al arrancar de
+      // nuevo (SCRUM-116).
+      expect(config.distanciaMinimaSistemaMetros, 0);
+      expect(config.distanciaMinimaRegistroMetros, 5);
       expect(config.altaPrecision, isTrue);
-      expect(config.precisionMaximaMetros, 50);
+      expect(config.precisionMaximaMetros, 30);
       expect(config.antiguedadMaxima, const Duration(seconds: 30));
+    });
+
+    test('el tope de precision es el mismo que usa la calculadora', () {
+      // Con dos topes distintos había lecturas que movían el marcador del
+      // mapa sin sumar distancia (SCRUM-116).
+      const config = ConfiguracionRastreo();
+      final calculadora = CalculadoraDistancia(
+        precisionMaximaMetros: config.precisionMaximaMetros!,
+      );
+
+      expect(calculadora.precisionMaximaMetros, config.precisionMaximaMetros);
     });
 
     test('acepta lecturas dentro del tope y rechaza las peores', () {

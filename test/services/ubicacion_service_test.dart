@@ -15,7 +15,7 @@ void main() {
       expect(ajustes, isA<AndroidSettings>());
       final android = ajustes as AndroidSettings;
       expect(android.accuracy, LocationAccuracy.best);
-      expect(android.distanceFilter, 5);
+      expect(android.distanceFilter, 0);
 
       final notificacion = android.foregroundNotificationConfig!;
       expect(notificacion.notificationTitle, tituloNotificacionRastreo);
@@ -46,7 +46,7 @@ void main() {
       expect(ios.showBackgroundLocationIndicator, isTrue);
       expect(ios.pauseLocationUpdatesAutomatically, isFalse);
       expect(ios.activityType, ActivityType.fitness);
-      expect(ios.distanceFilter, 5);
+      expect(ios.distanceFilter, 0);
     });
 
     test('en iOS sin segundo plano se queda solo en primer plano', () {
@@ -66,7 +66,7 @@ void main() {
       );
 
       expect(ajustes.runtimeType, LocationSettings);
-      expect(ajustes.distanceFilter, 5);
+      expect(ajustes.distanceFilter, 0);
     });
 
     test('con precisión baja pide medium en todas las plataformas', () {
@@ -89,6 +89,6 @@ void main() {
 
     expect(ajustes.runtimeType, LocationSettings);
     expect(ajustes.accuracy, LocationAccuracy.best);
-    expect(ajustes.distanceFilter, 5);
+    expect(ajustes.distanceFilter, 0);
   });
 }

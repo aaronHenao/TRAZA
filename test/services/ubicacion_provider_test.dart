@@ -116,7 +116,7 @@ void main() {
     test('abre la fuente con la configuración de rastreo del provider',
         () async {
       const configuracion = ConfiguracionRastreo(
-        distanciaMinimaMetros: 7,
+        distanciaMinimaSistemaMetros: 7,
         altaPrecision: false,
       );
       final otro = ProviderContainer(

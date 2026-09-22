@@ -25,10 +25,6 @@ class PuntoGps {
   /// plataforma no lo reporta.
   final double? precisionMetros;
 
-  /// `true` si [otro] está exactamente en la misma latitud y longitud.
-  bool mismaCoordenadaQue(PuntoGps? otro) =>
-      otro != null && otro.latitud == latitud && otro.longitud == longitud;
-
   @override
   bool operator ==(Object other) =>
       other is PuntoGps &&

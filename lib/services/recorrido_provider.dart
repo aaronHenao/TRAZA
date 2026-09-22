@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/punto_gps.dart';
 import '../models/recorrido.dart';
+import 'calculadora_distancia.dart';
 import 'cronometro_provider.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'puntos_gps_service.dart';
@@ -49,12 +50,29 @@ class RecorridoNotifier extends AutoDisposeNotifier<Recorrido> {
 
   /// Registra la lectura en local. No toca la red.
   void _registrar(PuntoGps punto) {
-    // En pausa (o ya finalizado) el usuario no está haciendo la ruta:
-    // la lectura no cuenta, igual que en el prototipo.
-    if (!ref.read(cronometroProvider).estaEnCurso) return;
-    // La lectura puntual inicial y el primer evento del stream suelen ser
-    // el mismo punto: no vale la pena guardarlo dos veces.
-    if (punto.mismaCoordenadaQue(state.ultimo)) return;
+    // En pausa manual (o ya finalizado) el usuario no está haciendo la
+    // ruta: la lectura no cuenta, igual que en el prototipo. En una
+    // auto-pausa sí se registra: el usuario no pidió parar, solo se quedó
+    // quieto, y hace falta seguir escuchando para saber cuándo arranca de
+    // nuevo (SCRUM-116).
+    if (!ref.read(cronometroProvider).registraRecorrido) return;
+
+    // El sistema entrega todas las lecturas; el filtro de ruido es este.
+    // Descarta el jitter del GPS con el usuario quieto y, de paso, la
+    // lectura puntual inicial repetida en el primer evento del stream.
+    final ultimo = state.ultimo;
+    if (ultimo != null) {
+      final avance = CalculadoraDistancia.haversineMetros(
+        ultimo.latitud,
+        ultimo.longitud,
+        punto.latitud,
+        punto.longitud,
+      );
+      final minimo = ref
+          .read(configuracionRastreoProvider)
+          .distanciaMinimaRegistroMetros;
+      if (avance < minimo) return;
+    }
 
     state = state.copyWith(puntos: [...state.puntos, punto]);
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/admin/formulario_reto_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
@@ -16,6 +17,7 @@ import 'services/auth_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/ofrece_permiso_salud.dart';
+import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 
 Future<void> main() async {
@@ -61,16 +63,24 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/perfil',
       builder: (context, state) {
-        // Durante el onboarding no lleva barra: la portada todavía no es un
-        // destino válido y el flujo sigue a Permisos.
+        // El administrador no tiene onboarding de corredor: no elige
+        // objetivos ni concede permisos de ubicación. Como el redirect manda
+        // aquí a quien no lo ha terminado, la puerta tiene que estar también
+        // en esta ruta y no solo en /inicio (SCRUM-139).
         if (AuthService.requiereOnboardingDe(
           Supabase.instance.client.auth.currentUser,
         )) {
-          return const PerfilScreen(enOnboarding: true);
+          // Durante el onboarding no lleva barra: la portada todavía no es un
+          // destino válido y el flujo sigue a Permisos.
+          return const PuertaAdmin(
+            corredor: PerfilScreen(enOnboarding: true),
+          );
         }
-        return const NavegacionPrincipal(
-          seccion: SeccionPrincipal.perfil,
-          child: PerfilScreen(),
+        return const PuertaAdmin(
+          corredor: NavegacionPrincipal(
+            seccion: SeccionPrincipal.perfil,
+            child: PerfilScreen(),
+          ),
         );
       },
     ),
@@ -78,8 +88,19 @@ final _navegacion = GoRouter(
       path: '/permisos',
       builder: (context, state) => const PermisosScreen(),
     ),
-    // Portada: a donde se llega al entrar y terminar el onboarding.
-    GoRoute(path: '/inicio', builder: (context, state) => const InicioScreen()),
+    // A donde se llega al entrar y al terminar el onboarding. Qué se muestra
+    // depende del rol: el administrador gestiona retos, los demás ven su
+    // portada (SCRUM-139).
+    GoRoute(
+      path: '/inicio',
+      builder: (context, state) => const PuertaAdmin(corredor: InicioScreen()),
+    ),
+    // Crear un reto (SCRUM-132). Se abre con `push` desde la gestión, así que
+    // al volver el catálogo se refresca con el reto recién creado.
+    GoRoute(
+      path: '/admin/retos/nuevo',
+      builder: (context, state) => const FormularioRetoScreen(),
+    ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(
       path: '/actividad',

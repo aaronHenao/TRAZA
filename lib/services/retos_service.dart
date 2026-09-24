@@ -54,6 +54,14 @@ abstract interface class RetosRepository {
   /// Lo que vuelve trae el id y el estado que puso la base, no los que mandó
   /// el cliente.
   Future<Reto> crear(NuevoReto reto);
+
+  /// Los retos del catálogo con el [estado] pedido, del más reciente al más
+  /// antiguo.
+  ///
+  /// Es lo que necesita el criterio 1 de SCRUM-132: al crear un reto, verlo
+  /// aparecer en el catálogo. La consulta de los corredores, con su filtro
+  /// por vigencia, es otra (SCRUM-163).
+  Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo});
 }
 
 class SupabaseRetosRepository implements RetosRepository {
@@ -66,6 +74,10 @@ class SupabaseRetosRepository implements RetosRepository {
        _usuarioActual = usuarioActual;
 
   static const _tabla = 'retos';
+
+  /// Suficiente para el catálogo de un proyecto de curso sin traer la tabla
+  /// entera.
+  static const limite = 100;
 
   /// Códigos de error de Postgres que hay que distinguir.
   static const _rlsDenegado = '42501';
@@ -110,5 +122,21 @@ class SupabaseRetosRepository implements RetosRepository {
       }
       rethrow;
     }
+  }
+
+  @override
+  Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo}) async {
+    // Sin sesión, RLS no devolvería nada; se corta antes para que el error
+    // diga qué pasó en vez de mostrar un catálogo vacío.
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tabla)
+        .select()
+        .eq('estado', estado.valorDb)
+        .order('fecha_creacion', ascending: false)
+        .limit(limite);
+
+    return filas.map(Reto.desdeSupabase).toList();
   }
 }

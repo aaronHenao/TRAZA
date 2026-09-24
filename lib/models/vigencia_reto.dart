@@ -17,6 +17,21 @@ class VigenciaReto {
   /// Cuántos días cubre, contando el primero y el último.
   int get dias => fin.difference(inicio).inDays + 1;
 
+  /// Cuántos días quedan desde [dia], contando ese mismo.
+  ///
+  /// Un reto creado a mitad del período nace con menos días de los que
+  /// sugiere su periodicidad: un semanal creado un sábado dura dos. Esto
+  /// existe para poder decírselo al administrador antes de que guarde.
+  int diasRestantesDesde(DateTime dia) {
+    final fecha = soloFecha(dia);
+    if (fecha.isAfter(fin)) return 0;
+    if (fecha.isBefore(inicio)) return dias;
+    return fin.difference(fecha).inDays + 1;
+  }
+
+  /// Si el período ya venía corriendo cuando se creó el reto.
+  bool empezoAntesDe(DateTime dia) => soloFecha(dia).isAfter(inicio);
+
   /// Si [dia] cae dentro del período.
   bool cubre(DateTime dia) {
     final fecha = soloFecha(dia);

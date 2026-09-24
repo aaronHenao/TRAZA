@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/nuevo_reto.dart';
+import '../models/periodicidad_reto.dart';
 import '../models/reto.dart';
 import 'reloj_provider.dart';
 import 'retos_service.dart';
@@ -40,6 +41,43 @@ class RetoNoGuardado extends ResultadoCreacionReto {
 
   final String mensaje;
 }
+
+/// Qué estado muestra la gestión de retos. Cambia la consulta.
+final filtroEstadoRetosProvider = StateProvider.autoDispose<EstadoReto>(
+  (ref) => EstadoReto.activo,
+);
+
+/// Qué periodicidad muestra la gestión, o null para todas.
+final filtroPeriodicidadRetosProvider =
+    StateProvider.autoDispose<PeriodicidadReto?>((ref) => null);
+
+/// Catálogo que ve el administrador, según el estado elegido.
+///
+/// `autoDispose`: se vuelve a consultar cada vez que se entra, así el reto
+/// recién creado aparece sin trucos (criterio 1 de SCRUM-132).
+final catalogoRetosProvider = FutureProvider.autoDispose<List<Reto>>(
+  (ref) => ref
+      .watch(retosRepositoryProvider)
+      .listar(estado: ref.watch(filtroEstadoRetosProvider)),
+);
+
+/// El catálogo ya filtrado por periodicidad.
+///
+/// La periodicidad se filtra aquí y no en la consulta: el catálogo de un
+/// administrador cabe de sobra en memoria, y así cambiar de pestaña responde
+/// al instante en vez de ir a la red.
+final retosFiltradosProvider = Provider.autoDispose<AsyncValue<List<Reto>>>((
+  ref,
+) {
+  final periodicidad = ref.watch(filtroPeriodicidadRetosProvider);
+  return ref
+      .watch(catalogoRetosProvider)
+      .whenData(
+        (retos) => periodicidad == null
+            ? retos
+            : retos.where((reto) => reto.periodicidad == periodicidad).toList(),
+      );
+});
 
 /// Creación de retos (SCRUM-143).
 final creacionRetoProvider = Provider<CreacionReto>(CreacionReto.new);

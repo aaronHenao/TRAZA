@@ -10,6 +10,7 @@ import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/ancho_contenido.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -98,98 +99,134 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
-            TrazaTopBar(titulo: 'Nuevo reto', onAtras: context.pop),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.xs,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
+        child: AnchoContenido(
+          child: Column(
+            children: [
+              TrazaTopBar(titulo: 'Nuevo reto', onAtras: context.pop),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.xs,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  children: [
+                    _Campo(
+                      etiqueta: 'Nombre',
+                      controlador: _nombre,
+                      pista: 'Corre 5 km hoy',
+                      error: _errores[CampoReto.nombre],
+                      maxCaracteres: maxCaracteresNombreReto,
+                      onCambio: () => _alEditar(CampoReto.nombre),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _Campo(
+                      etiqueta: 'Descripción',
+                      controlador: _descripcion,
+                      pista:
+                          'Qué tiene que hacer el corredor y con qué '
+                          'condiciones.',
+                      error: _errores[CampoReto.descripcion],
+                      lineas: 3,
+                      onCambio: () => _alEditar(CampoReto.descripcion),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _Periodicidad(
+                      elegida: _periodicidad,
+                      error: _errores[CampoReto.periodicidad],
+                      onElegir: (periodicidad) => setState(() {
+                        _periodicidad = periodicidad;
+                        _errores = {..._errores}
+                          ..remove(CampoReto.periodicidad);
+                      }),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _Vigencia(periodicidad: _periodicidad),
+                    const SizedBox(height: AppSpacing.md),
+                    _MetaYXp(
+                      meta: _Campo(
+                        etiqueta: 'Meta',
+                        controlador: _meta,
+                        pista: '5',
+                        sufijo: 'km',
+                        error: _errores[CampoReto.meta],
+                        teclado: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        // La coma se admite porque el teclado del usuario
+                        // puede ofrecerla en vez del punto.
+                        formatos: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                        ],
+                        onCambio: () => _alEditar(CampoReto.meta),
+                      ),
+                      xp: _Campo(
+                        etiqueta: 'XP otorgada',
+                        controlador: _xp,
+                        pista: '50',
+                        sufijo: 'XP',
+                        error: _errores[CampoReto.xp],
+                        teclado: TextInputType.number,
+                        formatos: [FilteringTextInputFormatter.digitsOnly],
+                        onCambio: () => _alEditar(CampoReto.xp),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    const _AvisoActivo(),
+                  ],
                 ),
-                children: [
-                  _Campo(
-                    etiqueta: 'Nombre',
-                    controlador: _nombre,
-                    pista: 'Corre 5 km hoy',
-                    error: _errores[CampoReto.nombre],
-                    maxCaracteres: maxCaracteresNombreReto,
-                    onCambio: () => _alEditar(CampoReto.nombre),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _Campo(
-                    etiqueta: 'Descripción',
-                    controlador: _descripcion,
-                    pista: 'Qué tiene que hacer el corredor y con qué '
-                        'condiciones.',
-                    error: _errores[CampoReto.descripcion],
-                    lineas: 3,
-                    onCambio: () => _alEditar(CampoReto.descripcion),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _Periodicidad(
-                    elegida: _periodicidad,
-                    error: _errores[CampoReto.periodicidad],
-                    onElegir: (periodicidad) => setState(() {
-                      _periodicidad = periodicidad;
-                      _errores = {..._errores}..remove(CampoReto.periodicidad);
-                    }),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _Vigencia(periodicidad: _periodicidad),
-                  const SizedBox(height: AppSpacing.md),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _Campo(
-                          etiqueta: 'Meta',
-                          controlador: _meta,
-                          pista: '5',
-                          sufijo: 'km',
-                          error: _errores[CampoReto.meta],
-                          teclado: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          // La coma se admite porque el teclado del usuario
-                          // puede ofrecerla en vez del punto.
-                          formatos: [
-                            FilteringTextInputFormatter.allow(
-                              RegExp(r'[0-9.,]'),
-                            ),
-                          ],
-                          onCambio: () => _alEditar(CampoReto.meta),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _Campo(
-                          etiqueta: 'XP otorgada',
-                          controlador: _xp,
-                          pista: '50',
-                          sufijo: 'XP',
-                          error: _errores[CampoReto.xp],
-                          teclado: TextInputType.number,
-                          formatos: [FilteringTextInputFormatter.digitsOnly],
-                          onCambio: () => _alEditar(CampoReto.xp),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  const _AvisoActivo(),
-                ],
               ),
-            ),
-            _PieConBoton(
-              guardando: _guardando,
-              onGuardar: _guardando ? null : _guardar,
-            ),
-          ],
+              _PieConBoton(
+                guardando: _guardando,
+                onGuardar: _guardando ? null : _guardar,
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Meta y XP, lado a lado mientras quepan.
+///
+/// Con la pantalla muy estrecha —o con el texto del sistema en grande— dos
+/// campos numéricos con su etiqueta y su posible mensaje de error no caben en
+/// una fila sin quedar ilegibles, así que se apilan.
+class _MetaYXp extends StatelessWidget {
+  const _MetaYXp({required this.meta, required this.xp});
+
+  final Widget meta;
+  final Widget xp;
+
+  /// Por debajo de esto cada columna bajaría de unos 140 px, que no alcanzan
+  /// para "XP otorgada" y su mensaje de error.
+  static const _anchoMinimo = 300.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, restricciones) {
+        if (restricciones.maxWidth < _anchoMinimo) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              meta,
+              const SizedBox(height: AppSpacing.md),
+              xp,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: meta),
+            const SizedBox(width: 12),
+            Expanded(child: xp),
+          ],
+        );
+      },
     );
   }
 }
@@ -384,11 +421,27 @@ class _Vigencia extends ConsumerWidget {
   final PeriodicidadReto? periodicidad;
 
   static const _dias = [
-    'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo',
+    'lunes',
+    'martes',
+    'miércoles',
+    'jueves',
+    'viernes',
+    'sábado',
+    'domingo',
   ];
   static const _meses = [
-    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
   ];
 
   static String _fecha(DateTime dia) =>

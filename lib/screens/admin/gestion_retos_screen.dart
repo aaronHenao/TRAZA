@@ -7,6 +7,7 @@ import '../../models/reto.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/ancho_contenido.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
 
@@ -19,6 +20,12 @@ class GestionRetosScreen extends ConsumerWidget {
   const GestionRetosScreen({super.key});
 
   static const claveBotonNuevo = Key('admin-nuevo-reto');
+
+  static Key claveEstado(EstadoReto estado) => Key('filtro-${estado.valorDb}');
+
+  /// `null` es la opción "Todos", que no filtra nada.
+  static Key clavePeriodicidad(PeriodicidadReto? periodicidad) =>
+      Key('filtro-${periodicidad?.valorDb ?? 'todas'}');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,26 +46,28 @@ class GestionRetosScreen extends ConsumerWidget {
         child: const Icon(Icons.add, size: 26),
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _Cabecera(),
-            const _Filtros(),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async => ref.invalidate(catalogoRetosProvider),
-                child: switch (catalogo) {
-                  AsyncData(value: final retos) when retos.isEmpty =>
-                    const _SinRetos(),
-                  AsyncData(value: final retos) => _Lista(retos: retos),
-                  AsyncError() => _NoSePudoCargar(
-                    onReintentar: () => ref.invalidate(catalogoRetosProvider),
-                  ),
-                  _ => const Center(child: CircularProgressIndicator()),
-                },
+        child: AnchoContenido(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Cabecera(),
+              const _Filtros(),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(catalogoRetosProvider),
+                  child: switch (catalogo) {
+                    AsyncData(value: final retos) when retos.isEmpty =>
+                      const _SinRetos(),
+                    AsyncData(value: final retos) => _Lista(retos: retos),
+                    AsyncError() => _NoSePudoCargar(
+                      onReintentar: () => ref.invalidate(catalogoRetosProvider),
+                    ),
+                    _ => const Center(child: CircularProgressIndicator()),
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -147,10 +156,6 @@ class _EtiquetaRol extends StatelessWidget {
 class _Filtros extends ConsumerWidget {
   const _Filtros();
 
-  static Key claveEstado(EstadoReto estado) => Key('filtro-${estado.valorDb}');
-  static Key clavePeriodicidad(PeriodicidadReto? p) =>
-      Key('filtro-${p?.valorDb ?? 'todas'}');
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final estado = ref.watch(filtroEstadoRetosProvider);
@@ -172,14 +177,14 @@ class _Filtros extends ConsumerWidget {
                 for (final opcion in EstadoReto.values)
                   Expanded(
                     child: _Pestana(
-                      key: claveEstado(opcion),
+                      key: GestionRetosScreen.claveEstado(opcion),
                       texto: opcion == EstadoReto.activo
                           ? 'Activos'
                           : 'Retirados',
                       activa: opcion == estado,
-                      onTap: () => ref
-                          .read(filtroEstadoRetosProvider.notifier)
-                          .state = opcion,
+                      onTap: () =>
+                          ref.read(filtroEstadoRetosProvider.notifier).state =
+                              opcion,
                     ),
                   ),
               ],
@@ -187,27 +192,27 @@ class _Filtros extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        SizedBox(
-          height: 36,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          // Wrap y no una fila deslizable: en pantallas estrechas los cuatro
+          // no caben, y un chip cortado en el borde no se ve como algo que
+          // se pueda arrastrar.
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               // null es "todas": no filtra nada.
               for (final opcion in <PeriodicidadReto?>[
                 null,
                 ...PeriodicidadReto.values,
               ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _ChipFiltro(
-                    key: clavePeriodicidad(opcion),
-                    texto: opcion?.etiqueta ?? 'Todos',
-                    activo: opcion == periodicidad,
-                    onTap: () => ref
-                        .read(filtroPeriodicidadRetosProvider.notifier)
-                        .state = opcion,
-                  ),
+                _ChipFiltro(
+                  key: GestionRetosScreen.clavePeriodicidad(opcion),
+                  texto: opcion?.etiqueta ?? 'Todos',
+                  activo: opcion == periodicidad,
+                  onTap: () =>
+                      ref.read(filtroPeriodicidadRetosProvider.notifier).state =
+                          opcion,
                 ),
             ],
           ),
@@ -272,14 +277,13 @@ class _ChipFiltro extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        // Sin `alignment`: dentro de un Wrap haría que cada chip se estirara
+        // a todo el ancho y cayera uno por línea.
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: activo ? AppColors.ink : AppColors.bg,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: activo ? AppColors.ink : AppColors.line,
-          ),
+          border: Border.all(color: activo ? AppColors.ink : AppColors.line),
         ),
         child: Text(
           texto,
@@ -377,7 +381,8 @@ class TarjetaReto extends StatelessWidget {
               _Insignia(texto: reto.periodicidad.etiqueta),
               _Insignia(texto: 'Meta ${_metaTexto(reto.metaKm)} km'),
               _Insignia(
-                texto: '${_fecha(reto.vigencia.inicio)} – '
+                texto:
+                    '${_fecha(reto.vigencia.inicio)} – '
                     '${_fecha(reto.vigencia.fin)}',
               ),
               if (reto.estaActivo)
@@ -400,8 +405,18 @@ class TarjetaReto extends StatelessWidget {
   }
 
   static const _meses = [
-    'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-    'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+    'ene',
+    'feb',
+    'mar',
+    'abr',
+    'may',
+    'jun',
+    'jul',
+    'ago',
+    'sep',
+    'oct',
+    'nov',
+    'dic',
   ];
 
   static String _fecha(DateTime dia) => '${dia.day} ${_meses[dia.month - 1]}';

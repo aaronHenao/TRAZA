@@ -11,15 +11,6 @@ enum MarchaCronometro {
   /// La actividad está en pausa: el tiempo transcurrido se conserva
   /// pero no avanza.
   pausado,
-
-  /// La app detectó que el usuario lleva un rato quieto y congeló el
-  /// tiempo por su cuenta (SCRUM-116).
-  ///
-  /// Es distinto de [pausado]: el usuario no pidió parar, así que el GPS
-  /// sigue registrando puntos y la distancia sigue sumando. En cuanto
-  /// vuelva a moverse, el tiempo se reanuda solo. Si el usuario pulsa
-  /// pausa estando aquí, pasa a [pausado] y ya no se reanuda solo.
-  autoPausado,
 }
 
 /// Instantánea inmutable del cronómetro que consumen los widgets.
@@ -43,16 +34,6 @@ class EstadoCronometro {
   bool get estaEnCurso => marcha == MarchaCronometro.enCurso;
 
   bool get estaPausado => marcha == MarchaCronometro.pausado;
-
-  bool get estaAutoPausado => marcha == MarchaCronometro.autoPausado;
-
-  /// La actividad no terminó: el usuario sigue entrenando, aunque el
-  /// tiempo esté congelado por una pausa (manual o automática).
-  bool get estaActiva => marcha != MarchaCronometro.detenido;
-
-  /// El GPS debe seguir registrando puntos: en curso o auto-pausado.
-  /// En una pausa manual el usuario decidió que lo que haga no cuenta.
-  bool get registraRecorrido => estaEnCurso || estaAutoPausado;
 
   /// Tiempo transcurrido en formato `HH:MM:SS`, tal como lo muestra
   /// el prototipo (`00:00:00`).

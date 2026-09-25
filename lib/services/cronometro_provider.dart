@@ -54,26 +54,9 @@ class CronometroNotifier extends Notifier<EstadoCronometro> {
   void alternarPausa() {
     if (state.estaEnCurso) {
       pausar();
-    } else if (state.estaPausado || state.estaAutoPausado) {
+    } else if (state.estaPausado) {
       reanudar();
     }
-  }
-
-  /// Congela el tiempo porque el usuario lleva un rato quieto (SCRUM-116).
-  /// Lo decide `autoPausaProvider`, no el usuario.
-  void autoPausar() {
-    _service.autoPausar();
-    _detenerTicker();
-    // Sin ticker no hay quien vuelva a mirar el reloj: la auto-pausa se
-    // levanta con el movimiento, que llega por el stream del GPS.
-    _sincronizar();
-  }
-
-  /// Retoma la cuenta al detectar movimiento tras una auto-pausa.
-  void autoReanudar() {
-    _service.autoReanudar();
-    _arrancarTicker();
-    _sincronizar();
   }
 
   /// Finaliza la actividad; el tiempo total queda disponible en el estado.

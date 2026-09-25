@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../services/auto_pausa_provider.dart';
+import '../../models/estado_cronometro.dart';
 import '../../services/cronometro_provider.dart';
 import '../../services/distancia_provider.dart';
 import '../../services/recorrido_provider.dart';
@@ -160,27 +160,19 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     // aunque nadie más lo observe (por ejemplo, con un mapa inyectado).
     ref.listen(recorridoProvider, (_, _) {});
 
-    // El tiempo congelado se ve igual lo haya pedido el usuario o lo haya
-    // decidido la auto-pausa: en ambos casos el botón ofrece reanudar.
     final pausado = ref.watch(
-      cronometroProvider.select(
-        (estado) => estado.estaPausado || estado.estaAutoPausado,
-      ),
+      cronometroProvider.select((estado) => estado.estaPausado),
     );
-    // Congela el cronómetro con el usuario quieto y lo reanuda al moverse
-    // (SCRUM-116). Se observa aquí para que viva lo que dure la pantalla.
-    ref.watch(autoPausaProvider);
-    // Distancia y ritmo en vivo (SCRUM-112): la distancia cambia con cada
-    // punto aceptado y el ritmo, con la ventana de los últimos segundos.
+    // Distancia y ritmo en vivo (SCRUM-112). El ritmo es el de los últimos
+    // segundos, no el promedio de toda la actividad (SCRUM-116).
     final distancia = ref.watch(distanciaProvider);
 
     // Con la actividad en curso no se sale por accidente: el recorrido vive
     // en memoria hasta que se finaliza, así que un atrás sin más lo perdería
     // y dejaría el entrenamiento abierto. Preguntar es además la forma de
     // recordarle al usuario que sigue entrenando (SCRUM-98).
-    final enCurso = ref.watch(
-      cronometroProvider.select((estado) => estado.estaActiva),
-    );
+    final enCurso =
+        ref.watch(cronometroProvider).marcha != MarchaCronometro.detenido;
 
     return PopScope(
       canPop: !enCurso,

@@ -80,12 +80,14 @@ void main() {
     Duration antiguedad = Duration.zero,
   }) async {
     reloj.avanzar(cuanto);
-    gps.emitir(PuntoGps(
-      latitud: latitud,
-      longitud: longitud,
-      capturadoEn: reloj().subtract(antiguedad),
-      precisionMetros: precisionMetros,
-    ));
+    gps.emitir(
+      PuntoGps(
+        latitud: latitud,
+        longitud: longitud,
+        capturadoEn: reloj().subtract(antiguedad),
+        precisionMetros: precisionMetros,
+      ),
+    );
     await tester.pump(cuanto);
     await tester.pump();
   }
@@ -100,11 +102,8 @@ void main() {
       .widget<Text>(find.byKey(CronometroEntrenamiento.claveTiempo))
       .data!;
 
-  LatLng marcador(WidgetTester tester) => tester
-      .widget<MarkerLayer>(find.byType(MarkerLayer))
-      .markers
-      .single
-      .point;
+  LatLng marcador(WidgetTester tester) =>
+      tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers.single.point;
 
   MapController camara(WidgetTester tester) =>
       tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController!;
@@ -114,81 +113,106 @@ void main() {
   void detener() => container.read(cronometroProvider.notifier).detener();
 
   testWidgets(
-      'un entrenamiento completo: buscar señal, correr, pausar, reanudar '
-      'y finalizar con el recorrido sincronizado', (tester) async {
-    Duration? duracionReportada;
-    await entrarAlEntrenamiento(
-      tester,
-      onFinalizar: (d) => duracionReportada = d,
-    );
+    'un entrenamiento completo: buscar señal, correr, pausar, reanudar '
+    'y finalizar con el recorrido sincronizado',
+    (tester) async {
+      Duration? duracionReportada;
+      await entrarAlEntrenamiento(
+        tester,
+        onFinalizar: (d) => duracionReportada = d,
+      );
 
-    // Al entrar: cronómetro en cero, GPS abierto, sin señal todavía.
-    expect(tiempo(tester), '00:00:00');
-    expect(gps.suscripcionesAbiertas, 1);
-    expect(find.text('Buscando tu ubicación...'), findsOneWidget);
-    expect(find.byType(FlutterMap), findsNothing);
+      // Al entrar: cronómetro en cero, GPS abierto, sin señal todavía.
+      expect(tiempo(tester), '00:00:00');
+      expect(gps.suscripcionesAbiertas, 1);
+      expect(find.text('Buscando tu ubicación...'), findsOneWidget);
+      expect(find.byType(FlutterMap), findsNothing);
 
-    // Primer fix: aparece el mapa centrado y la píldora se enciende.
-    await avanzar(tester, latitud: 6.2311, longitud: -75.6105);
-    expect(find.byKey(MapaEntrenamiento.claveNota), findsNothing);
-    expect(find.byType(FlutterMap), findsOneWidget);
-    expect(marcador(tester), const LatLng(6.2311, -75.6105));
-    expect(camara(tester).camera.center, const LatLng(6.2311, -75.6105));
-    expect(tiempo(tester), '00:00:05');
+      // Primer fix: aparece el mapa centrado y la píldora se enciende.
+      await avanzar(tester, latitud: 6.2311, longitud: -75.6105);
+      expect(find.byKey(MapaEntrenamiento.claveNota), findsNothing);
+      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(marcador(tester), const LatLng(6.2311, -75.6105));
+      expect(camara(tester).camera.center, const LatLng(6.2311, -75.6105));
+      expect(tiempo(tester), '00:00:05');
 
-    // El usuario corre: marcador y cámara lo siguen, el recorrido crece.
-    await avanzar(tester, latitud: 6.2314, longitud: -75.6108);
-    await avanzar(tester, latitud: 6.2317, longitud: -75.6112);
-    expect(marcador(tester), const LatLng(6.2317, -75.6112));
-    expect(camara(tester).camera.center, const LatLng(6.2317, -75.6112));
-    expect(recorrido().puntos.length, 3);
-    expect(tiempo(tester), '00:00:15');
-    expect(supabase.lotes, isEmpty, reason: 'nada se sube durante la ruta');
+      // El usuario corre: marcador y cámara lo siguen, el recorrido crece.
+      await avanzar(tester, latitud: 6.2314, longitud: -75.6108);
+      await avanzar(tester, latitud: 6.2317, longitud: -75.6112);
+      expect(marcador(tester), const LatLng(6.2317, -75.6112));
+      expect(camara(tester).camera.center, const LatLng(6.2317, -75.6112));
+      expect(recorrido().puntos.length, 3);
+      // El trazo se dibuja en vivo sobre el mapa (SCRUM-116).
+      final trazo = tester.widget<PolylineLayer>(find.byType(PolylineLayer));
+      expect(trazo.polylines.single.points, const [
+        LatLng(6.2311, -75.6105),
+        LatLng(6.2314, -75.6108),
+        LatLng(6.2317, -75.6112),
+      ]);
+      expect(tiempo(tester), '00:00:15');
+      expect(supabase.lotes, isEmpty, reason: 'nada se sube durante la ruta');
 
-    // Pausa: el tiempo se congela, la posición se sigue viendo pero no
-    // se registra.
-    await pulsar(tester, ControlesEntrenamiento.clavePausar);
-    expect(find.text('EN PAUSA'), findsOneWidget);
-    await avanzar(
-      tester,
-      latitud: 6.2400,
-      longitud: -75.6200,
-      cuanto: const Duration(minutes: 2),
-    );
-    expect(tiempo(tester), '00:00:15');
-    expect(marcador(tester), const LatLng(6.2400, -75.6200));
-    expect(recorrido().puntos.length, 3);
+      // Pausa: el tiempo se congela, la posición se sigue viendo pero no
+      // se registra.
+      await pulsar(tester, ControlesEntrenamiento.clavePausar);
+      expect(find.text('EN PAUSA'), findsOneWidget);
+      await avanzar(
+        tester,
+        latitud: 6.2400,
+        longitud: -75.6200,
+        cuanto: const Duration(minutes: 2),
+      );
+      expect(tiempo(tester), '00:00:15');
+      expect(marcador(tester), const LatLng(6.2400, -75.6200));
+      expect(recorrido().puntos.length, 3);
 
-    // Reanudar: sigue contando y registrando desde donde iba.
-    await pulsar(tester, ControlesEntrenamiento.clavePausar);
-    expect(find.text('TIEMPO'), findsOneWidget);
-    await avanzar(tester, latitud: 6.2319, longitud: -75.6117);
-    expect(tiempo(tester), '00:00:20');
-    expect(recorrido().puntos.length, 4);
+      // Reanudar: sigue contando y registrando desde donde iba.
+      await pulsar(tester, ControlesEntrenamiento.clavePausar);
+      expect(find.text('TIEMPO'), findsOneWidget);
+      await avanzar(tester, latitud: 6.2319, longitud: -75.6117);
+      expect(tiempo(tester), '00:00:20');
+      expect(recorrido().puntos.length, 4);
+      await avanzar(tester, latitud: 6.2322, longitud: -75.6121);
+      expect(tiempo(tester), '00:00:25');
+      // El trazo se corta en la pausa: un tramo por cada parte recorrida, sin
+      // una recta que una dónde se pausó con dónde se reanudó (BUG-005).
+      expect(
+        tester
+            .widget<PolylineLayer>(find.byType(PolylineLayer))
+            .polylines
+            .map((linea) => linea.points),
+        const [
+          [
+            LatLng(6.2311, -75.6105),
+            LatLng(6.2314, -75.6108),
+            LatLng(6.2317, -75.6112),
+          ],
+          [LatLng(6.2319, -75.6117), LatLng(6.2322, -75.6121)],
+        ],
+      );
 
-    // Finalizar: se detiene, se reporta el tiempo y el lote va completo
-    // y en orden, sin el punto capturado en pausa.
-    await pulsar(tester, ControlesEntrenamiento.claveFinalizar);
-    expect(duracionReportada, const Duration(seconds: 20));
-    expect(container.read(cronometroProvider).estaEnCurso, isFalse);
-    expect(recorrido().sincronizacion, EstadoSincronizacion.completada);
-    expect(supabase.lotes.length, 1);
-    expect(supabase.lotes.single.entrenamientoId, entrenamientoId);
-    expect(
-      supabase.lotes.single.puntos.map((p) => (p.latitud, p.longitud)),
-      [
+      // Finalizar: se detiene, se reporta el tiempo y el lote va completo
+      // y en orden, sin el punto capturado en pausa.
+      await pulsar(tester, ControlesEntrenamiento.claveFinalizar);
+      expect(duracionReportada, const Duration(seconds: 25));
+      expect(container.read(cronometroProvider).estaEnCurso, isFalse);
+      expect(recorrido().sincronizacion, EstadoSincronizacion.completada);
+      expect(supabase.lotes.length, 1);
+      expect(supabase.lotes.single.entrenamientoId, entrenamientoId);
+      expect(supabase.lotes.single.puntos.map((p) => (p.latitud, p.longitud)), [
         (6.2311, -75.6105),
         (6.2314, -75.6108),
         (6.2317, -75.6112),
         (6.2319, -75.6117),
-      ],
-    );
+        (6.2322, -75.6121),
+      ]);
 
-    // Tras finalizar ya no entra nada más.
-    await avanzar(tester, latitud: 6.2330, longitud: -75.6130);
-    expect(tiempo(tester), '00:00:20');
-    expect(recorrido().puntos.length, 4);
-  });
+      // Tras finalizar ya no entra nada más.
+      await avanzar(tester, latitud: 6.2330, longitud: -75.6130);
+      expect(tiempo(tester), '00:00:25');
+      expect(recorrido().puntos.length, 5);
+    },
+  );
 
   testWidgets('las lecturas imprecisas o viejas no llegan ni al mapa ni '
       'al recorrido', (tester) async {
@@ -219,16 +243,14 @@ void main() {
     );
 
     expect(marcador(tester), const LatLng(6.2314, -75.6108));
-    expect(
-      recorrido().puntos.map((p) => p.latitud),
-      [6.2311, 6.2314],
-    );
+    expect(recorrido().puntos.map((p) => p.latitud), [6.2311, 6.2314]);
 
     detener();
   });
 
-  testWidgets('descartar el entrenamiento cierra el GPS y no sube nada',
-      (tester) async {
+  testWidgets('descartar el entrenamiento cierra el GPS y no sube nada', (
+    tester,
+  ) async {
     var cancelado = false;
     await entrarAlEntrenamiento(tester, onCancelar: () => cancelado = true);
     await avanzar(tester, latitud: 6.2311, longitud: -75.6105);
@@ -257,8 +279,9 @@ void main() {
     expect(gps.suscripcionesAbiertas, 0);
   });
 
-  testWidgets('el boton atras del sistema no abandona la actividad en curso',
-      (tester) async {
+  testWidgets('el boton atras del sistema no abandona la actividad en curso', (
+    tester,
+  ) async {
     await entrarAlEntrenamiento(tester);
     await avanzar(tester, latitud: 6.2311, longitud: -75.6105);
     await avanzar(tester, latitud: 6.2314, longitud: -75.6108);
@@ -286,8 +309,9 @@ void main() {
     detener();
   });
 
-  testWidgets('"seguir entrenando" en el diálogo no interrumpe nada',
-      (tester) async {
+  testWidgets('"seguir entrenando" en el diálogo no interrumpe nada', (
+    tester,
+  ) async {
     await entrarAlEntrenamiento(tester);
     await avanzar(tester, latitud: 6.2311, longitud: -75.6105);
 

@@ -63,18 +63,18 @@ void main() {
       expect(recorrido().sincronizacion, EstadoSincronizacion.pendiente);
     });
 
-    test('acumula cada lectura en orden de captura sin tocar la red',
-        () async {
+    test('acumula cada lectura en orden de captura sin tocar la red', () async {
       await montar();
 
       await emitir(6.2311, -75.6105);
       await emitir(6.2312, -75.6106);
       await emitir(6.2313, -75.6107);
 
-      expect(
-        recorrido().puntos.map((p) => p.latitud),
-        [6.2311, 6.2312, 6.2313],
-      );
+      expect(recorrido().puntos.map((p) => p.latitud), [
+        6.2311,
+        6.2312,
+        6.2313,
+      ]);
       expect(recorrido().ultimo!.longitud, -75.6107);
       expect(repositorio.lotes, isEmpty);
     });
@@ -95,6 +95,42 @@ void main() {
       expect(recorrido().puntos.length, 2);
     });
 
+    test('al reanudar tras moverse en pausa abre un tramo nuevo', () async {
+      await montar();
+      await emitir(6.2311, -75.6105);
+      await emitir(6.2312, -75.6106);
+
+      container.read(cronometroProvider.notifier).pausar();
+      await emitir(6.2400, -75.6200);
+      container.read(cronometroProvider.notifier).reanudar();
+      // Primera lectura tras reanudar, lejos de donde se pausó: empieza el
+      // tramo nuevo, no se une con el anterior (BUG-005).
+      await emitir(6.2400, -75.6200);
+      await emitir(6.2401, -75.6201);
+
+      expect(recorrido().tramos.map((tramo) => tramo.map((p) => p.latitud)), [
+        [6.2311, 6.2312],
+        [6.2400, 6.2401],
+      ]);
+      // Para guardar sigue siendo una sola lista en orden de captura.
+      expect(recorrido().puntos.length, 4);
+    });
+
+    test(
+      'pausar y reanudar sin lecturas en medio no deja tramos vacíos',
+      () async {
+        await montar();
+        await emitir(6.2311, -75.6105);
+        container.read(cronometroProvider.notifier).pausar();
+        container.read(cronometroProvider.notifier).reanudar();
+        container.read(cronometroProvider.notifier).pausar();
+        container.read(cronometroProvider.notifier).reanudar();
+        await emitir(6.2312, -75.6106);
+
+        expect(recorrido().tramos.length, 2);
+      },
+    );
+
     test('ignora una lectura idéntica a la anterior', () async {
       await montar();
 
@@ -104,33 +140,6 @@ void main() {
       await emitir(6.2311, -75.6105);
 
       expect(recorrido().puntos.length, 3);
-    });
-
-    test('descarta el jitter del GPS con el usuario quieto', () async {
-      await montar();
-
-      await emitir(6.2311, -75.6105);
-      // ~1 m y ~2 m del anterior: por debajo del mínimo de registro. Antes
-      // este filtro lo hacía el sistema; ahora entregan todas las lecturas
-      // para que el marcador y el detector de reposo no se queden
-      // esperando (SCRUM-116).
-      await emitir(6.23111, -75.6105);
-      await emitir(6.231118, -75.6105);
-
-      expect(recorrido().puntos.length, 1);
-    });
-
-    test('en auto-pausa sigue registrando, a diferencia de la pausa manual',
-        () async {
-      await montar();
-      await emitir(6.2311, -75.6105);
-
-      container.read(cronometroProvider.notifier).autoPausar();
-      await emitir(6.2312, -75.6106);
-
-      // El usuario no pidió parar: si se dejara de escuchar, no habría
-      // forma de enterarse de que volvió a moverse.
-      expect(recorrido().puntos.length, 2);
     });
 
     test('tras finalizar la actividad ya no registra', () async {
@@ -146,9 +155,7 @@ void main() {
     test('al dejar de observarlo el recorrido se descarta', () async {
       container = crearContainer();
       container.read(cronometroProvider.notifier).iniciar();
-      addTearDown(
-        () => container.read(cronometroProvider.notifier).detener(),
-      );
+      addTearDown(() => container.read(cronometroProvider.notifier).detener());
 
       final sub = container.listen(recorridoProvider, (_, _) {});
       await pumpEventQueue();
@@ -175,10 +182,11 @@ void main() {
       expect(ok, isTrue);
       expect(repositorio.lotes.length, 1);
       expect(repositorio.lotes.single.entrenamientoId, entrenamientoId);
-      expect(
-        repositorio.lotes.single.puntos.map((p) => p.latitud),
-        [6.2311, 6.2312, 6.2313],
-      );
+      expect(repositorio.lotes.single.puntos.map((p) => p.latitud), [
+        6.2311,
+        6.2312,
+        6.2313,
+      ]);
       expect(recorrido().sincronizacion, EstadoSincronizacion.completada);
     });
 
@@ -203,25 +211,27 @@ void main() {
       expect(recorrido().puntos.length, 1);
     });
 
-    test('si el envío falla conserva los puntos y permite reintentar',
-        () async {
-      await montar();
-      await emitir(6.2311, -75.6105);
-      await emitir(6.2312, -75.6106);
-      repositorio.fallar = true;
+    test(
+      'si el envío falla conserva los puntos y permite reintentar',
+      () async {
+        await montar();
+        await emitir(6.2311, -75.6105);
+        await emitir(6.2312, -75.6106);
+        repositorio.fallar = true;
 
-      final primero = await sincronizar();
+        final primero = await sincronizar();
 
-      expect(primero, isFalse);
-      expect(recorrido().sincronizacion, EstadoSincronizacion.fallida);
-      expect(recorrido().puntos.length, 2);
+        expect(primero, isFalse);
+        expect(recorrido().sincronizacion, EstadoSincronizacion.fallida);
+        expect(recorrido().puntos.length, 2);
 
-      repositorio.fallar = false;
-      final segundo = await sincronizar();
+        repositorio.fallar = false;
+        final segundo = await sincronizar();
 
-      expect(segundo, isTrue);
-      expect(repositorio.lotes.single.puntos.length, 2);
-      expect(recorrido().sincronizacion, EstadoSincronizacion.completada);
-    });
+        expect(segundo, isTrue);
+        expect(repositorio.lotes.single.puntos.length, 2);
+        expect(recorrido().sincronizacion, EstadoSincronizacion.completada);
+      },
+    );
   });
 }

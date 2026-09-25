@@ -48,14 +48,7 @@ class CronometroService {
   }
 
   /// Congela el tiempo transcurrido sin perderlo.
-  ///
-  /// Desde una auto-pausa el tiempo ya estaba congelado: solo cambia la
-  /// marcha, para que el detector de reposo no lo reanude por su cuenta.
   void pausar() {
-    if (_marcha == MarchaCronometro.autoPausado) {
-      _marcha = MarchaCronometro.pausado;
-      return;
-    }
     if (_marcha != MarchaCronometro.enCurso) return;
     _cerrarTramo();
     _marcha = MarchaCronometro.pausado;
@@ -63,43 +56,16 @@ class CronometroService {
 
   /// Retoma la cuenta desde el tiempo que ya llevaba.
   void reanudar() {
-    if (_marcha != MarchaCronometro.pausado &&
-        _marcha != MarchaCronometro.autoPausado) {
-      return;
-    }
-    _inicioTramo = _reloj();
-    _marcha = MarchaCronometro.enCurso;
-  }
-
-  /// Congela el tiempo porque el usuario lleva un rato quieto, sin que
-  /// él lo haya pedido (SCRUM-116).
-  ///
-  /// Solo actúa con la actividad en curso: una pausa manual manda sobre
-  /// la automática y no se toca.
-  void autoPausar() {
-    if (_marcha != MarchaCronometro.enCurso) return;
-    _cerrarTramo();
-    _marcha = MarchaCronometro.autoPausado;
-  }
-
-  /// Retoma la cuenta al detectar movimiento tras una auto-pausa.
-  ///
-  /// No saca de una pausa manual: esa solo la levanta el usuario.
-  void autoReanudar() {
-    if (_marcha != MarchaCronometro.autoPausado) return;
+    if (_marcha != MarchaCronometro.pausado) return;
     _inicioTramo = _reloj();
     _marcha = MarchaCronometro.enCurso;
   }
 
   /// Alterna entre pausa y reanudación.
-  ///
-  /// Estando auto-pausado, el usuario ve el tiempo congelado y el botón
-  /// en "reanudar": pulsarlo vuelve a poner el tiempo en marcha.
   void alternarPausa() {
     if (_marcha == MarchaCronometro.enCurso) {
       pausar();
-    } else if (_marcha == MarchaCronometro.pausado ||
-        _marcha == MarchaCronometro.autoPausado) {
+    } else if (_marcha == MarchaCronometro.pausado) {
       reanudar();
     }
   }

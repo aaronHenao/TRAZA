@@ -1,102 +1,113 @@
 import 'dart:math' as math;
 
 import '../models/punto_gps.dart';
-import '../models/tramo_recorrido.dart';
+import 'criterio_movimiento.dart';
 
-/// Acumula la distancia recorrida a partir de puntos GPS consecutivos
-/// (SCRUM-111).
+/// Acumula la distancia recorrida a partir de lecturas GPS consecutivas
+/// (SCRUM-111 y SCRUM-116).
 ///
-/// Lógica pura (sin plugins) para poder testearla sin dispositivo. Sigue el
-/// mismo enfoque que Strava / Google Maps: no se suma la distancia entre
-/// *todos* los puntos que reporta el GPS, sino solo entre los que pasan un
-/// filtro de ruido. Un punto se descarta si:
+/// Lógica pura (sin plugins) para poder testearla sin dispositivo. Recibe
+/// **todas** las lecturas y usa, para cada tramo, la mejor evidencia que haya:
 ///
-///  1. su precisión es peor que [precisionMaximaMetros] (señal mala, ej.
-///     túnel);
-///  2. se movió menos de [umbralPara] respecto al último punto aceptado
-///     (jitter del GPS con el usuario quieto);
-///  3. la velocidad implícita supera [velocidadMaximaMetrosPorSegundo]
-///     (salto imposible).
-///
-/// Los puntos descartados no mueven el ancla, así que un usuario caminando
-/// despacio sí acumula distancia: los puntos se rechazan hasta que la suma
-/// del desplazamiento supera el umbral, y ahí se acepta uno.
+///  1. **Velocidad Doppler** en esta lectura y en la anterior (y sin huecos
+///     de más de [huecoMaximoVelocidad] entre las dos): suma velocidad media
+///     × tiempo. No depende del error de la posición, así que no se inventa
+///     distancia con el usuario quieto ni se congela con un GPS de 30-40 m
+///     de error. Se compara con la lectura anterior, no con el ancla: si
+///     no, unas lecturas sin velocidad al arrancar dejaban el ancla atrás y
+///     todo lo demás contaba como hueco (BUG-001).
+///     Si el GPS dice que el usuario está quieto, no suma nada y el ancla
+///     se queda en esa lectura.
+///  2. **Desplazamiento entre posiciones**, como respaldo cuando no hay
+///     velocidad fiable. Un punto se descarta si su precisión es peor que
+///     [precisionMaximaMetros], si se movió menos del umbral de
+///     [CriterioMovimiento.umbralDesplazamiento] (jitter) o si la velocidad
+///     implícita es imposible (teleport). Los descartes no mueven el ancla,
+///     así que caminar despacio sí acumula.
 class CalculadoraDistancia {
   CalculadoraDistancia({
-    this.precisionMaximaMetros = 30,
-    this.desplazamientoMinimoMetros = 3,
-    this.desplazamientoMaximoFiltroMetros = 15,
-    this.factorRuidoPrecision = 0.5,
-    this.velocidadMaximaMetrosPorSegundo = 12.5,
+    this.precisionMaximaMetros = 20,
+    this.criterio = const CriterioMovimiento(),
+    this.huecoMaximoVelocidad = const Duration(seconds: 5),
   });
 
-  /// Precisión horizontal máxima aceptada, en metros.
-  ///
-  /// Tiene que ser el mismo número que filtra las lecturas antes de llegar
-  /// a la pantalla (`ConfiguracionRastreo.precisionMaximaMetros`): si aquí
-  /// fuera más estricto, habría lecturas que mueven el marcador del mapa
-  /// pero no suman distancia, y el usuario vería el punto avanzar con los
-  /// kilómetros congelados (SCRUM-116).
+  /// Precisión horizontal máxima para medir por posiciones, en metros. No
+  /// aplica a los tramos medidos por velocidad: ahí el error de la posición
+  /// no entra en la cuenta. Con lecturas peores, el umbral de jitter
+  /// (2.5 × el error) superaría su tope y el ruido pasaría como avance.
   final double precisionMaximaMetros;
 
-  /// Desplazamiento mínimo respecto al último punto aceptado, en metros,
-  /// cuando la lectura es buena.
-  final double desplazamientoMinimoMetros;
+  /// Umbrales de reposo, de velocidad fiable y de jitter.
+  final CriterioMovimiento criterio;
 
-  /// Tope del umbral adaptativo. Sin él, una lectura mala exigiría tanto
-  /// desplazamiento que la distancia tardaría demasiado en moverse.
-  final double desplazamientoMaximoFiltroMetros;
-
-  /// Cuánto del error de la propia lectura se exige recorrer antes de
-  /// creerse el movimiento. Con precisión de 20 m y factor 0.5 hacen falta
-  /// 10 m: por debajo de eso el "movimiento" puede ser solo el error.
-  ///
-  /// Con señal buena (5-6 m, lo normal al aire libre) no cambia nada:
-  /// sale por debajo de [desplazamientoMinimoMetros]. `0` lo desactiva.
-  final double factorRuidoPrecision;
-
-  /// Velocidad máxima plausible, en m/s. 12.5 m/s ≈ 45 km/h, muy por encima
-  /// de cualquier corredor, pero por debajo de un salto de GPS.
-  final double velocidadMaximaMetrosPorSegundo;
+  /// Más allá de este tiempo entre dos lecturas no se integra la velocidad:
+  /// no se sabe qué pasó en medio y se mide por posiciones.
+  final Duration huecoMaximoVelocidad;
 
   double _distanciaMetros = 0;
   PuntoGps? _ultimoAceptado;
-  TramoRecorrido? _ultimoTramo;
+  double? _ultimaVelocidad;
+
+  /// Última lectura evaluada, aceptada o no: el otro extremo del tramo que
+  /// se integra por velocidad.
+  PuntoGps? _anterior;
 
   /// Distancia acumulada en metros.
   double get distanciaMetros => _distanciaMetros;
 
-  /// Último punto que pasó el filtro (ancla para el siguiente cálculo).
+  /// Último punto aceptado (ancla para el siguiente cálculo).
   PuntoGps? get ultimoPuntoAceptado => _ultimoAceptado;
 
-  /// Último trozo de recorrido que sumó distancia, o `null` si todavía no
-  /// hubo ninguno. Lo consume la ventana de ritmo actual (SCRUM-116).
-  TramoRecorrido? get ultimoTramo => _ultimoTramo;
+  /// Velocidad del usuario según la última lectura evaluada, en m/s (0 si
+  /// está quieto), o `null` si esa lectura no dijo nada sobre ella. Es la
+  /// muestra con la que se calcula el ritmo actual.
+  double? get ultimaVelocidadMps => _ultimaVelocidad;
 
-  /// Desplazamiento que hay que superar para creerse una lectura con esta
-  /// [precisionMetros].
-  ///
-  /// Con señal buena es [desplazamientoMinimoMetros]; conforme empeora,
-  /// sube con el propio error de la lectura hasta
-  /// [desplazamientoMaximoFiltroMetros]. Es lo que evita que, con el
-  /// usuario quieto y señal regular, el ancla se vaya corriendo de lado y
-  /// el siguiente tramo real se mida desde un sitio equivocado.
-  double umbralPara(double? precisionMetros) {
-    final porRuido = (precisionMetros ?? 0) * factorRuidoPrecision;
-    return math.min(
-      desplazamientoMaximoFiltroMetros,
-      math.max(desplazamientoMinimoMetros, porRuido),
-    );
-  }
-
-  /// Evalúa [punto]. Devuelve `true` si se aceptó y sumó distancia (o si es
-  /// el primer punto / el primero tras [reiniciarAncla]).
+  /// Evalúa [punto]. Devuelve `true` si se aceptó (sumara o no distancia).
   bool agregar(PuntoGps punto) {
-    final precision = punto.precisionMetros;
-    if (precision != null && precision > precisionMaximaMetros) return false;
+    final velocidad = criterio.velocidadFiable(punto);
+    _ultimaVelocidad = velocidad;
+    final anterior = _anterior;
+    _anterior = punto;
 
     final ancla = _ultimoAceptado;
     if (ancla == null) {
+      if (velocidad == null && !_precisionAceptable(punto)) return false;
+      _ultimoAceptado = punto;
+      return true;
+    }
+
+    if (velocidad != null && anterior != null) {
+      final dt = punto.capturadoEn.difference(anterior.capturadoEn);
+      if (dt > Duration.zero && dt <= huecoMaximoVelocidad) {
+        final velocidadAnterior = criterio.velocidadFiable(anterior);
+        if (velocidadAnterior != null) {
+          _sumar((velocidad + velocidadAnterior) / 2 * _segundos(dt), punto);
+          return true;
+        }
+        if (velocidad == 0) {
+          // Quieto según el GPS: el ancla pasa aquí sin sumar, para que el
+          // jitter acumulado no se cuente después como un tramo.
+          _ultimoAceptado = punto;
+          return true;
+        }
+      }
+    }
+
+    final dt = punto.capturadoEn.difference(ancla.capturadoEn);
+    // Sin tiempo transcurrido no hay tramo que medir.
+    if (dt <= Duration.zero) return false;
+    return _agregarPorPosicion(punto, ancla, _segundos(dt));
+  }
+
+  static double _segundos(Duration dt) =>
+      dt.inMicroseconds / Duration.microsecondsPerSecond;
+
+  bool _agregarPorPosicion(PuntoGps punto, PuntoGps ancla, double segundos) {
+    if (!_precisionAceptable(punto)) return false;
+    if (!_precisionAceptable(ancla)) {
+      // Un ancla que entró por velocidad con mala posición no sirve para
+      // medir desplazamiento: se rehace desde aquí sin sumar.
       _ultimoAceptado = punto;
       return true;
     }
@@ -107,40 +118,47 @@ class CalculadoraDistancia {
       punto.latitud,
       punto.longitud,
     );
-    // El umbral lo marca la peor de las dos lecturas: si cualquiera de las
-    // dos es mala, el tramo entre ellas es igual de dudoso.
+    // El umbral lo marca la peor de las dos lecturas.
     final ruido = math.max(
       ancla.precisionMetros ?? 0,
       punto.precisionMetros ?? 0,
     );
-    if (d < umbralPara(ruido)) return false;
+    if (d < criterio.umbralDesplazamiento(ruido)) return false;
 
-    final dt = punto.capturadoEn.difference(ancla.capturadoEn);
-    // Sin tiempo transcurrido no se puede validar velocidad → se descarta.
-    if (dt <= Duration.zero) return false;
-    final velocidad = d / (dt.inMicroseconds / Duration.microsecondsPerSecond);
-    if (velocidad > velocidadMaximaMetrosPorSegundo) return false;
+    final velocidadImplicita = d / segundos;
+    if (velocidadImplicita > criterio.velocidadMaximaMps) return false;
 
-    _distanciaMetros += d;
-    _ultimoTramo = TramoRecorrido(
-      metros: d,
-      inicio: ancla.capturadoEn,
-      fin: punto.capturadoEn,
-    );
-    _ultimoAceptado = punto;
+    _sumar(d, punto);
+    _ultimaVelocidad ??= criterio.esMovimiento(velocidadImplicita)
+        ? velocidadImplicita
+        : 0;
     return true;
+  }
+
+  bool _precisionAceptable(PuntoGps punto) {
+    final precision = punto.precisionMetros;
+    return precision == null || precision <= precisionMaximaMetros;
+  }
+
+  void _sumar(double metros, PuntoGps punto) {
+    _distanciaMetros += metros;
+    _ultimoAceptado = punto;
   }
 
   /// Rompe la continuidad: el siguiente punto aceptado no suma distancia
   /// respecto al anterior. Usar al reanudar tras una pausa, para no contar
   /// lo que el usuario se movió con la actividad pausada.
-  void reiniciarAncla() => _ultimoAceptado = null;
+  void reiniciarAncla() {
+    _ultimoAceptado = null;
+    _anterior = null;
+  }
 
   /// Vuelve al estado inicial (distancia 0, sin ancla).
   void reiniciar() {
     _distanciaMetros = 0;
     _ultimoAceptado = null;
-    _ultimoTramo = null;
+    _ultimaVelocidad = null;
+    _anterior = null;
   }
 
   /// Radio medio de la Tierra (WGS-84), en metros.

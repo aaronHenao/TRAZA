@@ -2,51 +2,37 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/distancia_en_vivo.dart';
 import '../models/estado_cronometro.dart';
-import '../models/punto_gps.dart';
 import 'calculadora_distancia.dart';
 import 'cronometro_provider.dart';
-import 'recorrido_provider.dart';
 import 'ubicacion_provider.dart';
-import 'ventana_ritmo.dart';
+import 'ventana_velocidad.dart';
 
-/// Cómo se construye la calculadora de cada actividad.
-///
-/// Toma el umbral de precisión de [configuracionRastreoProvider] para que
-/// sea el mismo que filtra las lecturas antes de llegar a la pantalla: con
-/// dos umbrales distintos había puntos que movían el marcador del mapa sin
-/// sumar distancia (SCRUM-116). Las pruebas lo sobrescriben para ajustar
-/// los umbrales del filtro.
+/// Cómo se construye la calculadora de cada actividad. Las pruebas la
+/// sobrescriben para ajustar los umbrales del filtro.
 final fabricaCalculadoraDistanciaProvider =
-    Provider<CalculadoraDistancia Function()>((ref) {
-  final precision = ref.watch(
-    configuracionRastreoProvider.select((c) => c.precisionMaximaMetros),
-  );
-  return () => CalculadoraDistancia(
-        precisionMaximaMetros: precision ?? double.infinity,
-      );
-});
+    Provider<CalculadoraDistancia Function()>(
+      (ref) => CalculadoraDistancia.new,
+    );
 
 /// Cómo se construye la ventana del ritmo actual. Las pruebas la
-/// sobrescriben para acortar la ventana.
-final fabricaVentanaRitmoProvider = Provider<VentanaRitmo Function()>(
-  (ref) => VentanaRitmo.new,
+/// sobrescriben para ajustarla.
+final fabricaVentanaVelocidadProvider = Provider<VentanaVelocidad Function()>(
+  (ref) => VentanaVelocidad.new,
 );
 
-/// Distancia recorrida y ritmo de la actividad en curso (SCRUM-111 y
-/// SCRUM-112).
+/// Distancia recorrida y ritmo actual de la actividad en curso (SCRUM-111,
+/// SCRUM-112 y SCRUM-116).
 ///
-/// No abre ningún GPS propio: lee los puntos que [recorridoProvider] va
-/// registrando (SCRUM-110) y los pasa por [CalculadoraDistancia], que
-/// descarta el ruido y suma solo entre puntos consecutivos válidos. Al
-/// reanudar tras una pausa manual se rompe la continuidad, para no contar
-/// lo que el usuario se movió con la actividad pausada.
+/// Evalúa **cada** lectura de [posicionEnVivoProvider] con la actividad en
+/// curso, no solo los puntos que se guardan como recorrido: la velocidad
+/// Doppler se integra lectura a lectura, y saltarse las de reposo haría que
+/// una parada se contara como si se hubiera seguido caminando. No abre un
+/// GPS propio: comparte el stream con el mapa y el recorrido.
 ///
-/// El ritmo que publica es el de los últimos segundos ([VentanaRitmo]), no
-/// el promedio de toda la actividad: parado, el promedio subía sin parar
-/// porque el tiempo corría y la distancia no (SCRUM-116).
+/// En pausa no se evalúa nada, y al reanudar se rompe la continuidad para
+/// no contar lo que el usuario se movió con la actividad pausada.
 ///
-/// Vive mientras la pantalla de entrenamiento lo observe; al salir se
-/// descarta junto con el recorrido.
+/// Vive mientras la pantalla de entrenamiento lo observe.
 final distanciaProvider =
     NotifierProvider.autoDispose<DistanciaNotifier, DistanciaEnVivo>(
       DistanciaNotifier.new,
@@ -54,86 +40,58 @@ final distanciaProvider =
 
 class DistanciaNotifier extends AutoDisposeNotifier<DistanciaEnVivo> {
   late CalculadoraDistancia _calculadora;
-  late VentanaRitmo _ventana;
+  late VentanaVelocidad _ventana;
   late Reloj _reloj;
-  int _procesados = 0;
 
   @override
   DistanciaEnVivo build() {
     _calculadora = ref.watch(fabricaCalculadoraDistanciaProvider)();
-    _ventana = ref.watch(fabricaVentanaRitmoProvider)();
+    _ventana = ref.watch(fabricaVentanaVelocidadProvider)();
     _reloj = ref.watch(relojProvider);
-    _procesados = 0;
 
-    ref.listen(recorridoProvider.select((recorrido) => recorrido.puntos), (
-      _,
-      puntos,
-    ) {
-      _procesar(puntos);
-      state = _instantanea();
+    ref.listen(posicionEnVivoProvider, (_, siguiente) {
+      final punto = siguiente.valueOrNull;
+      if (punto == null) return;
+      if (!ref.read(cronometroProvider).estaEnCurso) return;
+
+      _calculadora.agregar(punto);
+      final velocidad = _calculadora.ultimaVelocidadMps;
+      if (velocidad != null) _ventana.agregar(velocidad, _reloj());
+      _publicar();
     });
 
     ref.listen(cronometroProvider.select((estado) => estado.marcha), (
       anterior,
       actual,
     ) {
-      // Solo la pausa manual rompe la continuidad: en una auto-pausa el
-      // usuario no se fue a ningún lado, así que lo que recorra al
-      // arrancar de nuevo sí cuenta.
-      if (anterior == MarchaCronometro.pausado &&
-          actual == MarchaCronometro.enCurso) {
+      if (actual != MarchaCronometro.enCurso) return;
+      if (anterior == MarchaCronometro.detenido) {
+        // Actividad nueva: se empieza de cero.
+        _calculadora.reiniciar();
+        _ventana.reiniciar();
+      } else if (anterior == MarchaCronometro.pausado) {
         _calculadora.reiniciarAncla();
         _ventana.reiniciar();
       }
+      _publicar();
     });
 
-    // El ritmo tiene que empeorar aunque no lleguen puntos nuevos: si el
-    // usuario afloja, se nota en el siguiente tick, no en el siguiente
-    // fix del GPS.
+    // Sin lecturas nuevas (señal perdida) las muestras caducan y el ritmo
+    // desaparece con el tiempo, en vez de quedarse congelado.
     ref.listen(cronometroProvider.select((estado) => estado.transcurrido), (
       _,
       _,
     ) {
-      state = _instantanea();
+      _publicar();
     });
 
-    // Puntos registrados antes de que alguien observara la distancia.
-    _procesar(ref.read(recorridoProvider).puntos);
     return _instantanea();
   }
 
-  /// Instante del último movimiento aceptado, o `null` si no hubo ninguno
-  /// en la ventana. Lo consulta el detector de reposo (SCRUM-116).
-  DateTime? get ultimoMovimiento => _ventana.ultimoMovimiento;
+  void _publicar() => state = _instantanea();
 
-  DistanciaEnVivo _instantanea() {
-    final ritmo = _ventana.ritmoPorKm(_reloj());
-    return DistanciaEnVivo(
-      metros: _calculadora.distanciaMetros,
-      // Al segundo entero: el ritmo se recalcula varias veces por segundo
-      // y no tiene sentido que la pantalla parpadee con los milisegundos.
-      ritmoActual: ritmo == null
-          ? null
-          : Duration(seconds: (ritmo.inMilliseconds / 1000).round()),
-    );
-  }
-
-  /// Pasa por la calculadora solo los puntos que aún no se evaluaron.
-  void _procesar(List<PuntoGps> puntos) {
-    if (puntos.length < _procesados) {
-      // El recorrido se reinició (nueva actividad).
-      _calculadora.reiniciar();
-      _ventana.reiniciar();
-      _procesados = 0;
-    }
-    for (var i = _procesados; i < puntos.length; i++) {
-      final antes = _calculadora.distanciaMetros;
-      _calculadora.agregar(puntos[i]);
-      // El primer punto se acepta sin sumar nada: no hay tramo todavía.
-      if (_calculadora.distanciaMetros > antes) {
-        _ventana.agregar(_calculadora.ultimoTramo!);
-      }
-    }
-    _procesados = puntos.length;
-  }
+  DistanciaEnVivo _instantanea() => DistanciaEnVivo(
+    metros: _calculadora.distanciaMetros,
+    ritmoActual: _ventana.ritmoPorKm(_reloj()),
+  );
 }

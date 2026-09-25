@@ -1,10 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/estado_cronometro.dart';
 import '../models/punto_gps.dart';
 import '../models/recorrido.dart';
 import 'calculadora_distancia.dart';
+import 'criterio_movimiento.dart';
 import 'cronometro_provider.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'puntos_gps_service.dart';
@@ -29,11 +33,15 @@ final repositorioPuntosGpsProvider = Provider<RepositorioPuntosGps>(
 /// entrenamiento lo observe.
 final recorridoProvider =
     NotifierProvider.autoDispose<RecorridoNotifier, Recorrido>(
-  RecorridoNotifier.new,
-);
+      RecorridoNotifier.new,
+    );
 
 class RecorridoNotifier extends AutoDisposeNotifier<Recorrido> {
   bool _activo = true;
+
+  /// La siguiente lectura registrada empieza un tramo nuevo: se acaba de
+  /// reanudar tras una pausa.
+  bool _tramoNuevo = false;
 
   @override
   Recorrido build() {
@@ -45,36 +53,76 @@ class RecorridoNotifier extends AutoDisposeNotifier<Recorrido> {
       if (punto != null) _registrar(punto);
     });
 
+    ref.listen(cronometroProvider.select((estado) => estado.marcha), (
+      anterior,
+      actual,
+    ) {
+      if (anterior == MarchaCronometro.pausado &&
+          actual == MarchaCronometro.enCurso) {
+        _tramoNuevo = true;
+      }
+    });
+
     return const Recorrido();
   }
 
   /// Registra la lectura en local. No toca la red.
   void _registrar(PuntoGps punto) {
-    // En pausa manual (o ya finalizado) el usuario no está haciendo la
-    // ruta: la lectura no cuenta, igual que en el prototipo. En una
-    // auto-pausa sí se registra: el usuario no pidió parar, solo se quedó
-    // quieto, y hace falta seguir escuchando para saber cuándo arranca de
-    // nuevo (SCRUM-116).
-    if (!ref.read(cronometroProvider).registraRecorrido) return;
-
-    // El sistema entrega todas las lecturas; el filtro de ruido es este.
-    // Descarta el jitter del GPS con el usuario quieto y, de paso, la
-    // lectura puntual inicial repetida en el primer evento del stream.
-    final ultimo = state.ultimo;
-    if (ultimo != null) {
-      final avance = CalculadoraDistancia.haversineMetros(
-        ultimo.latitud,
-        ultimo.longitud,
-        punto.latitud,
-        punto.longitud,
+    // En pausa (o ya finalizado) el usuario no está haciendo la ruta:
+    // la lectura no cuenta, igual que en el prototipo.
+    if (!ref.read(cronometroProvider).estaEnCurso) return;
+    if (_tramoNuevo && state.puntos.isNotEmpty) {
+      // Lo que el usuario se movió en pausa no es parte de la ruta: la
+      // primera lectura tras reanudar no se compara con el último punto de
+      // antes, sino que abre un tramo nuevo (BUG-005).
+      _tramoNuevo = false;
+      state = state.copyWith(
+        puntos: [...state.puntos, punto],
+        cortes: [...state.cortes, state.puntos.length],
       );
-      final minimo = ref
-          .read(configuracionRastreoProvider)
-          .distanciaMinimaRegistroMetros;
-      if (avance < minimo) return;
+      return;
     }
-
+    if (!_esAvance(punto)) return;
     state = state.copyWith(puntos: [...state.puntos, punto]);
+  }
+
+  /// `true` si [punto] alarga el trazo.
+  ///
+  /// El sistema entrega todas las lecturas (una por segundo), así que el
+  /// filtro de ruido es este (SCRUM-116): con el usuario quieto el GPS
+  /// "baila" hasta decenas de metros y el trazo acumularía zigzags
+  /// fantasma. Hace falta separarse `distanciaMinimaRegistroMetros`
+  /// del último punto y, además, que haya movimiento: según la velocidad
+  /// Doppler si es fiable, o si no, un desplazamiento mayor que el error
+  /// de las lecturas.
+  bool _esAvance(PuntoGps punto) {
+    final ultimo = state.ultimo;
+    if (ultimo == null) return true;
+
+    final avance = CalculadoraDistancia.haversineMetros(
+      ultimo.latitud,
+      ultimo.longitud,
+      punto.latitud,
+      punto.longitud,
+    );
+    final minimo = ref
+        .read(configuracionRastreoProvider)
+        .distanciaMinimaRegistroMetros;
+    if (avance < minimo) return false;
+
+    const criterio = CriterioMovimiento();
+    final velocidad = criterio.velocidadFiable(punto);
+    if (velocidad != null) return criterio.esMovimiento(velocidad);
+
+    // Sin velocidad fiable basta con salir del radio de error. Es más
+    // permisivo que el umbral de la distancia (2.5 × el error): un zigzag
+    // en el trazo apenas se nota, pero un marcador que no avanza sí. Los
+    // kilómetros no salen de aquí, así que no se inflan.
+    final ruido = math.max(
+      ultimo.precisionMetros ?? 0,
+      punto.precisionMetros ?? 0,
+    );
+    return avance >= ruido;
   }
 
   /// Envía todos los puntos a `puntos_gps` en una sola operación.

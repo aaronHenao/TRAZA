@@ -13,6 +13,7 @@ import 'package:traza/models/recorrido.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
+import 'package:traza/services/pantalla_encendida_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
@@ -21,6 +22,7 @@ import 'package:traza/widgets/mapa_entrenamiento.dart';
 import 'package:traza/widgets/mapa_recorrido.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
@@ -45,6 +47,7 @@ void main() {
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(supabase),
         entrenamientoActualProvider.overrideWithValue(entrenamientoId),
+        pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),
       ],
     );
     addTearDown(container.dispose);
@@ -358,6 +361,7 @@ void main() {
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(supabase),
         entrenamientoActualProvider.overrideWithValue(null),
+        pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),
       ],
     );
     addTearDown(container.dispose);

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/estado_cronometro.dart';
 import '../../services/cronometro_provider.dart';
 import '../../services/distancia_provider.dart';
+import '../../services/pantalla_encendida_provider.dart';
 import '../../services/recorrido_provider.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/controles_entrenamiento.dart';
@@ -159,6 +160,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     // Mantiene vivo el registro de puntos mientras la pantalla exista,
     // aunque nadie más lo observe (por ejemplo, con un mapa inyectado).
     ref.listen(recorridoProvider, (_, _) {});
+    // Con la actividad en curso la pantalla no se apaga sola; en pausa, al
+    // finalizar o al salir de aquí, sí.
+    ref.watch(pantallaEncendidaEnRutaProvider);
 
     final pausado = ref.watch(
       cronometroProvider.select((estado) => estado.estaPausado),

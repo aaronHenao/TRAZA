@@ -222,7 +222,7 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
             capturadoEn: DateTime.parse(punto['capturado_en'] as String),
           ),
       ],
-      // Sin `tramo` (filas anteriores a la migración 0005) todo es un solo
+      // Sin `tramo` (filas anteriores a la migración 0007) todo es un solo
       // tramo, como se dibujaba antes (BUG-005).
       cortes: cortesDesdeTramos([
         for (final punto in filasPuntos) (punto['tramo'] as num?)?.toInt() ?? 0,

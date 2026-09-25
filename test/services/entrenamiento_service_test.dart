@@ -216,7 +216,7 @@ void main() {
       expect(resumen.distanciaMetros, 5230.5);
       expect(resumen.puntos.map((punto) => punto.latitud), [6.2311, 6.0]);
       expect(resumen.puntos.first.capturadoEn, DateTime.utc(2026, 1, 1, 13));
-      // Filas sin `tramo` (anteriores a la migración 0005): un solo tramo.
+      // Filas sin `tramo` (anteriores a la migración 0007): un solo tramo.
       expect(resumen.cortes, isEmpty);
     });
 

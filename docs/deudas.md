@@ -37,16 +37,3 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
   ])
   ```
 - En Jira: enlazar la SCRUM-84 como bloqueada por la HU de la foto cuando exista.
-
-## BUG-005: trazo cortado por las pausas en el resumen
-
-**Qué quedó hecho (SCRUM-116):**
-
-- El mapa en vivo y el resumen dibujan una línea por tramo: lo recorrido en pausa no se une con una recta.
-- La app guarda y lee la columna `puntos_gps.tramo`.
-- Migración `supabase/migrations/0005_tramo_puntos_gps.sql`.
-
-**Qué falta:**
-
-- **Aplicar la migración `0005` en el SQL Editor de Supabase antes de mergear o desplegar esta rama.** Sin la columna, la app nueva falla al guardar el lote (no se guarda ningún punto del entrenamiento) y al abrir el resumen.
-- Avisar al equipo cuando esté aplicada: la base es compartida. Las versiones anteriores de la app siguen funcionando (no envían `tramo` y queda en 0).

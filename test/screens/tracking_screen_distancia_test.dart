@@ -120,9 +120,7 @@ void main() {
     await emitir(tester, latitud, segundos: i, velocidad: velocidad);
   }
 
-  testWidgets('el ritmo es el del paso actual que mide el GPS', (
-    tester,
-  ) async {
+  testWidgets('el ritmo es el del paso actual que mide el GPS', (tester) async {
     await montar(tester);
 
     for (var i = 0; i <= 10; i++) {

@@ -80,7 +80,7 @@ class RepositorioPuntosGpsSupabase implements RepositorioPuntosGps {
       'longitud': punto.longitud,
       'capturado_en': punto.capturadoEn.toUtc().toIso8601String(),
       'orden_secuencia': ordenSecuencia,
-      // Requiere la migración 0005 (BUG-005).
+      // Requiere la migración 0007 (BUG-005).
       'tramo': tramo,
     };
   }

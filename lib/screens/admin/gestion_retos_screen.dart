@@ -9,6 +9,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/traza_card.dart';
 
 /// Catálogo de retos del administrador (SCRUM-139).
@@ -501,24 +502,12 @@ class _SinRetos extends ConsumerWidget {
         ref.watch(filtroPeriodicidadRetosProvider) != null ||
         ref.watch(filtroEstadoRetosProvider) != EstadoReto.activo;
 
-    // Sobre un scroll para que "deslizar para refrescar" siga funcionando
-    // cuando no hay nada que mostrar.
-    return ListView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: 60,
-      ),
-      children: [
-        _Estado(
-          icono: hayFiltro ? Icons.filter_alt_outlined : Icons.flag_outlined,
-          titulo: hayFiltro
-              ? 'Ningún reto con este filtro'
-              : 'Aún no hay retos',
-          detalle: hayFiltro
-              ? 'Prueba con otro estado o periodicidad.'
-              : 'Toca el botón + para crear el primero.',
-        ),
-      ],
+    return EstadoVacio(
+      icono: hayFiltro ? Icons.filter_alt_outlined : Icons.flag_outlined,
+      titulo: hayFiltro ? 'Ningún reto con este filtro' : 'Aún no hay retos',
+      detalle: hayFiltro
+          ? 'Prueba con otro estado o periodicidad.'
+          : 'Toca el botón + para crear el primero.',
     );
   }
 }
@@ -530,70 +519,14 @@ class _NoSePudoCargar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: 80,
+    return EstadoVacio(
+      icono: Icons.cloud_off_outlined,
+      titulo: 'No pudimos cargar los retos',
+      detalle: 'Revisa tu conexión e inténtalo de nuevo.',
+      accion: OutlinedButton(
+        onPressed: onReintentar,
+        child: const Text('Reintentar'),
       ),
-      children: [
-        _Estado(
-          icono: Icons.cloud_off_outlined,
-          titulo: 'No pudimos cargar los retos',
-          detalle: 'Revisa tu conexión e inténtalo de nuevo.',
-          accion: OutlinedButton(
-            onPressed: onReintentar,
-            child: const Text('Reintentar'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Estado extends StatelessWidget {
-  const _Estado({
-    required this.icono,
-    required this.titulo,
-    required this.detalle,
-    this.accion,
-  });
-
-  final IconData icono;
-  final String titulo;
-  final String detalle;
-  final Widget? accion;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 72,
-          height: 72,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.bgAlt,
-          ),
-          child: Icon(icono, size: 30, color: AppColors.ink3),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          titulo,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          detalle,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
-        ),
-        if (accion != null) ...[const SizedBox(height: AppSpacing.md), accion!],
-      ],
     );
   }
 }

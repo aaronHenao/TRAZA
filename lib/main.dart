@@ -11,6 +11,9 @@ import 'screens/home/inicio_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
+import 'screens/retos/detalle_reto_screen.dart';
+import 'screens/retos/retos_screen.dart';
+import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
@@ -105,6 +108,24 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/actividad',
       builder: (context, state) => const ActividadScreen(),
+    ),
+    // Catálogo de retos que el corredor puede intentar (SCRUM-135).
+    GoRoute(
+      path: '/retos',
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.retos,
+        child: RetosScreen(),
+      ),
+      routes: [
+        // El listado pasa el reto en `extra` para no volver a consultarlo.
+        GoRoute(
+          path: ':retoId',
+          builder: (context, state) => DetalleRetoPorRuta(
+            retoId: state.pathParameters['retoId']!,
+            reto: state.extra as Reto?,
+          ),
+        ),
+      ],
     ),
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(

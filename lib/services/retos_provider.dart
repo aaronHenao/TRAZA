@@ -79,6 +79,23 @@ final retosFiltradosProvider = Provider.autoDispose<AsyncValue<List<Reto>>>((
       );
 });
 
+/// Los retos que el corredor puede intentar hoy (SCRUM-163).
+///
+/// `autoDispose`: se consulta al entrar a la sección, así un reto que acaba
+/// de vencer deja de aparecer sin tener que reiniciar la app.
+final retosVigentesProvider = FutureProvider.autoDispose<List<Reto>>(
+  (ref) => ref
+      .watch(retosRepositoryProvider)
+      .vigentes(hoy: ref.read(relojProvider)()),
+);
+
+/// Qué periodicidad está mirando el corredor, o null para todas.
+///
+/// Se filtra en memoria y no en la consulta: los retos vigentes de un día son
+/// pocos, y así cambiar de pestaña responde al instante.
+final filtroRetosCorredorProvider =
+    StateProvider.autoDispose<PeriodicidadReto?>((ref) => null);
+
 /// Creación de retos (SCRUM-143).
 final creacionRetoProvider = Provider<CreacionReto>(CreacionReto.new);
 

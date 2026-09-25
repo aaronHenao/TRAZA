@@ -1,0 +1,195 @@
+import 'package:flutter/material.dart';
+
+import '../models/periodicidad_reto.dart';
+import '../models/reto.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_dimens.dart';
+import 'traza_card.dart';
+
+/// Un reto del catálogo, como lo ve el corredor (SCRUM-167).
+///
+/// Muestra lo que necesita para decidir si lo intenta: qué hay que hacer,
+/// cuánta XP da y **cuánto le queda de vigencia**, que es lo que cambia la
+/// decisión — no es lo mismo un reto que termina esta noche que uno al que le
+/// quedan tres semanas.
+class TarjetaReto extends StatelessWidget {
+  const TarjetaReto({required this.reto, required this.hoy, this.onTap, super.key});
+
+  final Reto reto;
+
+  /// Desde cuándo se cuenta lo que queda. Se recibe en vez de leer el reloj
+  /// aquí para que la lista entera use el mismo día.
+  final DateTime hoy;
+
+  /// Abre el detalle del reto (SCRUM-166).
+  final VoidCallback? onTap;
+
+  static Key claveDe(String retoId) => Key('reto-$retoId');
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconoPeriodicidad(periodicidad: reto.periodicidad),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      reto.nombre,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      reto.descripcion,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.ink2,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              InsigniaReto(
+                texto: '+${reto.xpOtorgada} XP',
+                fondo: AppColors.primaryTint,
+                color: AppColors.primaryDark,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              InsigniaReto(texto: reto.periodicidad.etiqueta),
+              InsigniaReto(texto: 'Meta ${textoMeta(reto.metaKm)} km'),
+              _Vigencia(reto: reto, hoy: hoy),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// `5` en vez de `5.0`, pero `2.5` se mantiene.
+  static String textoMeta(double meta) {
+    final entero = meta.toInt();
+    return meta == entero ? '$entero' : '$meta';
+  }
+}
+
+/// Cuánto le queda al reto, contado en días enteros.
+///
+/// Se dice en días y no con fechas porque es lo que el corredor necesita
+/// decidir: "termina hoy" mueve a salir a correr, "del 21 al 27 de
+/// septiembre" hay que traducirlo mentalmente.
+class _Vigencia extends StatelessWidget {
+  const _Vigencia({required this.reto, required this.hoy});
+
+  final Reto reto;
+  final DateTime hoy;
+
+  @override
+  Widget build(BuildContext context) {
+    final quedan = reto.vigencia.diasRestantesDesde(hoy);
+
+    final (texto, fondo, color) = switch (quedan) {
+      0 => ('Terminado', AppColors.bgAlt, AppColors.ink3),
+      // El último día se avisa en rojo: es ahora o nunca.
+      1 => ('Termina hoy', AppColors.dangerTint, AppColors.danger),
+      2 => ('Queda 1 día', AppColors.accentTint, AppColors.accentInk),
+      _ => ('Quedan ${quedan - 1} días', AppColors.bgAlt, AppColors.ink2),
+    };
+
+    return InsigniaReto(texto: texto, fondo: fondo, color: color);
+  }
+}
+
+/// Icono cuadrado con el color de cada periodicidad.
+class IconoPeriodicidad extends StatelessWidget {
+  const IconoPeriodicidad({required this.periodicidad, super.key});
+
+  final PeriodicidadReto periodicidad;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icono, fondo, color) = switch (periodicidad) {
+      PeriodicidadReto.diaria => (
+        Icons.schedule,
+        AppColors.accentTint,
+        AppColors.accentInk,
+      ),
+      PeriodicidadReto.semanal => (
+        Icons.bolt_outlined,
+        AppColors.primaryTint,
+        AppColors.primaryDark,
+      ),
+      PeriodicidadReto.mensual => (
+        Icons.calendar_month_outlined,
+        AppColors.secondaryTint,
+        AppColors.secondaryDark,
+      ),
+    };
+
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: fondo,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icono, size: 22, color: color),
+    );
+  }
+}
+
+/// Etiqueta redondeada del prototipo (`.badge`).
+class InsigniaReto extends StatelessWidget {
+  const InsigniaReto({
+    required this.texto,
+    this.fondo = AppColors.bgAlt,
+    this.color = AppColors.ink2,
+    super.key,
+  });
+
+  final String texto;
+  final Color fondo;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: fondo,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+}

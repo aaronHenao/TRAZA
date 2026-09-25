@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/nuevo_reto.dart';
 import '../models/reto.dart';
+import '../models/vigencia_reto.dart';
 
 /// Repositorio de retos que usa la app. Las pruebas lo sustituyen con
 /// `overrideWithValue`.
@@ -59,9 +60,17 @@ abstract interface class RetosRepository {
   /// antiguo.
   ///
   /// Es lo que necesita el criterio 1 de SCRUM-132: al crear un reto, verlo
-  /// aparecer en el catálogo. La consulta de los corredores, con su filtro
-  /// por vigencia, es otra (SCRUM-163).
+  /// aparecer en el catálogo. Es la consulta del administrador, que ve todo
+  /// lo que ha creado aunque ya no esté vigente.
   Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo});
+
+  /// Los retos que un corredor puede intentar hoy (SCRUM-163): activos y con
+  /// [hoy] dentro de su vigencia.
+  ///
+  /// Ordenados por lo que se acaba antes. Un reto diario que termina esta
+  /// noche es más urgente que uno mensual al que le quedan tres semanas, y
+  /// eso es lo primero que el corredor necesita ver.
+  Future<List<Reto>> vigentes({required DateTime hoy});
 }
 
 class SupabaseRetosRepository implements RetosRepository {
@@ -135,6 +144,28 @@ class SupabaseRetosRepository implements RetosRepository {
         .select()
         .eq('estado', estado.valorDb)
         .order('fecha_creacion', ascending: false)
+        .limit(limite);
+
+    return filas.map(Reto.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<Reto>> vigentes({required DateTime hoy}) async {
+    final dia = VigenciaReto.aTexto(hoy);
+
+    // El filtro de vigencia va aquí y no en la policy: RLS decide quién ve
+    // qué, no qué muestra cada pantalla. La misma fila es "vigente" hoy y
+    // "vencida" mañana sin que cambien los permisos.
+    final filas = await _cliente
+        .from(_tabla)
+        .select()
+        .eq('estado', EstadoReto.activo.valorDb)
+        .lte('fecha_inicio', dia)
+        .gte('fecha_fin', dia)
+        // `ascending` explícito: en postgrest el valor por defecto de
+        // `order` es descendente, así que sin esto lo que más falta hacía
+        // quedaba al final.
+        .order('fecha_fin', ascending: true)
         .limit(limite);
 
     return filas.map(Reto.desdeSupabase).toList();

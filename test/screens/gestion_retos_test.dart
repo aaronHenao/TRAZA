@@ -9,8 +9,10 @@ import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
 
+import '../utiles/retos_repository_falso.dart';
+
 /// Catálogo de mentira: guarda los retos y responde según el estado pedido.
-class _RetosFalso implements RetosRepository {
+class _RetosFalso extends RetosRepositorioFalso {
   _RetosFalso(this.retos);
 
   List<Reto> retos;

@@ -42,13 +42,11 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 **Qué quedó hecho (SCRUM-116):**
 
-- `Recorrido` sabe dónde empieza cada tramo (`cortes`, `tramos`) y el mapa en vivo dibuja una línea por tramo: lo recorrido en pausa ya no se une con una recta.
+- El mapa en vivo y el resumen dibujan una línea por tramo: lo recorrido en pausa no se une con una recta.
+- La app guarda y lee la columna `puntos_gps.tramo`.
+- Migración `supabase/migrations/0005_tramo_puntos_gps.sql`.
 
 **Qué falta:**
 
-- **`puntos_gps` no guarda el tramo.** El resumen dibuja los puntos que lee de la base, así que ahí la recta entre la pausa y la reanudación sigue.
-- Hace falta:
-  1. una migración nueva (`supabase/migrations/0005_...sql`) con `alter table puntos_gps add column tramo smallint not null default 0;`, aplicada a mano en el SQL Editor;
-  2. que `RepositorioPuntosGpsSupabase` envíe el `tramo` de cada punto;
-  3. que el resumen lea `tramo` y `Trazado`/`TrazadoRecorrido` dibujen una línea por tramo.
-- **Orden obligatorio:** aplicar la migración **antes** de desplegar la app que envía `tramo`. Si no, el insert del lote falla y no se guarda ningún punto del entrenamiento.
+- **Aplicar la migración `0005` en el SQL Editor de Supabase antes de mergear o desplegar esta rama.** Sin la columna, la app nueva falla al guardar el lote (no se guarda ningún punto del entrenamiento) y al abrir el resumen.
+- Avisar al equipo cuando esté aplicada: la base es compartida. Las versiones anteriores de la app siguen funcionando (no envían `tramo` y queda en 0).

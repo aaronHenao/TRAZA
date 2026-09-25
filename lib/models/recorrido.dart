@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'punto_gps.dart';
+import 'tramos.dart';
 
 /// En qué va la sincronización del recorrido con Supabase.
 enum EstadoSincronizacion {
@@ -45,14 +46,7 @@ class Recorrido {
   PuntoGps? get ultimo => puntos.isEmpty ? null : puntos.last;
 
   /// [puntos] separados por las pausas, cada tramo en orden de captura.
-  List<List<PuntoGps>> get tramos {
-    if (puntos.isEmpty) return const [];
-    final limites = [0, ...cortes, puntos.length];
-    return [
-      for (var i = 0; i < limites.length - 1; i++)
-        puntos.sublist(limites[i], limites[i + 1]),
-    ];
-  }
+  List<List<PuntoGps>> get tramos => dividirEnTramos(puntos, cortes);
 
   Recorrido copyWith({
     List<PuntoGps>? puntos,

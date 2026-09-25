@@ -16,8 +16,7 @@ import 'package:traza/services/objetivos_service.dart'
 /// que la prueba necesita. Así se verifican las consultas que de verdad salen
 /// hacia Supabase.
 void main() {
-  test('crea el entrenamiento en curso del usuario y devuelve su id',
-      () async {
+  test('crea el entrenamiento en curso del usuario y devuelve su id', () async {
     final supabase = _SupabaseFalso(
       filasActualizadas: [
         {'id': 'e-nuevo'},
@@ -41,22 +40,24 @@ void main() {
     });
   });
 
-  test('no manda fecha_inicio: la pone la base con la hora del servidor',
-      () async {
-    final supabase = _SupabaseFalso(
-      filasActualizadas: [
-        {'id': 'e-nuevo'},
-      ],
-    );
-    addTearDown(supabase.cerrar);
+  test(
+    'no manda fecha_inicio: la pone la base con la hora del servidor',
+    () async {
+      final supabase = _SupabaseFalso(
+        filasActualizadas: [
+          {'id': 'e-nuevo'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
 
-    await supabase.repositorio.crear(tipoActividadId: 'id-correr');
+      await supabase.repositorio.crear(tipoActividadId: 'id-correr');
 
-    expect(
-      (jsonDecode(supabase.peticiones.single.body) as Map).keys,
-      isNot(contains('fecha_inicio')),
-    );
-  });
+      expect(
+        (jsonDecode(supabase.peticiones.single.body) as Map).keys,
+        isNot(contains('fecha_inicio')),
+      );
+    },
+  );
 
   test('sin sesión no intenta crear el entrenamiento', () async {
     final supabase = _SupabaseFalso(usuarioActual: null);
@@ -204,6 +205,7 @@ void main() {
       expect(parametros['estado'], 'eq.finalizado');
       expect(parametros['select'], contains('tipos_actividad(nombre)'));
       expect(parametros['select'], contains('puntos_gps('));
+      expect(parametros['select'], contains('tramo'));
       expect(parametros['puntos_gps.order'], 'orden_secuencia.asc.nullslast');
 
       expect(resumen, isNotNull);
@@ -214,6 +216,33 @@ void main() {
       expect(resumen.distanciaMetros, 5230.5);
       expect(resumen.puntos.map((punto) => punto.latitud), [6.2311, 6.0]);
       expect(resumen.puntos.first.capturadoEn, DateTime.utc(2026, 1, 1, 13));
+      // Filas sin `tramo` (anteriores a la migración 0005): un solo tramo.
+      expect(resumen.cortes, isEmpty);
+    });
+
+    test('reconstruye dónde empieza cada tramo con la columna tramo '
+        '(BUG-005)', () async {
+      Map<String, Object?> fila(int orden, int tramo) => {
+        'latitud': 6.2311 + orden / 1000,
+        'longitud': -75.6105,
+        'capturado_en': '2026-01-01T13:00:0$orden+00:00',
+        'orden_secuencia': orden,
+        'tramo': tramo,
+      };
+      final supabase = _SupabaseFalso(
+        filasLeidas: [
+          {
+            ..._filaGuardada,
+            'puntos_gps': [fila(0, 0), fila(1, 0), fila(2, 1), fila(3, 1)],
+          },
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final resumen = await supabase.repositorio.cargarFinalizado('e-123');
+
+      expect(resumen!.puntos, hasLength(4));
+      expect(resumen.cortes, [2]);
     });
 
     test('si no existe, no es del usuario o no está finalizado devuelve '

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/punto_gps.dart';
 import '../models/resumen_entrenamiento.dart';
+import '../models/tramos.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
 
 /// Repositorio de entrenamientos que usa la app. Las pruebas lo sustituyen
@@ -176,7 +177,7 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
         .select(
           'id,fecha_fin,duracion_segundos,distancia_total_m,'
           'tipos_actividad(nombre),'
-          'puntos_gps(latitud,longitud,capturado_en,orden_secuencia)',
+          'puntos_gps(latitud,longitud,capturado_en,orden_secuencia,tramo)',
         )
         .eq('id', entrenamientoId)
         .eq('estado', 'finalizado')
@@ -201,6 +202,9 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
 
     final tipo = fila['tipos_actividad'];
     final puntos = fila['puntos_gps'];
+    final filasPuntos = puntos is List
+        ? puntos.cast<Map<String, dynamic>>()
+        : const <Map<String, dynamic>>[];
 
     return ResumenEntrenamiento(
       entrenamientoId: id,
@@ -211,14 +215,18 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
       duracion: Duration(seconds: duracion.toInt()),
       distanciaMetros: _comoDouble(fila['distancia_total_m']),
       puntos: [
-        if (puntos is List)
-          for (final punto in puntos.cast<Map<String, dynamic>>())
-            PuntoGps(
-              latitud: (punto['latitud'] as num).toDouble(),
-              longitud: (punto['longitud'] as num).toDouble(),
-              capturadoEn: DateTime.parse(punto['capturado_en'] as String),
-            ),
+        for (final punto in filasPuntos)
+          PuntoGps(
+            latitud: (punto['latitud'] as num).toDouble(),
+            longitud: (punto['longitud'] as num).toDouble(),
+            capturadoEn: DateTime.parse(punto['capturado_en'] as String),
+          ),
       ],
+      // Sin `tramo` (filas anteriores a la migración 0005) todo es un solo
+      // tramo, como se dibujaba antes (BUG-005).
+      cortes: cortesDesdeTramos([
+        for (final punto in filasPuntos) (punto['tramo'] as num?)?.toInt() ?? 0,
+      ]),
     );
   }
 

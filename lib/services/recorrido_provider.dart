@@ -145,6 +145,7 @@ class RecorridoNotifier extends AutoDisposeNotifier<Recorrido> {
       await repositorio.guardarTodos(
         entrenamientoId: entrenamientoId,
         puntos: puntos,
+        cortes: state.cortes,
       );
       _actualizar(EstadoSincronizacion.completada);
       return true;

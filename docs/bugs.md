@@ -8,7 +8,7 @@ Registro de los bugs que aparecen al probar la app y cómo se corrigieron, para 
 | [BUG-002](#bug-002-regresión-del-primer-arreglo-mapa-tiempo-y-ritmo-congelados) | SCRUM-116 | Regresión del commit `30d0e10`: mapa, tiempo y ritmo congelados | Corregido (se revirtió) |
 | [BUG-003](#bug-003-distancia-inflada-parezco-que-corro-una-maratón) | SCRUM-116 | Distancia y ritmo inflados, "parezco que corro una maratón" | Corregido (misma causa que BUG-001) |
 | [BUG-004](#bug-004-el-recorrido-no-se-ve-en-vivo-en-el-mapa) | SCRUM-116 | El recorrido no se dibuja en vivo en el mapa | Corregido |
-| [BUG-005](#bug-005-al-reanudar-el-trazo-une-con-una-recta-el-punto-de-pausa-y-el-de-reanudación) | SCRUM-116 | Al reanudar tras moverse en pausa, el trazo une con una recta el punto de pausa y el de reanudación | Corregido en el mapa en vivo; falta el resumen |
+| [BUG-005](#bug-005-al-reanudar-el-trazo-une-con-una-recta-el-punto-de-pausa-y-el-de-reanudación) | SCRUM-116 | Al reanudar tras moverse en pausa, el trazo une con una recta el punto de pausa y el de reanudación | Corregido; el resumen requiere aplicar la migración `0005` |
 
 Dispositivo de pruebas: tablet Samsung SM-X520 (Android 16). Su GPS entrega fixes con 30-40 m de error (`hAcc=32` en GPS y `~40` por red, según `adb shell dumpsys location`). Casi todos estos bugs salen de ese error: a paso de caminata (~1,4 m/s) es mucho mayor que lo que el usuario avanza entre dos lecturas.
 
@@ -264,18 +264,25 @@ La distancia, en cambio, ya corta la continuidad al reanudar (`distanciaProvider
 
 **Tests:** `test/models/recorrido_test.dart` (nuevo), `test/services/recorrido_provider_test.dart` (tramo nuevo al reanudar, pausas sin lecturas no dejan tramos vacíos), `test/integration/rastreo_en_vivo_test.dart` (dos polilíneas tras pausar y reanudar).
 
-**Falta:** el mapa del resumen lee los puntos de `puntos_gps`, que no guarda dónde empieza cada tramo, así que ahí la recta sigue. Hace falta una columna nueva (migración en `supabase/migrations/`, aplicada a mano).
+**Resumen** (rama `fix/SCRUM-116-trazo-por-tramos-resumen`): el mapa del resumen lee los puntos de `puntos_gps`, que no guardaba dónde empieza cada tramo.
+
+- Migración `supabase/migrations/0005_tramo_puntos_gps.sql`: columna `tramo smallint not null default 0` (0 es el primer tramo y cada reanudación suma 1). Las filas viejas quedan como un solo tramo.
+- `RepositorioPuntosGpsSupabase` guarda el `tramo` de cada punto a partir de `Recorrido.cortes`.
+- `cargarFinalizado` lee `tramo` y reconstruye los cortes; `Trazado` y `TrazadoRecorrido` dibujan una línea por tramo.
+- `lib/models/tramos.dart` reúne la conversión entre cortes y números de tramo, que usan `Recorrido`, `Trazado` y la persistencia.
+
+**Tests:** `test/models/tramos_test.dart` (nuevo), `test/models/trazado_test.dart`, `test/widgets/trazado_recorrido_test.dart`, `test/services/puntos_gps_service_test.dart`, `test/services/entrenamiento_service_test.dart`, `test/screens/resumen_screen_test.dart`, `test/services/recorrido_provider_test.dart`.
 
 **Validación (2026-09-24, A55):** tras pausar, moverse y reanudar, el trazo en vivo queda cortado.
 
-**Estado:** corregido en el mapa en vivo; el resumen queda como deuda (ver `docs/deudas.md`).
+**Estado:** corregido. El resumen solo funciona después de aplicar la migración `0005` en Supabase (ver `docs/deudas.md`).
 
 ---
 
 ## Pendiente
 
 - **BUG-001 y BUG-003:** validar la distancia contra un tramo de longitud conocida (por ejemplo, una pista de 400 m).
-- **BUG-005:** cortar también el trazo del resumen (ver `docs/deudas.md`).
+- **BUG-005:** aplicar la migración `0005` antes de mergear la rama del resumen (ver `docs/deudas.md`).
 
 ## Cómo diagnosticar en el dispositivo
 

@@ -107,4 +107,33 @@ void main() {
       isNot(Trazado.desdePuntos([punto(6.20, -75.6), punto(6.22, -75.59)])),
     );
   });
+
+  test('separa los puntos en tramos por las pausas (BUG-005)', () {
+    final trazado = Trazado.desdePuntos(
+      [punto(0, 0), punto(0, 0.001), punto(0, 0.003), punto(0, 0.004)],
+      cortes: const [2],
+    );
+
+    expect(trazado.tramos, hasLength(2));
+    esperarPunto(trazado.tramos[0].last, 0.25, 0);
+    esperarPunto(trazado.tramos[1].first, 0.75, 0);
+    // La partida y la llegada no cambian.
+    esperarPunto(trazado.puntos.first, 0, 0);
+    esperarPunto(trazado.puntos.last, 1, 0);
+  });
+
+  test('sin cortes es un solo tramo', () {
+    final trazado = Trazado.desdePuntos([punto(0, 0), punto(0, 0.001)]);
+
+    expect(trazado.tramos, hasLength(1));
+  });
+
+  test('los cortes cuentan para la igualdad', () {
+    final puntos = [punto(0, 0), punto(0, 0.001)];
+
+    expect(
+      Trazado.desdePuntos(puntos, cortes: const [1]),
+      isNot(Trazado.desdePuntos(puntos)),
+    );
+  });
 }

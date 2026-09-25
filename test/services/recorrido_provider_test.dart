@@ -114,6 +114,10 @@ void main() {
       ]);
       // Para guardar sigue siendo una sola lista en orden de captura.
       expect(recorrido().puntos.length, 4);
+
+      // Y el lote lleva dónde empieza cada tramo, para el resumen.
+      await sincronizar();
+      expect(repositorio.lotes.single.cortes, [2]);
     });
 
     test(

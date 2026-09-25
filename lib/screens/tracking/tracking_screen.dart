@@ -163,12 +163,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     final pausado = ref.watch(
       cronometroProvider.select((estado) => estado.estaPausado),
     );
-    // Distancia y ritmo en vivo (SCRUM-112): la distancia cambia con cada
-    // punto aceptado y el ritmo con cada tick del cronómetro.
+    // Distancia y ritmo en vivo (SCRUM-112). El ritmo es el de los últimos
+    // segundos, no el promedio de toda la actividad (SCRUM-116).
     final distancia = ref.watch(distanciaProvider);
-    final transcurrido = ref.watch(
-      cronometroProvider.select((estado) => estado.transcurrido),
-    );
 
     // Con la actividad en curso no se sale por accidente: el recorrido vive
     // en memoria hasta que se finaliza, así que un atrás sin más lo perdería
@@ -198,7 +195,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                   const CronometroEntrenamiento(),
                   EstadisticasEntrenamiento(
                     distancia: distancia.kilometros,
-                    ritmo: distancia.ritmoPara(transcurrido),
+                    ritmo: distancia.ritmoActualFormateado,
                   ),
                   ControlesEntrenamiento(
                     pausado: pausado,

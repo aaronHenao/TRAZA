@@ -5,13 +5,17 @@ import '../models/punto_gps.dart';
 
 /// Frecuencia y calidad con las que se procesa la ubicación (SCRUM-110).
 ///
-/// Se filtra por distancia, no por tiempo: corriendo a 12 km/h (~3 m/s)
-/// llega una lectura cada 1-2 s, y parado no llega ninguna. Sin ese
-/// filtro el GPS "baila" 2-3 m en reposo y el recorrido acumula puntos
-/// fantasma.
+/// Se piden **todas** las lecturas, una por segundo ([intervalo]), y el ruido
+/// se filtra en la app (SCRUM-116). Con el filtro de distancia del sistema,
+/// parado no llegaba ninguna lectura: no había forma de saber que el usuario
+/// se había detenido (el ritmo se quedaba con el último valor) y al volver a
+/// caminar la app tardaba en enterarse. Cada lectura trae además la
+/// velocidad Doppler, que es con lo que se mide el ritmo y la distancia.
 class ConfiguracionRastreo {
   const ConfiguracionRastreo({
-    this.distanciaMinimaMetros = 5,
+    this.distanciaMinimaMetros = 0,
+    this.intervalo = const Duration(seconds: 1),
+    this.distanciaMinimaRegistroMetros = 5,
     this.altaPrecision = true,
     this.precisionMaximaMetros = 50,
     this.antiguedadMaxima = const Duration(seconds: 30),
@@ -19,8 +23,16 @@ class ConfiguracionRastreo {
   });
 
   /// Desplazamiento mínimo entre dos lecturas para que el sistema
-  /// entregue una nueva. `0` = todas las lecturas.
+  /// entregue una nueva. `0` = todas las lecturas, que es lo que queremos.
   final int distanciaMinimaMetros;
+
+  /// Cada cuánto se pide una lectura en Android. Sin fijarlo, geolocator
+  /// usa 5 s: demasiado lento para notar que el usuario paró o arrancó.
+  final Duration intervalo;
+
+  /// Separación mínima entre dos puntos del recorrido (el trazo), en
+  /// metros. Por debajo es jitter del GPS con el usuario quieto.
+  final double distanciaMinimaRegistroMetros;
 
   /// `true` pide la mejor precisión disponible (más batería).
   final bool altaPrecision;
@@ -100,14 +112,14 @@ class UbicacionGeolocator implements FuenteUbicacion {
     // los primeros ~3 s tras arrancar la app; el stream se queda mudo,
     // sin datos ni error). getCurrentPosition no depende de ese servicio,
     // y cuando resuelve el servicio ya está enlazado.
-    yield _aPunto(
+    yield aPunto(
       await Geolocator.getCurrentPosition(
         locationSettings: ajustesBasicos(configuracion),
       ),
     );
     yield* Geolocator.getPositionStream(
       locationSettings: ajustesPara(configuracion, defaultTargetPlatform),
-    ).map(_aPunto);
+    ).map(aPunto);
   }
 
   /// Precisión y filtro de distancia, sin nada de segundo plano. Para la
@@ -136,6 +148,7 @@ class UbicacionGeolocator implements FuenteUbicacion {
         return AndroidSettings(
           accuracy: precision,
           distanceFilter: distancia,
+          intervalDuration: configuracion.intervalo,
           foregroundNotificationConfig: configuracion.enSegundoPlano
               ? const ForegroundNotificationConfig(
                   notificationTitle: tituloNotificacionRastreo,
@@ -166,13 +179,35 @@ class UbicacionGeolocator implements FuenteUbicacion {
 
   static LocationAccuracy _precision(ConfiguracionRastreo configuracion) =>
       configuracion.altaPrecision
-          ? LocationAccuracy.best
-          : LocationAccuracy.medium;
+      ? LocationAccuracy.best
+      : LocationAccuracy.medium;
 
-  static PuntoGps _aPunto(Position posicion) => PuntoGps(
-        latitud: posicion.latitude,
-        longitud: posicion.longitude,
-        capturadoEn: posicion.timestamp,
-        precisionMetros: posicion.accuracy,
-      );
+  /// Traduce una [Position] de geolocator a [PuntoGps].
+  ///
+  /// No basta con las banderas `has*`: en Android `AndroidPosition.fromMap`
+  /// (geolocator_android 4.6.2) las pierde y llegan siempre en `false`,
+  /// aunque el sistema sí midiera precisión y velocidad (BUG-001). Por eso
+  /// un valor distinto de 0 también cuenta como medido: geolocator pone 0
+  /// cuando falta. Una velocidad de 0 es un reposo válido, así que se cree
+  /// si el sistema dijo cuánto error tiene.
+  @visibleForTesting
+  static PuntoGps aPunto(Position posicion) {
+    final precisionVelocidad =
+        posicion.hasSpeedAccuracy || posicion.speedAccuracy > 0
+        ? posicion.speedAccuracy
+        : null;
+    return PuntoGps(
+      latitud: posicion.latitude,
+      longitud: posicion.longitude,
+      capturadoEn: posicion.timestamp,
+      precisionMetros: posicion.hasAccuracy || posicion.accuracy > 0
+          ? posicion.accuracy
+          : null,
+      velocidadMps:
+          posicion.hasSpeed || posicion.speed != 0 || precisionVelocidad != null
+          ? posicion.speed
+          : null,
+      precisionVelocidadMps: precisionVelocidad,
+    );
+  }
 }

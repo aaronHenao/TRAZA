@@ -146,6 +146,40 @@ void main() {
       expect(find.text('Ver en el mapa'), findsNothing);
     });
 
+    testWidgets('dibuja el recorrido cortado donde se pausó (BUG-005)', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: 'e-123',
+          nombreActividad: 'Trote',
+          fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+          duracion: const Duration(minutes: 32, seconds: 17),
+          distanciaMetros: 5230.5,
+          puntos: [
+            puntoDePrueba(latitud: 6.2311, longitud: -75.6105),
+            puntoDePrueba(latitud: 6.2320, longitud: -75.6100),
+            puntoDePrueba(latitud: 6.2400, longitud: -75.6200),
+            puntoDePrueba(latitud: 6.2410, longitud: -75.6190),
+          ],
+          cortes: const [2],
+        ),
+      );
+
+      final dibujo = tester.widget<TrazadoRecorrido>(
+        find.byType(TrazadoRecorrido),
+      );
+      expect(dibujo.trazado.tramos.map((tramo) => tramo.length), [2, 2]);
+
+      // Sobre el mapa, también cortado.
+      await tester.tap(find.text('Ver en el mapa'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<MapaTrayecto>(find.byType(MapaTrayecto)).cortes, [
+        2,
+      ]);
+    });
+
     testWidgets('la X de la barra superior vuelve al inicio', (tester) async {
       await _montar(tester, resumen: resumen);
 

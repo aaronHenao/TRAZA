@@ -43,11 +43,15 @@ PuntoGps puntoDePrueba({
   double longitud = -75.6105,
   double? precisionMetros = 8,
   DateTime? capturadoEn,
+  double? velocidadMps,
+  double? precisionVelocidadMps,
 }) {
   return PuntoGps(
     latitud: latitud,
     longitud: longitud,
     capturadoEn: capturadoEn ?? DateTime(2026, 1, 1, 8),
     precisionMetros: precisionMetros,
+    velocidadMps: velocidadMps,
+    precisionVelocidadMps: precisionVelocidadMps,
   );
 }

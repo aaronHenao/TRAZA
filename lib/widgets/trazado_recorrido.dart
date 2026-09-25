@@ -7,7 +7,8 @@ import '../theme/app_colors.dart';
 
 /// Dibuja el trazado del recorrido como `.summary-map` del prototipo
 /// (SCRUM-119): la línea en lima, el punto de partida en blanco y el de
-/// llegada en lima.
+/// llegada en lima. Cada tramo es una línea aparte, sin unir el punto donde
+/// se pausó con el punto donde se reanudó (BUG-005).
 ///
 /// Ocupa todo el espacio que le den y centra el recorrido dentro, sin
 /// deformarlo.
@@ -63,12 +64,19 @@ class _PintorTrazado extends CustomPainter {
     Offset enPantalla(Offset punto) => origen + punto * factor;
 
     final puntos = trazado.puntos;
-    if (puntos.length > 1) {
-      final inicio = enPantalla(puntos.first);
-      final linea = Path()..moveTo(inicio.dx, inicio.dy);
-      for (final punto in puntos.skip(1)) {
-        final enLinea = enPantalla(punto);
-        linea.lineTo(enLinea.dx, enLinea.dy);
+    final tramos = [
+      for (final tramo in trazado.tramos)
+        if (tramo.length > 1) tramo,
+    ];
+    if (tramos.isNotEmpty) {
+      final linea = Path();
+      for (final tramo in tramos) {
+        final inicio = enPantalla(tramo.first);
+        linea.moveTo(inicio.dx, inicio.dy);
+        for (final punto in tramo.skip(1)) {
+          final enLinea = enPantalla(punto);
+          linea.lineTo(enLinea.dx, enLinea.dy);
+        }
       }
       canvas.drawPath(
         linea,

@@ -5,19 +5,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/punto_gps.dart';
+import '../services/cronometro_provider.dart';
 import '../services/mapa_provider.dart';
 import '../services/recorrido_provider.dart';
 import '../services/ubicacion_provider.dart';
 import '../theme/traza_theme.dart';
 
-/// Mapa con la posición actual del usuario y el trazo de su recorrido
-/// (SCRUM-109).
+/// Mapa con la posición actual del usuario y el trazo recorrido
+/// (SCRUM-109 y SCRUM-116).
 ///
-/// Se dibuja cuando llega la primera lectura de [posicionEnVivoProvider]
-/// y, a partir de ahí, mueve el marcador y centra la cámara en cada
-/// lectura nueva. Detrás del marcador va quedando la línea que une los
-/// puntos que [recorridoProvider] registra: en pausa no se registran, así
-/// que el trazo se detiene aunque el marcador siga moviéndose.
+/// Se dibuja cuando llega la primera lectura de [posicionEnVivoProvider].
+/// El marcador y la cámara siguen al último punto del recorrido
+/// ([recorridoProvider]), no a cada lectura cruda: el recorrido solo avanza
+/// con movimiento real, así que con el usuario quieto el marcador no baila
+/// con el ruido del GPS, y lo que se ve en el mapa coincide con los
+/// kilómetros. En pausa, o mientras no haya recorrido, se usa la lectura
+/// cruda.
 class MapaRecorrido extends ConsumerStatefulWidget {
   const MapaRecorrido({super.key});
 
@@ -47,26 +50,38 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
   }
 
   void _seguir(PuntoGps punto) {
-    if (!_mapaListo) return;
+    if (!_mapaListo || !mounted) return;
     // Conserva el zoom que el usuario haya elegido con los dedos.
     _controlador.move(punto.aLatLng(), _controlador.camera.zoom);
   }
 
+  /// Con la actividad en curso el marcador va con el trazo; en pausa (o
+  /// antes de arrancar) muestra dónde está el usuario de verdad.
+  bool _sigueTrazo() =>
+      ref.read(cronometroProvider).estaEnCurso &&
+      ref.read(recorridoProvider).puntos.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
-    ref.listen(posicionEnVivoProvider, (_, siguiente) {
-      final punto = siguiente.valueOrNull;
-      if (punto != null) _seguir(punto);
-    });
-
+    final lectura = ref.watch(posicionEnVivoProvider).valueOrNull;
     // Se observa desde el principio, antes de tener posición, para que el
     // registro esté escuchando cuando llegue el primer fix y el trazo
     // arranque en ese punto y no en el segundo.
-    final trazo = ref.watch(
-      recorridoProvider.select((recorrido) => recorrido.puntos),
+    final recorrido = ref.watch(recorridoProvider);
+    final trazo = recorrido.puntos;
+    final enCurso = ref.watch(
+      cronometroProvider.select((estado) => estado.estaEnCurso),
     );
+    final punto = enCurso && trazo.isNotEmpty ? trazo.last : lectura;
 
-    final punto = ref.watch(posicionEnVivoProvider).valueOrNull;
+    ref.listen(recorridoProvider.select((r) => r.ultimo), (_, ultimo) {
+      if (ultimo != null && _sigueTrazo()) _seguir(ultimo);
+    });
+    ref.listen(posicionEnVivoProvider, (_, siguiente) {
+      final lectura = siguiente.valueOrNull;
+      if (lectura != null && !_sigueTrazo()) _seguir(lectura);
+    });
+
     // Sin posición no hay dónde centrar: la nota de "buscando" que pone
     // MapaEntrenamiento encima cubre este hueco.
     if (punto == null) return const SizedBox.shrink();
@@ -102,14 +117,18 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
         // pero no vale la pena montarla.
         if (trazo.length >= 2)
           PolylineLayer(
+            // Una línea por tramo: lo recorrido en pausa no se dibuja
+            // (BUG-005).
             polylines: [
-              Polyline(
-                points: [for (final punto in trazo) punto.aLatLng()],
-                color: TrazaColors.accent,
-                strokeWidth: MapaRecorrido.grosorTrazo,
-                strokeCap: StrokeCap.round,
-                strokeJoin: StrokeJoin.round,
-              ),
+              for (final tramo in recorrido.tramos)
+                if (tramo.length >= 2)
+                  Polyline(
+                    points: [for (final punto in tramo) punto.aLatLng()],
+                    color: TrazaColors.accent,
+                    strokeWidth: MapaRecorrido.grosorTrazo,
+                    strokeCap: StrokeCap.round,
+                    strokeJoin: StrokeJoin.round,
+                  ),
             ],
           ),
         MarkerLayer(

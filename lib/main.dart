@@ -22,6 +22,7 @@ import 'theme/app_theme.dart';
 import 'widgets/ofrece_permiso_salud.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
+import 'widgets/solo_administrador.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -111,15 +112,18 @@ final _navegacion = GoRouter(
         ),
       ],
     ),
-    // Gestión de niveles de progresión (SCRUM-177), con su formulario. El
-    // acceso lo restringe SCRUM-183.
+    // Gestión de niveles de progresión (SCRUM-177), con su formulario. Ambas
+    // van tras SoloAdministrador (SCRUM-183): escribir la dirección a mano no
+    // es un atajo. La barrera de verdad la pone RLS en la tabla.
     GoRoute(
       path: GestionNivelesScreen.ruta,
-      builder: (context, state) => const GestionNivelesScreen(),
+      builder: (context, state) =>
+          const SoloAdministrador(hijo: GestionNivelesScreen()),
       routes: [
         GoRoute(
           path: 'nuevo',
-          builder: (context, state) => const FormularioNivelScreen(),
+          builder: (context, state) =>
+              const SoloAdministrador(hijo: FormularioNivelScreen()),
         ),
       ],
     ),

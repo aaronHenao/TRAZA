@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/admin/formulario_nivel_screen.dart';
 import 'screens/admin/formulario_reto_screen.dart';
+import 'screens/admin/gestion_niveles_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
@@ -100,6 +102,18 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/admin/retos/nuevo',
       builder: (context, state) => const FormularioRetoScreen(),
+    ),
+    // Gestión de niveles de progresión (SCRUM-177), con su formulario. El
+    // acceso lo restringe SCRUM-183.
+    GoRoute(
+      path: GestionNivelesScreen.ruta,
+      builder: (context, state) => const GestionNivelesScreen(),
+      routes: [
+        GoRoute(
+          path: 'nuevo',
+          builder: (context, state) => const FormularioNivelScreen(),
+        ),
+      ],
     ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(

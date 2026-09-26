@@ -68,6 +68,36 @@ void main() {
     });
   });
 
+  test('si otro administrador usó ese nombre, marca el campo del '
+      'nombre', () async {
+    repositorio.errorAlCrear = const NivelDuplicadoException.porNombre();
+
+    final resultado = await crear(
+      const BorradorNivel(nombre: 'Oro', umbral: '1500'),
+    );
+
+    expect((resultado as NivelConErrores).errores, {
+      CampoNivel.nombre: CreacionNivel.nombreOcupado,
+    });
+  });
+
+  test('si la base rechaza los datos, lo dice sin marcar campos', () async {
+    // Señal de que las restricciones de la tabla y la validación de Dart se
+    // desalinearon: no hay campo que señalar porque el borrador era válido.
+    repositorio.errorAlCrear = const DatosDeNivelInvalidosException(
+      'niveles_umbral_positivo',
+    );
+
+    final resultado = await crear(
+      const BorradorNivel(nombre: 'Oro', umbral: '1500'),
+    );
+
+    expect(
+      (resultado as NivelNoGuardado).mensaje,
+      CreacionNivel.datosRechazados,
+    );
+  });
+
   test(
     'si la cuenta no es administradora, lo dice sin perder lo escrito',
     () async {

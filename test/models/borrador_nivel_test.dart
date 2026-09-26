@@ -3,7 +3,7 @@ import 'package:traza/models/nivel.dart';
 import 'package:traza/models/nuevo_nivel.dart';
 
 /// Pruebas de las reglas que impiden registrar un nivel mal formado
-/// (SCRUM-181).
+/// (SCRUM-181), ampliadas con los casos límite de SCRUM-184.
 void main() {
   const existentes = [
     Nivel(id: 'n-1', nombre: 'Bronce', umbralExperiencia: 100),
@@ -61,6 +61,25 @@ void main() {
         'Ya existe un nivel llamado "Bronce".',
       );
     });
+
+    test('un nombre de justo el máximo cabe', () {
+      // El límite es inclusivo: 40 caracteres se aceptan, 41 no.
+      final borrador = BorradorNivel(
+        nombre: 'a' * maxCaracteresNombreNivel,
+        umbral: '900',
+      );
+
+      expect(borrador.erroresFrenteA(existentes), isEmpty);
+    });
+
+    test('el límite cuenta el nombre sin los espacios de los extremos', () {
+      final borrador = BorradorNivel(
+        nombre: '  ${'a' * maxCaracteresNombreNivel}  ',
+        umbral: '900',
+      );
+
+      expect(borrador.erroresFrenteA(existentes), isEmpty);
+    });
   });
 
   group('umbral', () {
@@ -106,6 +125,38 @@ void main() {
       );
       expect(borrador.aNuevoNivel(existentes), isNull);
     });
+
+    test('un umbral entre dos niveles no se solapa con ninguno', () {
+      // Solapar es empezar donde ya empieza otro; meterse en medio de la
+      // progresión es lo normal y tiene que dejarse.
+      const borrador = BorradorNivel(nombre: 'Hierro', umbral: '250');
+
+      expect(borrador.erroresFrenteA(existentes), isEmpty);
+    });
+
+    test('un umbral un punto al lado del de otro nivel es válido', () {
+      for (final escrito in ['99', '101']) {
+        final borrador = BorradorNivel(nombre: 'Hierro', umbral: escrito);
+
+        expect(
+          borrador.erroresFrenteA(existentes),
+          isEmpty,
+          reason: 'con "$escrito"',
+        );
+      }
+    });
+
+    test('un umbral más grande de lo que cabe en un entero se rechaza', () {
+      const borrador = BorradorNivel(
+        nombre: 'Oro',
+        umbral: '99999999999999999999',
+      );
+
+      expect(
+        borrador.erroresFrenteA(existentes)[CampoNivel.umbral],
+        'Usa solo números enteros.',
+      );
+    });
   });
 
   group('cuando está todo bien', () {
@@ -133,6 +184,24 @@ void main() {
       const borrador = BorradorNivel(nombre: 'Bronce', umbral: '100');
 
       expect(borrador.erroresFrenteA(const []), isEmpty);
+    });
+
+    test('señala los dos choques cuando el nombre y el umbral ya existen', () {
+      // Copiar un nivel entero: ninguno de los dos campos sirve como está.
+      const borrador = BorradorNivel(nombre: 'Plata', umbral: '500');
+
+      expect(borrador.erroresFrenteA(existentes), {
+        CampoNivel.nombre: 'Ya existe un nivel llamado "Plata".',
+        CampoNivel.umbral:
+            'Ese umbral ya lo usa "Plata". Cada nivel empieza en uno distinto.',
+      });
+      expect(borrador.esValidoFrenteA(existentes), isFalse);
+    });
+
+    test('si solo choca el nombre, el umbral no se marca', () {
+      const borrador = BorradorNivel(nombre: 'Plata', umbral: '900');
+
+      expect(borrador.erroresFrenteA(existentes).keys, [CampoNivel.nombre]);
     });
 
     test('señala los dos campos a la vez cuando los dos están mal', () {

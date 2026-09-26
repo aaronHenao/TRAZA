@@ -184,6 +184,22 @@ void main() {
       );
       expect(supabase.peticiones, isEmpty);
     });
+
+    test('una fila que no cuadra con el modelo no se disimula', () async {
+      // Si la tabla y el modelo se desalinean, mejor que se note a mostrar
+      // una progresión con niveles inventados.
+      final supabase = _SupabaseFalso(
+        filasLeidas: const [
+          {'id': 'n-1', 'nombre': 'Bronce', 'umbral_experiencia': 'cien'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.listar(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 }
 

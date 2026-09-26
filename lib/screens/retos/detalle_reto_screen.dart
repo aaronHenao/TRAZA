@@ -205,7 +205,7 @@ class _Condiciones extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           _Fila(
             icono: Icons.flag_outlined,
-            titulo: 'Recorre ${TarjetaReto.textoMeta(reto.metaKm)} km',
+            titulo: 'Recorre ${TarjetaReto.textoKm(reto.metaKm)} km',
             detalle: switch (reto.periodicidad) {
               PeriodicidadReto.diaria => 'Durante el día de hoy.',
               PeriodicidadReto.semanal =>

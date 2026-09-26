@@ -107,7 +107,7 @@ void main() {
         expect(find.text('Gestión de retos'), findsOneWidget);
         // Cuántos caben depende del alto: lo que se comprueba es que la
         // pantalla se arma entera sin desbordar.
-        expect(find.byType(TarjetaReto), findsWidgets);
+        expect(find.byType(TarjetaRetoAdmin), findsWidgets);
       });
 
       testWidgets('ancho ${tamano.key} con el texto del sistema grande', (

@@ -12,6 +12,7 @@ import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
 import 'screens/retos/detalle_reto_screen.dart';
+import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
 import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
@@ -117,6 +118,11 @@ final _navegacion = GoRouter(
         child: RetosScreen(),
       ),
       routes: [
+        // Antes de ':retoId': si no, 'historial' se tomaría por un id.
+        GoRoute(
+          path: 'historial',
+          builder: (context, state) => const HistorialRetosScreen(),
+        ),
         // El listado pasa el reto en `extra` para no volver a consultarlo.
         GoRoute(
           path: ':retoId',

@@ -1,5 +1,6 @@
 import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/reto_del_usuario.dart';
 import 'package:traza/services/retos_service.dart';
 
 /// Base para los dobles de `RetosRepository`.
@@ -17,4 +18,7 @@ abstract class RetosRepositorioFalso implements RetosRepository {
 
   @override
   Future<List<Reto>> vigentes({required DateTime hoy}) async => const [];
+
+  @override
+  Future<List<RetoDelUsuario>> misRetos() async => const [];
 }

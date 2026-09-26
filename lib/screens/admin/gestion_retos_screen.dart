@@ -9,7 +9,9 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
+import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
+import '../../widgets/tarjeta_reto.dart';
 import '../../widgets/traza_card.dart';
 
 /// Catálogo de retos del administrador (SCRUM-139).
@@ -207,7 +209,7 @@ class _Filtros extends ConsumerWidget {
                 null,
                 ...PeriodicidadReto.values,
               ])
-                _ChipFiltro(
+                ChipFiltro(
                   key: GestionRetosScreen.clavePeriodicidad(opcion),
                   texto: opcion?.etiqueta ?? 'Todos',
                   activo: opcion == periodicidad,
@@ -261,44 +263,6 @@ class _Pestana extends StatelessWidget {
   }
 }
 
-class _ChipFiltro extends StatelessWidget {
-  const _ChipFiltro({
-    required this.texto,
-    required this.activo,
-    required this.onTap,
-    super.key,
-  });
-
-  final String texto;
-  final bool activo;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        // Sin `alignment`: dentro de un Wrap haría que cada chip se estirara
-        // a todo el ancho y cayera uno por línea.
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: activo ? AppColors.ink : AppColors.bg,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: activo ? AppColors.ink : AppColors.line),
-        ),
-        child: Text(
-          texto,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: activo ? AppColors.bg : AppColors.ink2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _Lista extends StatelessWidget {
   const _Lista({required this.retos});
 
@@ -316,14 +280,17 @@ class _Lista extends StatelessWidget {
       ),
       itemCount: retos.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (context, i) => TarjetaReto(reto: retos[i]),
+      itemBuilder: (context, i) => TarjetaRetoAdmin(reto: retos[i]),
     );
   }
 }
 
 /// Un reto del catálogo, con lo que el administrador necesita reconocerlo.
-class TarjetaReto extends StatelessWidget {
-  const TarjetaReto({required this.reto, super.key});
+///
+/// Se diferencia de la tarjeta del corredor en lo que destaca: aquí importa
+/// el rango de fechas y el estado; allí, cuántos días quedan.
+class TarjetaRetoAdmin extends StatelessWidget {
+  const TarjetaRetoAdmin({required this.reto, super.key});
 
   final Reto reto;
 
@@ -336,7 +303,7 @@ class TarjetaReto extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _IconoPeriodicidad(periodicidad: reto.periodicidad),
+              IconoPeriodicidad(periodicidad: reto.periodicidad),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -367,7 +334,7 @@ class TarjetaReto extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _Insignia(
+              InsigniaReto(
                 texto: '+${reto.xpOtorgada} XP',
                 fondo: AppColors.primaryTint,
                 color: AppColors.primaryDark,
@@ -379,15 +346,17 @@ class TarjetaReto extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _Insignia(texto: reto.periodicidad.etiqueta),
-              _Insignia(texto: 'Meta ${_metaTexto(reto.metaKm)} km'),
-              _Insignia(
+              InsigniaReto(texto: reto.periodicidad.etiqueta),
+              InsigniaReto(
+                texto: 'Meta ${TarjetaReto.textoKm(reto.metaKm)} km',
+              ),
+              InsigniaReto(
                 texto:
                     '${_fecha(reto.vigencia.inicio)} – '
                     '${_fecha(reto.vigencia.fin)}',
               ),
               if (reto.estaActivo)
-                const _Insignia(
+                const InsigniaReto(
                   texto: 'Activo',
                   fondo: AppColors.accentTint,
                   color: AppColors.accentInk,
@@ -397,12 +366,6 @@ class TarjetaReto extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  /// `5` en vez de `5.0`, pero `2.5` se mantiene.
-  static String _metaTexto(double meta) {
-    final entero = meta.toInt();
-    return meta == entero ? '$entero' : '$meta';
   }
 
   static const _meses = [
@@ -421,74 +384,6 @@ class TarjetaReto extends StatelessWidget {
   ];
 
   static String _fecha(DateTime dia) => '${dia.day} ${_meses[dia.month - 1]}';
-}
-
-class _IconoPeriodicidad extends StatelessWidget {
-  const _IconoPeriodicidad({required this.periodicidad});
-
-  final PeriodicidadReto periodicidad;
-
-  @override
-  Widget build(BuildContext context) {
-    final (icono, fondo, color) = switch (periodicidad) {
-      PeriodicidadReto.diaria => (
-        Icons.schedule,
-        AppColors.accentTint,
-        AppColors.accentInk,
-      ),
-      PeriodicidadReto.semanal => (
-        Icons.bolt_outlined,
-        AppColors.primaryTint,
-        AppColors.primaryDark,
-      ),
-      PeriodicidadReto.mensual => (
-        Icons.calendar_month_outlined,
-        AppColors.secondaryTint,
-        AppColors.secondaryDark,
-      ),
-    };
-
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: fondo,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icono, size: 22, color: color),
-    );
-  }
-}
-
-class _Insignia extends StatelessWidget {
-  const _Insignia({
-    required this.texto,
-    this.fondo = AppColors.bgAlt,
-    this.color = AppColors.ink2,
-  });
-
-  final String texto;
-  final Color fondo;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: fondo,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        texto,
-        style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
 }
 
 class _SinRetos extends ConsumerWidget {

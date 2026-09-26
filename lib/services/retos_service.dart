@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/nuevo_reto.dart';
 import '../models/reto.dart';
+import '../models/reto_del_usuario.dart';
 import '../models/vigencia_reto.dart';
 
 /// Repositorio de retos que usa la app. Las pruebas lo sustituyen con
@@ -71,6 +72,13 @@ abstract interface class RetosRepository {
   /// noche es más urgente que uno mensual al que le quedan tres semanas, y
   /// eso es lo primero que el corredor necesita ver.
   Future<List<Reto>> vigentes({required DateTime hoy});
+
+  /// Los retos que el corredor ha activado, del más reciente al más antiguo
+  /// (SCRUM-173 y SCRUM-174).
+  ///
+  /// Trae el reto embebido: sin su meta y su vigencia, el progreso guardado
+  /// no significa nada.
+  Future<List<RetoDelUsuario>> misRetos();
 }
 
 class SupabaseRetosRepository implements RetosRepository {
@@ -83,6 +91,7 @@ class SupabaseRetosRepository implements RetosRepository {
        _usuarioActual = usuarioActual;
 
   static const _tabla = 'retos';
+  static const _tablaRetosUsuario = 'retos_usuario';
 
   /// Suficiente para el catálogo de un proyecto de curso sin traer la tabla
   /// entera.
@@ -169,5 +178,25 @@ class SupabaseRetosRepository implements RetosRepository {
         .limit(limite);
 
     return filas.map(Reto.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<RetoDelUsuario>> misRetos() async {
+    final usuarioId = _usuarioId();
+
+    // `retos(*)` embebe el reto de la clave foránea en la misma consulta: sin
+    // él habría que pedir cada reto por separado.
+    //
+    // El filtro por usuario es redundante con la policy, que ya limita las
+    // filas a las de `auth.uid()`. Va explícito porque una consulta debe
+    // decir qué pide, no confiar en que alguien la recorte por detrás.
+    final filas = await _cliente
+        .from(_tablaRetosUsuario)
+        .select('*, retos(*)')
+        .eq('usuario_id', usuarioId)
+        .order('fecha_activacion', ascending: false)
+        .limit(limite);
+
+    return filas.map(RetoDelUsuario.desdeSupabase).toList();
   }
 }

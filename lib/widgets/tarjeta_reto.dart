@@ -80,7 +80,7 @@ class TarjetaReto extends StatelessWidget {
             runSpacing: 6,
             children: [
               InsigniaReto(texto: reto.periodicidad.etiqueta),
-              InsigniaReto(texto: 'Meta ${textoMeta(reto.metaKm)} km'),
+              InsigniaReto(texto: 'Meta ${textoKm(reto.metaKm)} km'),
               _Vigencia(reto: reto, hoy: hoy),
             ],
           ),
@@ -89,10 +89,16 @@ class TarjetaReto extends StatelessWidget {
     );
   }
 
-  /// `5` en vez de `5.0`, pero `2.5` se mantiene.
-  static String textoMeta(double meta) {
-    final entero = meta.toInt();
-    return meta == entero ? '$entero' : '$meta';
+  /// Kilómetros legibles: `5` en vez de `5.0`, `2.5` se mantiene y
+  /// `0.3333333333` se queda en `0.33`.
+  ///
+  /// El redondeo hace falta porque no todos los valores los escribe una
+  /// persona: el progreso sale de una división y arrastra todos sus
+  /// decimales.
+  static String textoKm(double km) {
+    final redondeado = double.parse(km.toStringAsFixed(2));
+    final entero = redondeado.toInt();
+    return redondeado == entero ? '$entero' : '$redondeado';
   }
 }
 

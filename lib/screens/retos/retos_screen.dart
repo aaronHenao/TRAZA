@@ -9,8 +9,10 @@ import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_reto.dart';
+import '../../widgets/traza_top_bar.dart';
 
 /// Catálogo de retos que el corredor puede intentar (SCRUM-164).
 ///
@@ -18,6 +20,8 @@ import '../../widgets/tarjeta_reto.dart';
 /// prototipo. Activarlos es de SCRUM-136; aquí se ven y se abren.
 class RetosScreen extends ConsumerWidget {
   const RetosScreen({super.key});
+
+  static const claveHistorial = Key('retos-historial');
 
   /// `null` es la pestaña "Todos", que no filtra nada.
   static Key clavePestana(PeriodicidadReto? periodicidad) =>
@@ -68,29 +72,43 @@ class _Cabecera extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,
         AppSpacing.lg,
         AppSpacing.md,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            'Retos',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.19,
-              color: AppColors.ink,
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Retos',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.19,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Elige uno y gana XP al cumplirlo',
+                  style: TextStyle(fontSize: 13, color: AppColors.ink2),
+                ),
+              ],
             ),
           ),
-          SizedBox(height: 2),
-          Text(
-            'Elige uno y gana XP al cumplirlo',
-            style: TextStyle(fontSize: 13, color: AppColors.ink2),
+          const SizedBox(width: AppSpacing.sm),
+          // Historial de retos, como el botón de la topbar del prototipo.
+          TrazaIconButton(
+            key: RetosScreen.claveHistorial,
+            icon: Icons.schedule,
+            tooltip: 'Mis retos',
+            onPressed: () => context.push('/retos/historial'),
           ),
         ],
       ),
@@ -107,66 +125,20 @@ class _Pestanas extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final elegida = ref.watch(filtroRetosCorredorProvider);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        0,
-        AppSpacing.lg,
-        AppSpacing.md,
-      ),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (final opcion in <PeriodicidadReto?>[
-            null,
-            ...PeriodicidadReto.values,
-          ])
-            _Pestana(
-              key: RetosScreen.clavePestana(opcion),
-              texto: opcion?.etiqueta ?? 'Todos',
-              activa: opcion == elegida,
-              onTap: () =>
-                  ref.read(filtroRetosCorredorProvider.notifier).state = opcion,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pestana extends StatelessWidget {
-  const _Pestana({
-    required this.texto,
-    required this.activa,
-    required this.onTap,
-    super.key,
-  });
-
-  final String texto;
-  final bool activa;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: activa ? AppColors.ink : AppColors.bg,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: activa ? AppColors.ink : AppColors.line),
-        ),
-        child: Text(
-          texto,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: activa ? AppColors.bg : AppColors.ink2,
+    return FilaChips(
+      children: [
+        for (final opcion in <PeriodicidadReto?>[
+          null,
+          ...PeriodicidadReto.values,
+        ])
+          ChipFiltro(
+            key: RetosScreen.clavePestana(opcion),
+            texto: opcion?.etiqueta ?? 'Todos',
+            activo: opcion == elegida,
+            onTap: () =>
+                ref.read(filtroRetosCorredorProvider.notifier).state = opcion,
           ),
-        ),
-      ),
+      ],
     );
   }
 }

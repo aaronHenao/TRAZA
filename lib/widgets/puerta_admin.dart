@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../screens/admin/gestion_retos_screen.dart';
+import '../screens/admin/panel_admin_screen.dart';
 import '../services/rol_provider.dart';
 
-/// Decide qué ve cada cuenta al entrar: el administrador su gestión de retos,
-/// los corredores su portada (SCRUM-139).
+/// Decide qué ve cada cuenta al entrar: el administrador su panel
+/// (SCRUM-194), los corredores su portada (SCRUM-139).
 ///
 /// Es un widget y no un `redirect` del router porque leer `perfiles.rol`
 /// es asíncrono y el redirect de go_router es síncrono. Renderizar en vez de
@@ -23,10 +23,10 @@ class PuertaAdmin extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (ref.watch(esAdministradorProvider)) {
-      AsyncData(value: true) => const GestionRetosScreen(),
+      AsyncData(value: true) => const PanelAdminScreen(),
       AsyncData() => corredor,
       // Si el rol no se pudo leer, se entra como corredor. Al revés se
-      // abriría una gestión de retos que después no podría guardar nada.
+      // abrirían pantallas de gestión que después no podrían guardar nada.
       AsyncError() => corredor,
       _ => const Scaffold(body: Center(child: CircularProgressIndicator())),
     };

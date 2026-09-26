@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/punto_gps.dart';
+import '../models/tramos.dart';
 import '../services/mapa_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/traza_theme.dart';
@@ -13,13 +14,17 @@ import '../theme/traza_theme.dart';
 /// Dibuja la línea de los puntos guardados sobre las calles, marca la partida
 /// (blanco) y la llegada (lima) y encuadra la cámara en todo el recorrido. Usa
 /// los mismos tiles y el mismo tono oscuro que el mapa del entrenamiento en
-/// curso (`MapaRecorrido`).
+/// curso (`MapaRecorrido`). Cada tramo es una línea aparte: no se une el
+/// punto donde se pausó con el punto donde se reanudó (BUG-005).
 class MapaTrayecto extends ConsumerWidget {
-  const MapaTrayecto({required this.puntos, super.key})
+  const MapaTrayecto({required this.puntos, this.cortes = const [], super.key})
     : assert(puntos.length > 0, 'Sin puntos no hay trayecto que mostrar');
 
   /// Puntos del recorrido en orden de captura.
   final List<PuntoGps> puntos;
+
+  /// Índices de [puntos] donde empieza un tramo tras una pausa.
+  final List<int> cortes;
 
   /// Zoom de calle: al que se muestra un recorrido de un solo lugar y el
   /// máximo al que llega el encuadre, para no pegarse demasiado a una ruta
@@ -76,11 +81,13 @@ class MapaTrayecto extends ConsumerWidget {
         if (hayForma)
           PolylineLayer(
             polylines: [
-              Polyline(
-                points: coordenadas,
-                color: AppColors.accent,
-                strokeWidth: grosorLinea,
-              ),
+              for (final tramo in dividirEnTramos(coordenadas, cortes))
+                if (tramo.length >= 2)
+                  Polyline(
+                    points: tramo,
+                    color: AppColors.accent,
+                    strokeWidth: grosorLinea,
+                  ),
             ],
           ),
         MarkerLayer(

@@ -54,12 +54,15 @@ void main() {
     double latitud, {
     required int segundos,
     double? precisionMetros = 8,
+    double? velocidad,
   }) async {
     fuente.emitir(
       puntoDePrueba(
         latitud: latitud,
         capturadoEn: DateTime(2026, 1, 1, 8).add(Duration(seconds: segundos)),
         precisionMetros: precisionMetros,
+        velocidadMps: velocidad,
+        precisionVelocidadMps: velocidad == null ? null : 0.3,
       ),
     );
     await pumpEventQueue();
@@ -177,19 +180,56 @@ void main() {
     expect(distancia().ritmoPara(Duration.zero), "0'00\"");
   });
 
-  test(
-    'cuenta los puntos registrados antes de observar la distancia',
-    () async {
-      await montar(observarDistancia: false);
+  test('evalúa cada lectura, no solo los puntos del trazo', () async {
+    // Con el usuario quieto el trazo no crece, pero la distancia necesita
+    // ver esas lecturas: si no, al retomar integraría la velocidad sobre
+    // todo el rato parado (SCRUM-116).
+    await montar();
 
-      await emitir(6.2311, segundos: 0);
-      await emitir(6.2321, segundos: 30);
+    for (var i = 0; i <= 5; i++) {
+      await emitir(6.2311, segundos: i, velocidad: 1.4);
+    }
+    for (var i = 6; i <= 65; i++) {
+      await emitir(6.2311, segundos: i, velocidad: 0.1);
+    }
+    for (var i = 66; i <= 70; i++) {
+      await emitir(6.2311, segundos: i, velocidad: 1.4);
+    }
 
-      // Recién ahora alguien observa la distancia.
-      container.listen(distanciaProvider, (_, _) {});
-      expect(distancia().metros, closeTo(_metrosPorMiliGrado, 0.5));
-    },
-  );
+    // 5 s + 4 s a 1.4 m/s, y medio segundo de arranque y de frenada.
+    expect(distancia().metros, closeTo(1.4 * 10, 0.01));
+  });
+
+  test('con 40 m de error y velocidad del GPS, la distancia avanza', () async {
+    // Lo que entregaba la tablet de pruebas: por posiciones se descartaba
+    // todo y los kilómetros se congelaban (SCRUM-116).
+    await montar();
+
+    for (var i = 0; i <= 60; i++) {
+      await emitir(6.2311, segundos: i, precisionMetros: 40, velocidad: 1.4);
+    }
+
+    expect(distancia().metros, closeTo(84, 0.01));
+    expect(distancia().ritmoActual, isNotNull);
+  });
+
+  test('quieto con 40 m de error no se inventa distancia', () async {
+    await montar();
+
+    // La posición salta ±20 m pero el GPS dice que no se mueve.
+    for (var i = 0; i <= 60; i++) {
+      final salto = (i.isEven ? 1 : -1) * 0.00018;
+      await emitir(
+        6.2311 + salto,
+        segundos: i,
+        precisionMetros: 40,
+        velocidad: 0.2,
+      );
+    }
+
+    expect(distancia().metros, 0);
+    expect(distancia().ritmoActual, isNull);
+  });
 
   test('la calculadora se puede sustituir', () async {
     // Con umbral de precisión 100 m, la lectura de 40 m sí cuenta.

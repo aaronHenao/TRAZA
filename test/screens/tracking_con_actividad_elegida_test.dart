@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/services/pantalla_encendida_provider.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
@@ -17,6 +18,7 @@ import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
@@ -341,6 +343,7 @@ Future<_Entorno> _montar(
       proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
       repositorioPuntosGpsProvider.overrideWithValue(puntos),
       entrenamientoActualProvider.overrideWithValue(entrenamientoId),
+      pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),
       entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
       tiposActividadRepositoryProvider.overrideWithValue(
         _CatalogoFalso(catalogo),

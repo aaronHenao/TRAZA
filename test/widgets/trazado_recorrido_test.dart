@@ -85,6 +85,34 @@ void main() {
     );
   });
 
+  testWidgets('no une el punto donde se pausó con el de reanudación '
+      '(BUG-005)', (tester) async {
+    // El mismo cuadrado que arriba, en forma de U: abajo de izquierda a
+    // derecha, pausa, y arriba de derecha a izquierda. Unido, la U encierra
+    // el centro del recuadro; cortado son dos rectas sueltas que no
+    // encierran nada.
+    final puntos = [
+      punto(-0.0005, 0),
+      punto(-0.0005, 0.001),
+      punto(0.0005, 0.001),
+      punto(0.0005, 0),
+    ];
+    const centro = Offset(150, 80);
+
+    await dibujar(tester, Trazado.desdePuntos(puntos));
+    expect(lienzo(), paints..path(includes: const [centro]));
+
+    await dibujar(tester, Trazado.desdePuntos(puntos, cortes: const [2]));
+    expect(
+      lienzo(),
+      paints
+        ..path(excludes: const [centro])
+        // La partida y la llegada siguen en su sitio.
+        ..circle(x: 90, y: 140, color: Colors.white)
+        ..circle(x: 90, y: 20, color: AppColors.accent),
+    );
+  });
+
   testWidgets('con un solo punto marca el lugar sin dibujar línea', (
     tester,
   ) async {

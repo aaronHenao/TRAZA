@@ -11,6 +11,7 @@ import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
+import 'screens/home/progresion_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
@@ -126,6 +127,12 @@ final _navegacion = GoRouter(
               const SoloAdministrador(hijo: FormularioNivelScreen()),
         ),
       ],
+    ),
+    // Cuánto le falta al corredor para el siguiente nivel (SCRUM-178). Se
+    // abre con `push` desde la portada, así se vuelve a ella al cerrarla.
+    GoRoute(
+      path: ProgresionScreen.ruta,
+      builder: (context, state) => const ProgresionScreen(),
     ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(

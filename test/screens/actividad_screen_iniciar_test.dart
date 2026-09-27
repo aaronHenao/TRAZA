@@ -10,12 +10,14 @@ import 'package:traza/screens/home/actividad_screen.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
+import 'package:traza/services/permisos_provider.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
 import 'package:traza/services/entrenamiento_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/requiere_permiso_ubicacion.dart';
+import 'package:traza/widgets/ventana_permiso_salud.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
 
@@ -35,10 +37,11 @@ void main() {
     entrenamientos = _EntrenamientosFalso();
     gps = FuenteUbicacionFalsa();
     addTearDown(() => gps.cerrar());
-    // La salud no bloquea el inicio: se deja siempre sin conceder.
+    // Con la salud concedida no sale su ventana. Lo que pasa sin ella se
+    // prueba en su propio grupo (SCRUM-131).
     when(
       () => permisos.estadoSalud(),
-    ).thenAnswer((_) async => EstadoPermiso.desconocido);
+    ).thenAnswer((_) async => EstadoPermiso.concedido);
     when(() => permisos.abrirAjustes()).thenAnswer((_) async {});
   });
 
@@ -275,6 +278,96 @@ void main() {
 
       expect(entrenamientos.creados, ['id-correr']);
       expect(estaEnElEntrenamiento(tester), isTrue);
+    });
+  });
+
+  group('sin el permiso de datos de salud (SCRUM-131)', () {
+    setUp(() {
+      ubicacionEsta(EstadoPermiso.concedido);
+      when(
+        () => permisos.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+    });
+
+    bool hayVentana() =>
+        find.text(VentanaPermisoSalud.titulo).evaluate().isNotEmpty;
+
+    testWidgets('ofrece la ventana antes de crear el entrenamiento', (
+      tester,
+    ) async {
+      await abrirInicio(tester);
+
+      await tocarIniciar(tester);
+
+      expect(hayVentana(), isTrue);
+      expect(entrenamientos.creados, isEmpty);
+      expect(estaEnElEntrenamiento(tester), isFalse);
+    });
+
+    testWidgets('"Aceptar" pide el permiso y arranca', (tester) async {
+      when(
+        () => permisos.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await abrirInicio(tester);
+      await tocarIniciar(tester);
+
+      await tester.tap(find.text(VentanaPermisoSalud.aceptar));
+      await tester.pumpAndSettle();
+
+      verify(() => permisos.solicitarSalud()).called(1);
+      expect(entrenamientos.creados, ['id-correr']);
+      expect(estaEnElEntrenamiento(tester), isTrue);
+      expect(container.read(permisosProvider).saludOmitida, isFalse);
+    });
+
+    testWidgets('si lo niega arranca igual, sin datos de salud', (
+      tester,
+    ) async {
+      when(
+        () => permisos.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await abrirInicio(tester);
+      await tocarIniciar(tester);
+
+      await tester.tap(find.text(VentanaPermisoSalud.aceptar));
+      await tester.pumpAndSettle();
+
+      expect(entrenamientos.creados, ['id-correr']);
+      expect(estaEnElEntrenamiento(tester), isTrue);
+      expect(container.read(permisosProvider).saludOmitida, isTrue);
+    });
+
+    testWidgets('"Continuar sin datos de salud" arranca sin pedirlo', (
+      tester,
+    ) async {
+      await abrirInicio(tester);
+      await tocarIniciar(tester);
+
+      await tester.tap(find.text(VentanaPermisoSalud.continuarSin));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => permisos.solicitarSalud());
+      expect(entrenamientos.creados, ['id-correr']);
+      expect(estaEnElEntrenamiento(tester), isTrue);
+      expect(container.read(permisosProvider).saludOmitida, isTrue);
+    });
+
+    testWidgets('cerrar la ventana con "atrás" no arranca nada', (
+      tester,
+    ) async {
+      await abrirInicio(tester);
+      await tocarIniciar(tester);
+
+      Navigator.of(tester.element(find.byType(VentanaPermisoSalud))).pop();
+      await tester.pumpAndSettle();
+
+      expect(hayVentana(), isFalse);
+      expect(entrenamientos.creados, isEmpty);
+      expect(estaEnElEntrenamiento(tester), isFalse);
+      expect(container.read(actividadIniciadaProvider), isFalse);
+      // El botón queda libre para volver a intentarlo.
+      await tocarIniciar(tester);
+      expect(hayVentana(), isTrue);
     });
   });
 

@@ -292,12 +292,21 @@ void main() {
     bool hayVentana() =>
         find.text(VentanaPermisoSalud.titulo).evaluate().isNotEmpty;
 
+    /// Toca "Iniciar actividad" y espera a que salga la ventana. Sin
+    /// `pumpAndSettle`: mientras la ventana espera la respuesta, el botón
+    /// muestra su indicador de carga y la pantalla nunca queda quieta.
+    Future<void> tocarIniciarHastaLaVentana(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Iniciar actividad'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
     testWidgets('ofrece la ventana antes de crear el entrenamiento', (
       tester,
     ) async {
       await abrirInicio(tester);
 
-      await tocarIniciar(tester);
+      await tocarIniciarHastaLaVentana(tester);
 
       expect(hayVentana(), isTrue);
       expect(entrenamientos.creados, isEmpty);
@@ -309,7 +318,7 @@ void main() {
         () => permisos.solicitarSalud(),
       ).thenAnswer((_) async => EstadoPermiso.concedido);
       await abrirInicio(tester);
-      await tocarIniciar(tester);
+      await tocarIniciarHastaLaVentana(tester);
 
       await tester.tap(find.text(VentanaPermisoSalud.aceptar));
       await tester.pumpAndSettle();
@@ -327,7 +336,7 @@ void main() {
         () => permisos.solicitarSalud(),
       ).thenAnswer((_) async => EstadoPermiso.denegado);
       await abrirInicio(tester);
-      await tocarIniciar(tester);
+      await tocarIniciarHastaLaVentana(tester);
 
       await tester.tap(find.text(VentanaPermisoSalud.aceptar));
       await tester.pumpAndSettle();
@@ -341,7 +350,7 @@ void main() {
       tester,
     ) async {
       await abrirInicio(tester);
-      await tocarIniciar(tester);
+      await tocarIniciarHastaLaVentana(tester);
 
       await tester.tap(find.text(VentanaPermisoSalud.continuarSin));
       await tester.pumpAndSettle();
@@ -356,7 +365,7 @@ void main() {
       tester,
     ) async {
       await abrirInicio(tester);
-      await tocarIniciar(tester);
+      await tocarIniciarHastaLaVentana(tester);
 
       Navigator.of(tester.element(find.byType(VentanaPermisoSalud))).pop();
       await tester.pumpAndSettle();
@@ -366,7 +375,7 @@ void main() {
       expect(estaEnElEntrenamiento(tester), isFalse);
       expect(container.read(actividadIniciadaProvider), isFalse);
       // El botón queda libre para volver a intentarlo.
-      await tocarIniciar(tester);
+      await tocarIniciarHastaLaVentana(tester);
       expect(hayVentana(), isTrue);
     });
   });

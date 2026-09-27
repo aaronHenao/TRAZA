@@ -8,16 +8,19 @@ import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
-import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
+import '../../widgets/traza_top_bar.dart';
 
 /// Catálogo de retos del administrador (SCRUM-139).
 ///
-/// Es su pantalla de entrada: desde aquí ve lo que los corredores tienen
-/// disponible y crea retos nuevos con el botón "+". Editar y retirar llegan
-/// con SCRUM-133 y SCRUM-134.
+/// Se abre desde el panel del administrador (SCRUM-194): desde aquí ve lo que
+/// los corredores tienen disponible y crea retos nuevos con el botón "+".
+/// Editar y retirar llegan con SCRUM-133 y SCRUM-134.
 class GestionRetosScreen extends ConsumerWidget {
   const GestionRetosScreen({super.key});
+
+  static const ruta = '/admin/retos';
+  static const rutaNuevo = '$ruta/nuevo';
 
   static const claveBotonNuevo = Key('admin-nuevo-reto');
 
@@ -37,7 +40,7 @@ class GestionRetosScreen extends ConsumerWidget {
         // `push`: al volver del formulario se regresa aquí, y esta pantalla
         // se refresca para mostrar el reto recién creado.
         onPressed: () async {
-          await context.push('/admin/retos/nuevo');
+          await context.push(rutaNuevo);
           ref.invalidate(catalogoRetosProvider);
         },
         backgroundColor: AppColors.primary,
@@ -79,8 +82,8 @@ class _Cabecera extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,
         AppSpacing.lg,
@@ -89,7 +92,17 @@ class _Cabecera extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          // Se llega desde el panel del administrador; si se abrió la ruta
+          // directamente no hay a dónde volver.
+          if (context.canPop()) ...[
+            TrazaIconButton(
+              icon: Icons.chevron_left,
+              onPressed: context.pop,
+              tooltip: 'Volver',
+            ),
+            const SizedBox(width: AppSpacing.sm),
+          ],
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -107,43 +120,7 @@ class _Cabecera extends StatelessWidget {
                   'Lo que ven los corredores en su sección de retos',
                   style: TextStyle(fontSize: 13, color: AppColors.ink2),
                 ),
-                SizedBox(height: AppSpacing.sm),
-                _EtiquetaRol(),
               ],
-            ),
-          ),
-          SizedBox(width: AppSpacing.sm),
-          // El administrador no tiene pantalla de perfil, así que la salida
-          // vive aquí: es su única pantalla.
-          BotonCerrarSesion(mensaje: BotonCerrarSesion.mensajeAdministrador),
-        ],
-      ),
-    );
-  }
-}
-
-class _EtiquetaRol extends StatelessWidget {
-  const _EtiquetaRol();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.secondaryTint,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.shield_outlined, size: 13, color: AppColors.secondaryDark),
-          SizedBox(width: 5),
-          Text(
-            'Administrador',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.secondaryDark,
             ),
           ),
         ],

@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/admin/formulario_nivel_screen.dart';
 import 'screens/admin/formulario_reto_screen.dart';
+import 'screens/admin/gestion_niveles_screen.dart';
+import 'screens/admin/gestion_retos_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
@@ -19,6 +22,7 @@ import 'theme/app_theme.dart';
 import 'widgets/ofrece_permiso_salud.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
+import 'widgets/solo_administrador.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,17 +93,39 @@ final _navegacion = GoRouter(
       builder: (context, state) => const PermisosScreen(),
     ),
     // A donde se llega al entrar y al terminar el onboarding. Qué se muestra
-    // depende del rol: el administrador gestiona retos, los demás ven su
+    // depende del rol: el administrador ve su panel (SCRUM-194), los demás su
     // portada (SCRUM-139).
     GoRoute(
       path: '/inicio',
       builder: (context, state) => const PuertaAdmin(corredor: InicioScreen()),
     ),
-    // Crear un reto (SCRUM-132). Se abre con `push` desde la gestión, así que
-    // al volver el catálogo se refresca con el reto recién creado.
+    // Gestión de retos (SCRUM-139) con su formulario (SCRUM-132). Ambas se
+    // abren con `push`, así que al volver el catálogo se refresca con el reto
+    // recién creado.
     GoRoute(
-      path: '/admin/retos/nuevo',
-      builder: (context, state) => const FormularioRetoScreen(),
+      path: GestionRetosScreen.ruta,
+      builder: (context, state) => const GestionRetosScreen(),
+      routes: [
+        GoRoute(
+          path: 'nuevo',
+          builder: (context, state) => const FormularioRetoScreen(),
+        ),
+      ],
+    ),
+    // Gestión de niveles de progresión (SCRUM-177), con su formulario. Ambas
+    // van tras SoloAdministrador (SCRUM-183): escribir la dirección a mano no
+    // es un atajo. La barrera de verdad la pone RLS en la tabla.
+    GoRoute(
+      path: GestionNivelesScreen.ruta,
+      builder: (context, state) =>
+          const SoloAdministrador(hijo: GestionNivelesScreen()),
+      routes: [
+        GoRoute(
+          path: 'nuevo',
+          builder: (context, state) =>
+              const SoloAdministrador(hijo: FormularioNivelScreen()),
+        ),
+      ],
     ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(

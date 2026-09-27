@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/reto.dart';
-import 'package:traza/screens/admin/gestion_retos_screen.dart';
+import 'package:traza/screens/admin/panel_admin_screen.dart';
 import 'package:traza/services/rol_provider.dart';
 import 'package:traza/services/retos_service.dart';
 import 'package:traza/widgets/puerta_admin.dart';
@@ -80,12 +80,12 @@ void main() {
     }
   }
 
-  testWidgets('la cuenta administradora entra a la gestión de retos', (
-    tester,
-  ) async {
+  // El administrador entra al panel desde SCRUM-194, no a una gestión
+  // concreta.
+  testWidgets('la cuenta administradora entra a su panel', (tester) async {
     await abrir(tester, esAdmin: () async => true);
 
-    expect(find.byType(GestionRetosScreen), findsOneWidget);
+    expect(find.byType(PanelAdminScreen), findsOneWidget);
     expect(find.text('Portada del corredor'), findsNothing);
   });
 
@@ -93,7 +93,7 @@ void main() {
     await abrir(tester, esAdmin: () async => false);
 
     expect(find.text('Portada del corredor'), findsOneWidget);
-    expect(find.byType(GestionRetosScreen), findsNothing);
+    expect(find.byType(PanelAdminScreen), findsNothing);
   });
 
   testWidgets('mientras resuelve el rol no enseña ninguna de las dos', (
@@ -113,8 +113,8 @@ void main() {
   testWidgets('si el rol no se puede leer, entra como corredor', (
     tester,
   ) async {
-    // Al revés se abriría una gestión de retos que después no podría guardar
-    // nada, porque RLS rechazaría la escritura.
+    // Al revés se abrirían pantallas de gestión que después no podrían
+    // guardar nada, porque RLS rechazaría la escritura.
     await abrir(tester, esAdmin: () async => throw Exception('sin red'));
 
     expect(find.text('Portada del corredor'), findsOneWidget);

@@ -28,8 +28,12 @@ class BarraProgresion extends StatelessWidget {
     final siguiente = progresion.siguienteNivel;
     if (avance == null || siguiente == null) return const SizedBox.shrink();
 
-    final recorrido = progresion.experiencia - progresion.inicioDelTramo;
     final tramo = siguiente.umbralExperiencia - progresion.inicioDelTramo;
+    // Acotado al tramo: la experiencia no puede ser negativa, y si alguna vez
+    // llegara un dato así, "-50 de 100 XP" confundiría más que ayudar. La
+    // barra ya queda vacía, porque el avance viene acotado igual.
+    final recorrido = (progresion.experiencia - progresion.inicioDelTramo)
+        .clamp(0, tramo);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -127,6 +127,34 @@ void main() {
     });
   });
 
+  group('datos fuera del contrato', () {
+    test('una experiencia negativa deja el avance en cero, no al revés', () {
+      // El contrato dice que nunca es negativa; si llegara, la progresión se
+      // comporta como la de quien acaba de empezar (SCRUM-189).
+      final progresion = con(-50);
+
+      expect(progresion.nivelActual, isNull);
+      expect(progresion.siguienteNivel, bronce);
+      expect(progresion.avance, 0);
+    });
+
+    test(
+      'dos niveles en el mismo umbral no provocan una división por cero',
+      () {
+        // La tabla lo impide, pero el cálculo no se apoya en eso.
+        const gemelo = Nivel(
+          id: 'n-9',
+          nombre: 'Gemelo',
+          umbralExperiencia: 100,
+        );
+        final progresion = con(50, catalogo: const [bronce, gemelo]);
+
+        expect(progresion.avance, isNotNull);
+        expect(progresion.avance, closeTo(0.5, 0.0001));
+      },
+    );
+  });
+
   test('dos progresiones con los mismos datos son iguales', () {
     expect(con(700), con(700));
     expect(con(700).hashCode, con(700).hashCode);

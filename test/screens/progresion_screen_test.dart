@@ -34,6 +34,52 @@ void main() {
     );
   });
 
+  group('barra de progreso (SCRUM-208)', () {
+    double? avance(WidgetTester tester) => tester
+        .widget<LinearProgressIndicator>(
+          find.byKey(ProgresionScreen.claveAvance),
+        )
+        .value;
+
+    testWidgets('dibuja lo recorrido del tramo hacia el siguiente nivel', (
+      tester,
+    ) async {
+      await _montar(tester, catalogo: niveles, experiencia: 300);
+
+      // 200 de los 400 que hay entre Bronce y Plata.
+      expect(avance(tester), 0.5);
+    });
+
+    testWidgets('sin nivel todavía, el tramo empieza en cero', (tester) async {
+      await _montar(tester, catalogo: niveles, experiencia: 25);
+
+      expect(avance(tester), 0.25);
+    });
+
+    testWidgets('en el nivel más alto no hay barra hacia ninguna parte', (
+      tester,
+    ) async {
+      await _montar(tester, catalogo: niveles, experiencia: 900);
+
+      expect(find.byKey(ProgresionScreen.claveAvance), findsNothing);
+    });
+
+    testWidgets('al refrescar refleja la XP nueva', (tester) async {
+      final experiencia = ExperienciaFalsa(acumulada: 300);
+      await _montar(
+        tester,
+        catalogo: niveles,
+        repositorioExperiencia: experiencia,
+      );
+
+      experiencia.acumulada = 400;
+      await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+
+      expect(avance(tester), 0.75);
+    });
+  });
+
   testWidgets('sin nivel alcanzado todavía lo dice en vez de dejarlo en '
       'blanco', (tester) async {
     await _montar(tester, catalogo: niveles, experiencia: 40);

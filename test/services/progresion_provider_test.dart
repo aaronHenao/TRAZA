@@ -113,20 +113,14 @@ void main() {
     );
   });
 
-  group('mientras no exista el motor de experiencia', () {
-    test('la experiencia acreditada es cero, no un valor inventado', () async {
-      // Hoy nada en la app otorga XP ni la persiste.
-      expect(await const ExperienciaSinMotor().experienciaAcumulada(), 0);
-    });
+  test('con cero XP el corredor va camino del primer nivel', () async {
+    // Un usuario nuevo: la XP arranca en cero (SCRUM-192, sin backfill).
+    repositorioExperiencia.acumulada = 0;
 
-    test('con cero el corredor va camino del primer nivel', () async {
-      repositorioExperiencia.acumulada = 0;
+    final resultado = await progresion();
 
-      final resultado = await progresion();
-
-      expect(resultado.nivelActual, isNull);
-      expect(resultado.siguienteNivel, bronce);
-      expect(resultado.experienciaFaltante, 100);
-    });
+    expect(resultado.nivelActual, isNull);
+    expect(resultado.siguienteNivel, bronce);
+    expect(resultado.experienciaFaltante, 100);
   });
 }

@@ -4,14 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/models/experiencia_ganada.dart';
+import 'package:traza/models/regla_experiencia.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/services/entrenamiento_service.dart';
+import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
+import 'package:traza/widgets/seccion_experiencia.dart';
 import 'package:traza/widgets/trazado_recorrido.dart';
 
+import '../utiles/experiencia_falsa.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
@@ -355,6 +360,43 @@ void main() {
     });
   });
 
+  group('XP obtenida (SCRUM-207)', () {
+    testWidgets('muestra la XP que dejó el entrenamiento de la ruta', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resumen: resumen,
+        experiencia: ExperienciaFalsa(
+          porEntrenamiento: {
+            'e-123': const ExperienciaDeEntrenamiento(
+              xpActividad: 26,
+              ajuste: AjusteExperiencia.ninguno,
+            ),
+          },
+        ),
+      );
+
+      expect(find.byType(SeccionExperiencia), findsOneWidget);
+      expect(find.text('+26 XP'), findsOneWidget);
+    });
+
+    testWidgets('sin sesión no hay XP que mostrar', (tester) async {
+      await _montar(
+        tester,
+        ruta: '/resumen',
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: null,
+          nombreActividad: 'Correr',
+          fechaFin: DateTime(2026, 1, 1, 8, 5),
+          duracion: const Duration(minutes: 5),
+        ),
+      );
+
+      expect(find.byType(SeccionExperiencia), findsNothing);
+    });
+  });
+
   group('ruta del resumen', () {
     test('lleva el id del entrenamiento', () {
       expect(ResumenScreen.rutaPara('e-123'), '/resumen/e-123');
@@ -425,6 +467,7 @@ Future<_EntrenamientosFalso> _montar(
   Map<String, ResumenEntrenamiento> guardados = const {},
   Object? error,
   Completer<void>? espera,
+  ExperienciaFalsa? experiencia,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -470,6 +513,9 @@ Future<_EntrenamientosFalso> _montar(
           RelojFalso(DateTime(2026, 1, 1, 9)).call,
         ),
         entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
+        experienciaRepositoryProvider.overrideWithValue(
+          experiencia ?? ExperienciaFalsa(),
+        ),
         // El mapa del recorrido no descarga tiles reales.
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
       ],

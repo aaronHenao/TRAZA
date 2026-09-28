@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/services/pantalla_encendida_provider.dart';
 import 'package:traza/services/tipos_actividad_service.dart';
+import 'package:traza/models/experiencia_ganada.dart';
+import 'package:traza/models/regla_experiencia.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
@@ -12,11 +14,14 @@ import 'package:traza/screens/tracking/tracking_con_actividad_elegida.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
+import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
+import 'package:traza/widgets/seccion_experiencia.dart';
 
+import '../utiles/experiencia_falsa.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
@@ -88,6 +93,13 @@ void main() {
       expect(find.text('00:32:17'), findsOneWidget);
       // El id del entrenamiento viaja en la ruta (SCRUM-122).
       expect(entorno.ubicacion, '/resumen/e-123');
+      // Y con él se lee la XP que dejó el cierre (SCRUM-207). Sin puntos GPS
+      // no hubo distancia, así que no sumó.
+      expect(find.byType(SeccionExperiencia), findsOneWidget);
+      expect(
+        find.text('Sin distancia registrada, esta actividad no suma XP.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('guarda los puntos GPS y también cierra el entrenamiento', (
@@ -345,6 +357,17 @@ Future<_Entorno> _montar(
       entrenamientoActualProvider.overrideWithValue(entrenamientoId),
       pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),
       entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
+      // La XP que el trigger habría asignado al cerrar (SCRUM-207).
+      experienciaRepositoryProvider.overrideWithValue(
+        ExperienciaFalsa(
+          porEntrenamiento: {
+            'e-123': const ExperienciaDeEntrenamiento(
+              xpActividad: 0,
+              ajuste: AjusteExperiencia.sinDatos,
+            ),
+          },
+        ),
+      ),
       tiposActividadRepositoryProvider.overrideWithValue(
         _CatalogoFalso(catalogo),
       ),

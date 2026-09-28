@@ -42,7 +42,7 @@ class BorradorNivel {
   /// Vacío si se puede guardar.
   ///
   /// Las mismas reglas están en las restricciones de la tabla `niveles`
-  /// (`0007_niveles.sql`), que son la última palabra. Aquí existen para que el
+  /// (`0008_niveles.sql`), que son la última palabra. Aquí existen para que el
   /// administrador sepa qué corregir antes de que la base lo rechace, y sobre
   /// todo para poder decirle **con cuál nivel** choca: eso Postgres no lo
   /// cuenta, solo dice que se violó una restricción.

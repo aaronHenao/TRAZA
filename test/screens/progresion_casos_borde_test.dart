@@ -112,6 +112,7 @@ void main() {
       await montar(tester, experiencia: 900);
 
       expect(find.text('Estás en el nivel más alto'), findsOneWidget);
+      expect(find.text('No hay ninguno por encima por ahora.'), findsOneWidget);
       expect(find.byKey(ProgresionScreen.claveFaltante), findsNothing);
       expect(find.byKey(BarraProgresion.clave), findsNothing);
     });
@@ -138,6 +139,13 @@ void main() {
       await montar(tester, catalogo: const [], experiencia: 0);
 
       expect(find.text('Todavía no hay niveles'), findsOneWidget);
+      expect(
+        find.text(
+          'Cuando se configure la progresión, aquí verás cuánto te falta '
+          'para el siguiente.',
+        ),
+        findsOneWidget,
+      );
       expect(find.byKey(ProgresionScreen.claveNivelActual), findsNothing);
       expect(find.byKey(BarraProgresion.clave), findsNothing);
       expect(tester.takeException(), isNull);

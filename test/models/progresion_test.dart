@@ -127,6 +127,45 @@ void main() {
     });
   });
 
+  group('la experiencia que falta', () {
+    test('es la diferencia con el umbral del siguiente, en todo el tramo', () {
+      // Recorrer el tramo entero de Plata (500) a Oro (1500).
+      const esperado = {500: 1000, 700: 800, 1000: 500, 1499: 1};
+
+      for (final caso in esperado.entries) {
+        expect(
+          con(caso.key).experienciaFaltante,
+          caso.value,
+          reason: 'con ${caso.key} XP',
+        );
+      }
+    });
+
+    test('sumada a la experiencia da justo el umbral del siguiente', () {
+      // La invariante que hace fiable el dato: lo que falta más lo que lleva
+      // es el umbral al que quiere llegar.
+      for (final experiencia in [0, 40, 100, 499, 500, 1499]) {
+        final progresion = con(experiencia);
+        expect(
+          experiencia + progresion.experienciaFaltante!,
+          progresion.siguienteNivel!.umbralExperiencia,
+          reason: 'con $experiencia XP',
+        );
+      }
+    });
+
+    test('siempre es mayor que cero mientras haya siguiente nivel', () {
+      // Si llegara a cero, ese nivel ya sería el actual y no el siguiente.
+      for (final experiencia in [0, 99, 100, 499, 1499]) {
+        expect(
+          con(experiencia).experienciaFaltante,
+          greaterThan(0),
+          reason: 'con $experiencia XP',
+        );
+      }
+    });
+  });
+
   group('datos fuera del contrato', () {
     test('una experiencia negativa deja el avance en cero, no al revés', () {
       // El contrato dice que nunca es negativa; si llegara, la progresión se

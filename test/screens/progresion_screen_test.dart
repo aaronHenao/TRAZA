@@ -6,6 +6,7 @@ import 'package:traza/models/nivel.dart';
 import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/niveles_service.dart';
+import 'package:traza/widgets/barra_progresion.dart';
 
 import '../utiles/experiencia_falsa.dart';
 import '../utiles/niveles_falso.dart';
@@ -45,6 +46,19 @@ void main() {
     );
   });
 
+  testWidgets('acompaña los números con la barra de avance', (tester) async {
+    // De Bronce (100) a Plata (500) hay 400; con 300 lleva la mitad.
+    await _montar(tester, catalogo: niveles, experiencia: 300);
+
+    expect(find.byType(BarraProgresion), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byKey(BarraProgresion.clave))
+          .value,
+      closeTo(0.5, 0.0001),
+    );
+  });
+
   testWidgets('en el nivel más alto no muestra un siguiente inexistente', (
     tester,
   ) async {
@@ -54,6 +68,8 @@ void main() {
     expect(find.text('Estás en el nivel más alto'), findsOneWidget);
     expect(find.byKey(ProgresionScreen.claveFaltante), findsNothing);
     expect(find.text('SIGUIENTE NIVEL'), findsNothing);
+    // Sin siguiente nivel no hay barra que llenar.
+    expect(find.byKey(BarraProgresion.clave), findsNothing);
   });
 
   testWidgets('sin niveles configurados avisa, no falla', (tester) async {

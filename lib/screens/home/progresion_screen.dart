@@ -7,6 +7,7 @@ import '../../services/progresion_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/barra_progresion.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -147,6 +148,9 @@ class _Detalle extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
+                // Lo mismo que dice el texto, pero de un vistazo (SCRUM-188).
+                BarraProgresion(progresion: progresion),
               ],
             ),
           ),

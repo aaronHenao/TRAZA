@@ -7,6 +7,7 @@ import '../../services/progresion_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/barra_progresion.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -26,7 +27,11 @@ class ProgresionScreen extends ConsumerWidget {
   static const claveNivelActual = Key('progresion-nivel-actual');
   static const claveExperiencia = Key('progresion-experiencia');
   static const claveFaltante = Key('progresion-faltante');
-  static const claveAvance = Key('progresion-avance');
+
+  /// La barra de avance, que vive en [BarraProgresion]. SCRUM-188 y SCRUM-208
+  /// llegaron a lo mismo por separado; quedó el componente, y este nombre
+  /// sigue sirviendo para encontrarla.
+  static const claveAvance = BarraProgresion.clave;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -137,21 +142,6 @@ class _Detalle extends StatelessWidget {
                     _Insignia(texto: '${siguiente.umbralExperiencia} XP'),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.md),
-                // Lo recorrido del tramo hacia el siguiente nivel, con la
-                // barra de progreso del prototipo (`.lv-track`). Refleja la
-                // XP nueva: el cierre del entrenamiento invalida la
-                // progresión (SCRUM-208).
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  child: LinearProgressIndicator(
-                    key: ProgresionScreen.claveAvance,
-                    value: progresion.avance,
-                    minHeight: 8,
-                    backgroundColor: AppColors.bgAlt,
-                    valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-                  ),
-                ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Te faltan ${progresion.experienciaFaltante} XP para '
@@ -163,6 +153,11 @@ class _Detalle extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
+                // Lo mismo que dice el texto, pero de un vistazo. Refleja la
+                // XP nueva: el cierre del entrenamiento invalida la progresión
+                // (SCRUM-188 y SCRUM-208).
+                BarraProgresion(progresion: progresion),
               ],
             ),
           ),

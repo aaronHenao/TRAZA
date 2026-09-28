@@ -9,6 +9,7 @@ import 'actividad_provider.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'entrenamiento_service.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
+import 'progresion_provider.dart';
 import 'ubicacion_provider.dart';
 import 'reloj_provider.dart';
 
@@ -135,7 +136,6 @@ class DescarteEntrenamiento {
   /// segundos —lo que más pasa— se resuelve aquí.
   static const intentos = 3;
 
-
   Future<void> descartar() async {
     final entrenamientoId = _ref.read(entrenamientoActualProvider);
 
@@ -256,6 +256,9 @@ class CierreEntrenamiento {
     // Ya no hay entrenamiento en curso: el siguiente empieza con el suyo
     // (SCRUM-96).
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
+    // La XP la asignó el trigger en el mismo cierre (SCRUM-206): la
+    // progresión vuelve a leer la acumulada.
+    _ref.invalidate(progresionProvider);
     return null;
   }
 }

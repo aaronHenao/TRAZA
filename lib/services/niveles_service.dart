@@ -80,7 +80,7 @@ class SupabaseNivelesRepository implements NivelesRepository {
   static const _valorDuplicado = '23505';
   static const _restriccionIncumplida = '23514';
 
-  /// Índice único del nombre en `0007_niveles.sql`. El mensaje de Postgres lo
+  /// Índice único del nombre en `0008_niveles.sql`. El mensaje de Postgres lo
   /// nombra, y así se sabe si lo repetido fue el nombre o el umbral.
   static const _indiceNombreUnico = 'niveles_nombre_unico_idx';
 

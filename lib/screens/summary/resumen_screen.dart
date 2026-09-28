@@ -11,6 +11,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/mapa_trayecto.dart';
+import '../../widgets/seccion_experiencia.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/trazado_recorrido.dart';
@@ -88,7 +89,11 @@ class ResumenScreen extends ConsumerWidget {
     // hace falta consultar nada.
     final datos = resumen;
     if (datos != null && datos.correspondeA(entrenamientoId)) {
-      return _ContenidoResumen(resumen: datos, onVolver: volverAlInicio);
+      return _ContenidoResumen(
+        resumen: datos,
+        entrenamientoId: entrenamientoId,
+        onVolver: volverAlInicio,
+      );
     }
 
     // Sin esos datos (se recargó la página, se abrió la ruta a mano o son de
@@ -109,16 +114,27 @@ class ResumenScreen extends ConsumerWidget {
           ),
           data: (guardado) => guardado == null
               ? _SinResumen(onVolver: volverAlInicio)
-              : _ContenidoResumen(resumen: guardado, onVolver: volverAlInicio),
+              : _ContenidoResumen(
+                  resumen: guardado,
+                  entrenamientoId: id,
+                  onVolver: volverAlInicio,
+                ),
         );
   }
 }
 
 /// El resumen de la sesión, como en `screen-summary`.
 class _ContenidoResumen extends ConsumerWidget {
-  const _ContenidoResumen({required this.resumen, required this.onVolver});
+  const _ContenidoResumen({
+    required this.resumen,
+    required this.entrenamientoId,
+    required this.onVolver,
+  });
 
   final ResumenEntrenamiento resumen;
+
+  /// Sin sesión no hay id, y sin entrenamiento guardado no hay XP.
+  final String? entrenamientoId;
   final VoidCallback onVolver;
 
   @override
@@ -151,6 +167,9 @@ class _ContenidoResumen extends ConsumerWidget {
               _Ritmo(valor: resumen.ritmo),
               // Solo aparece si hay permiso y datos (SCRUM-79).
               SeccionSalud.deResumen(resumen),
+              // La XP que asignó la base al cerrar (SCRUM-207).
+              if (entrenamientoId case final id?)
+                SeccionExperiencia(entrenamientoId: id),
               const SizedBox(height: 18),
               _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),
               const SizedBox(height: 18),

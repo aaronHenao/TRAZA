@@ -127,7 +127,8 @@ void main() {
       await abrirGestion(tester);
 
       expect(find.text('Gestión de retos'), findsOneWidget);
-      expect(find.text('Administrador'), findsOneWidget);
+      // El distintivo del rol vive en el panel, no aquí (SCRUM-194).
+      expect(find.text('Administrador'), findsNothing);
       expect(find.text('Corre 5 km hoy'), findsOneWidget);
       expect(find.text('+200 XP'), findsOneWidget);
       expect(find.text('Meta 60 km'), findsOneWidget);

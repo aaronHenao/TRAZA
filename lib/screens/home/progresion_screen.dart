@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/progresion.dart';
+import '../../services/insignias_provider.dart';
 import '../../services/progresion_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/barra_progresion.dart';
+import '../../widgets/seccion_insignias.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -49,7 +51,12 @@ class ProgresionScreen extends ConsumerWidget {
               ),
               Expanded(
                 child: RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(progresionProvider),
+                  // Las insignias también: entran con la misma XP (SCRUM-193).
+                  onRefresh: () async {
+                    ref
+                      ..invalidate(progresionProvider)
+                      ..invalidate(insigniasProvider);
+                  },
                   child: switch (progresion) {
                     AsyncData(value: final datos) when !datos.hayNiveles =>
                       const _SinNiveles(),
@@ -161,6 +168,8 @@ class _Detalle extends StatelessWidget {
               ],
             ),
           ),
+        const SizedBox(height: AppSpacing.md),
+        const SeccionInsignias(),
       ],
     );
   }
@@ -221,6 +230,10 @@ class _SinNiveles extends StatelessWidget {
               'Cuando se configure la progresión, aquí verás cuánto te falta '
               'para el siguiente.',
         ),
+        // Las insignias dependen de la XP, no de que haya niveles
+        // (SCRUM-193).
+        SizedBox(height: AppSpacing.xl),
+        SeccionInsignias(),
       ],
     );
   }

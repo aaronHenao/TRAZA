@@ -15,6 +15,7 @@ import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
+import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
@@ -22,6 +23,7 @@ import 'package:traza/widgets/controles_entrenamiento.dart';
 import 'package:traza/widgets/seccion_experiencia.dart';
 
 import '../utiles/experiencia_falsa.dart';
+import '../utiles/niveles_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
@@ -368,6 +370,8 @@ Future<_Entorno> _montar(
           },
         ),
       ),
+      // Sin niveles creados: el resumen no muestra nivel (SCRUM-198).
+      nivelesRepositoryProvider.overrideWithValue(NivelesFalso()),
       tiposActividadRepositoryProvider.overrideWithValue(
         _CatalogoFalso(catalogo),
       ),

@@ -75,7 +75,14 @@ class ResumenScreen extends ConsumerWidget {
                 tooltip: 'Cerrar',
               ),
             ),
-            Expanded(child: _cuerpo(ref, volverAlInicio)),
+            Expanded(
+              child: _cuerpo(
+                ref,
+                volverAlInicio,
+                // El ascenso solo se anuncia recién finalizado (SCRUM-199).
+                anunciarAscenso: !desdeHistorial,
+              ),
+            ),
           ],
         ),
       ),
@@ -84,7 +91,11 @@ class ResumenScreen extends ConsumerWidget {
 
   /// Qué mostrar: solo el resumen del entrenamiento que indica la ruta
   /// (SCRUM-122), nunca "el último" de una lista.
-  Widget _cuerpo(WidgetRef ref, VoidCallback volverAlInicio) {
+  Widget _cuerpo(
+    WidgetRef ref,
+    VoidCallback volverAlInicio, {
+    required bool anunciarAscenso,
+  }) {
     // Recién terminada la actividad, los datos llegan con la navegación y no
     // hace falta consultar nada.
     final datos = resumen;
@@ -92,6 +103,7 @@ class ResumenScreen extends ConsumerWidget {
       return _ContenidoResumen(
         resumen: datos,
         entrenamientoId: entrenamientoId,
+        anunciarAscenso: anunciarAscenso,
         onVolver: volverAlInicio,
       );
     }
@@ -117,6 +129,7 @@ class ResumenScreen extends ConsumerWidget {
               : _ContenidoResumen(
                   resumen: guardado,
                   entrenamientoId: id,
+                  anunciarAscenso: anunciarAscenso,
                   onVolver: volverAlInicio,
                 ),
         );
@@ -128,6 +141,7 @@ class _ContenidoResumen extends ConsumerWidget {
   const _ContenidoResumen({
     required this.resumen,
     required this.entrenamientoId,
+    required this.anunciarAscenso,
     required this.onVolver,
   });
 
@@ -135,6 +149,7 @@ class _ContenidoResumen extends ConsumerWidget {
 
   /// Sin sesión no hay id, y sin entrenamiento guardado no hay XP.
   final String? entrenamientoId;
+  final bool anunciarAscenso;
   final VoidCallback onVolver;
 
   @override
@@ -169,7 +184,10 @@ class _ContenidoResumen extends ConsumerWidget {
               SeccionSalud.deResumen(resumen),
               // La XP que asignó la base al cerrar (SCRUM-207).
               if (entrenamientoId case final id?)
-                SeccionExperiencia(entrenamientoId: id),
+                SeccionExperiencia(
+                  entrenamientoId: id,
+                  anunciarAscenso: anunciarAscenso,
+                ),
               const SizedBox(height: 18),
               _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),
               const SizedBox(height: 18),

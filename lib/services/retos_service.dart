@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/nuevo_reto.dart';
 import '../models/reto.dart';
+import '../models/reto_del_usuario.dart';
+import '../models/vigencia_reto.dart';
 
 /// Repositorio de retos que usa la app. Las pruebas lo sustituyen con
 /// `overrideWithValue`.
@@ -59,9 +61,24 @@ abstract interface class RetosRepository {
   /// antiguo.
   ///
   /// Es lo que necesita el criterio 1 de SCRUM-132: al crear un reto, verlo
-  /// aparecer en el catálogo. La consulta de los corredores, con su filtro
-  /// por vigencia, es otra (SCRUM-163).
+  /// aparecer en el catálogo. Es la consulta del administrador, que ve todo
+  /// lo que ha creado aunque ya no esté vigente.
   Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo});
+
+  /// Los retos que un corredor puede intentar hoy (SCRUM-163): activos y con
+  /// [hoy] dentro de su vigencia.
+  ///
+  /// Ordenados por lo que se acaba antes. Un reto diario que termina esta
+  /// noche es más urgente que uno mensual al que le quedan tres semanas, y
+  /// eso es lo primero que el corredor necesita ver.
+  Future<List<Reto>> vigentes({required DateTime hoy});
+
+  /// Los retos que el corredor ha activado, del más reciente al más antiguo
+  /// (SCRUM-173 y SCRUM-174).
+  ///
+  /// Trae el reto embebido: sin su meta y su vigencia, el progreso guardado
+  /// no significa nada.
+  Future<List<RetoDelUsuario>> misRetos();
 }
 
 class SupabaseRetosRepository implements RetosRepository {
@@ -74,6 +91,7 @@ class SupabaseRetosRepository implements RetosRepository {
        _usuarioActual = usuarioActual;
 
   static const _tabla = 'retos';
+  static const _tablaRetosUsuario = 'retos_usuario';
 
   /// Suficiente para el catálogo de un proyecto de curso sin traer la tabla
   /// entera.
@@ -138,5 +156,47 @@ class SupabaseRetosRepository implements RetosRepository {
         .limit(limite);
 
     return filas.map(Reto.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<Reto>> vigentes({required DateTime hoy}) async {
+    final dia = VigenciaReto.aTexto(hoy);
+
+    // El filtro de vigencia va aquí y no en la policy: RLS decide quién ve
+    // qué, no qué muestra cada pantalla. La misma fila es "vigente" hoy y
+    // "vencida" mañana sin que cambien los permisos.
+    final filas = await _cliente
+        .from(_tabla)
+        .select()
+        .eq('estado', EstadoReto.activo.valorDb)
+        .lte('fecha_inicio', dia)
+        .gte('fecha_fin', dia)
+        // `ascending` explícito: en postgrest el valor por defecto de
+        // `order` es descendente, así que sin esto lo que más falta hacía
+        // quedaba al final.
+        .order('fecha_fin', ascending: true)
+        .limit(limite);
+
+    return filas.map(Reto.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<RetoDelUsuario>> misRetos() async {
+    final usuarioId = _usuarioId();
+
+    // `retos(*)` embebe el reto de la clave foránea en la misma consulta: sin
+    // él habría que pedir cada reto por separado.
+    //
+    // El filtro por usuario es redundante con la policy, que ya limita las
+    // filas a las de `auth.uid()`. Va explícito porque una consulta debe
+    // decir qué pide, no confiar en que alguien la recorte por detrás.
+    final filas = await _cliente
+        .from(_tablaRetosUsuario)
+        .select('*, retos(*)')
+        .eq('usuario_id', usuarioId)
+        .order('fecha_activacion', ascending: false)
+        .limit(limite);
+
+    return filas.map(RetoDelUsuario.desdeSupabase).toList();
   }
 }

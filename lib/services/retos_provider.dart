@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/nuevo_reto.dart';
 import '../models/periodicidad_reto.dart';
 import '../models/reto.dart';
+import '../models/reto_del_usuario.dart';
 import 'reloj_provider.dart';
 import 'retos_service.dart';
 
@@ -78,6 +79,35 @@ final retosFiltradosProvider = Provider.autoDispose<AsyncValue<List<Reto>>>((
             : retos.where((reto) => reto.periodicidad == periodicidad).toList(),
       );
 });
+
+/// Los retos que el corredor puede intentar hoy (SCRUM-163).
+///
+/// `autoDispose`: se consulta al entrar a la sección, así un reto que acaba
+/// de vencer deja de aparecer sin tener que reiniciar la app.
+final retosVigentesProvider = FutureProvider.autoDispose<List<Reto>>(
+  (ref) => ref
+      .watch(retosRepositoryProvider)
+      .vigentes(hoy: ref.read(relojProvider)()),
+);
+
+/// Qué periodicidad está mirando el corredor, o null para todas.
+///
+/// Se filtra en memoria y no en la consulta: los retos vigentes de un día son
+/// pocos, y así cambiar de pestaña responde al instante.
+final filtroRetosCorredorProvider =
+    StateProvider.autoDispose<PeriodicidadReto?>((ref) => null);
+
+/// Qué pestaña del historial está abierta. Arranca en lo que el corredor
+/// todavía puede cumplir.
+final seccionHistorialRetosProvider =
+    StateProvider.autoDispose<SeccionHistorialRetos>(
+      (ref) => SeccionHistorialRetos.enCurso,
+    );
+
+/// Los retos que el corredor ha activado (SCRUM-173 y SCRUM-174).
+final misRetosProvider = FutureProvider.autoDispose<List<RetoDelUsuario>>(
+  (ref) => ref.watch(retosRepositoryProvider).misRetos(),
+);
 
 /// Creación de retos (SCRUM-143).
 final creacionRetoProvider = Provider<CreacionReto>(CreacionReto.new);

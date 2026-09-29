@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:traza/models/nuevo_reto.dart';
-import 'package:traza/models/reto.dart';
 import 'package:traza/screens/admin/gestion_niveles_screen.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/screens/admin/panel_admin_screen.dart';
@@ -11,15 +9,9 @@ import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/retos_service.dart';
 
 import '../utiles/niveles_falso.dart';
+import '../utiles/retos_repository_falso.dart';
 
-class _RetosVacio implements RetosRepository {
-  @override
-  Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo}) async =>
-      const [];
-
-  @override
-  Future<Reto> crear(NuevoReto reto) async => throw UnimplementedError();
-}
+class _RetosVacio extends RetosRepositorioFalso {}
 
 /// Pruebas del panel del administrador (SCRUM-194).
 void main() {

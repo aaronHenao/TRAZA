@@ -9,6 +9,10 @@
 -- qué acreditar la XP.
 --
 -- Corre esto DESPUÉS de 0006_retos.sql.
+--
+-- Nació como 0007 y se renumeró: el tramo de puntos GPS llegó
+-- antes a develop con ese número. El contenido no cambió, así
+-- que quien ya la corrió no tiene que hacer nada.
 -- =============================================================
 
 create table retos_usuario (

@@ -9,9 +9,11 @@ import 'package:traza/screens/admin/formulario_reto_screen.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
+
+import '../utiles/retos_repository_falso.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
 
-class _RetosFalso implements RetosRepository {
+class _RetosFalso extends RetosRepositorioFalso {
   _RetosFalso(this.retos);
 
   final List<Reto> retos;
@@ -105,7 +107,7 @@ void main() {
         expect(find.text('Gestión de retos'), findsOneWidget);
         // Cuántos caben depende del alto: lo que se comprueba es que la
         // pantalla se arma entera sin desbordar.
-        expect(find.byType(TarjetaReto), findsWidgets);
+        expect(find.byType(TarjetaRetoAdmin), findsWidgets);
       });
 
       testWidgets('ancho ${tamano.key} con el texto del sistema grande', (

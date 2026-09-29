@@ -8,9 +8,11 @@ import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_provider.dart';
 import 'package:traza/services/retos_service.dart';
 
+import '../utiles/retos_repository_falso.dart';
+
 /// Repositorio de mentira: anota lo que le mandan y responde lo que la prueba
 /// le indique.
-class _RetosFalso implements RetosRepository {
+class _RetosFalso extends RetosRepositorioFalso {
   Object? error;
   NuevoReto? recibido;
   List<Reto> catalogo = const [];

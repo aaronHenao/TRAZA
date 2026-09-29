@@ -180,21 +180,36 @@ class _Lista extends ConsumerWidget {
   }
 }
 
-class _SinRetos extends StatelessWidget {
+class _SinRetos extends ConsumerWidget {
   const _SinRetos({required this.hayFiltro});
 
   final bool hayFiltro;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!hayFiltro) {
+      return const EstadoVacio(
+        icono: Icons.flag_outlined,
+        titulo: 'No hay retos disponibles',
+        detalle: 'Vuelve más tarde: aquí aparecerán los retos vigentes.',
+      );
+    }
+
+    // Se nombra la periodicidad: un mensaje común obliga a mirar qué chip
+    // está activo para saber de qué habla.
+    final periodicidad = ref.watch(filtroRetosCorredorProvider)!;
+
     return EstadoVacio(
-      icono: hayFiltro ? Icons.filter_alt_outlined : Icons.flag_outlined,
-      titulo: hayFiltro
-          ? 'Ningún reto de este tipo'
-          : 'No hay retos disponibles',
-      detalle: hayFiltro
-          ? 'Prueba con otra periodicidad.'
-          : 'Vuelve más tarde: aquí aparecerán los retos vigentes.',
+      icono: Icons.filter_alt_outlined,
+      titulo: 'Ningún reto ${periodicidad.etiqueta.toLowerCase()}',
+      detalle: switch (periodicidad) {
+        PeriodicidadReto.diaria =>
+          'Hoy no hay ninguno. Prueba con los semanales o mensuales.',
+        PeriodicidadReto.semanal =>
+          'Esta semana no hay ninguno. Prueba con los diarios o mensuales.',
+        PeriodicidadReto.mensual =>
+          'Este mes no hay ninguno. Prueba con los diarios o semanales.',
+      },
     );
   }
 }

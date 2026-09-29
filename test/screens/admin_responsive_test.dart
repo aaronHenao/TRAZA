@@ -23,6 +23,9 @@ class _RetosFalso extends RetosRepositorioFalso {
       retos.where((reto) => reto.estado == estado).toList();
 
   @override
+  Future<List<Reto>> vigentes({required DateTime hoy}) async => retos;
+
+  @override
   Future<Reto> crear(NuevoReto reto) async => throw UnimplementedError();
 }
 

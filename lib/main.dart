@@ -12,6 +12,7 @@ import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/home/progresion_screen.dart';
+import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
@@ -77,9 +78,7 @@ final _navegacion = GoRouter(
         )) {
           // Durante el onboarding no lleva barra: la portada todavía no es un
           // destino válido y el flujo sigue a Permisos.
-          return const PuertaAdmin(
-            corredor: PerfilScreen(enOnboarding: true),
-          );
+          return const PuertaAdmin(corredor: PerfilScreen(enOnboarding: true));
         }
         return const PuertaAdmin(
           corredor: NavegacionPrincipal(
@@ -133,6 +132,12 @@ final _navegacion = GoRouter(
     GoRoute(
       path: ProgresionScreen.ruta,
       builder: (context, state) => const ProgresionScreen(),
+    ),
+    // Requisitos y ventajas de Runner Experto (SCRUM-195). Se abre con `push`
+    // desde el perfil, así se vuelve a él al cerrarla.
+    GoRoute(
+      path: RunnerExpertoScreen.ruta,
+      builder: (context, state) => const RunnerExpertoScreen(),
     ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(

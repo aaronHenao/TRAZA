@@ -364,6 +364,17 @@ class AuthService {
     return limpio.isEmpty ? null : limpio;
   }
 
+  /// Cuándo se creó la cuenta con la sesión abierta, o null sin sesión.
+  ///
+  /// Cuenta la antigüedad para Runner Experto (SCRUM-195). Sale de
+  /// `auth.users.created_at` y no de `perfiles.fecha_registro`: la policy de
+  /// `perfiles` deja al usuario cambiar cualquier columna de su fila, y esta
+  /// no la puede tocar.
+  DateTime? get fechaCreacionCuenta {
+    final creada = _auth.currentUser?.createdAt;
+    return creada == null ? null : DateTime.tryParse(creada)?.toLocal();
+  }
+
   /// Marca que el usuario terminó Perfil y Permisos. Si falla la red no se
   /// propaga: lo peor es que la próxima vez vuelva a ver esas pantallas.
   Future<void> completarOnboarding() async {

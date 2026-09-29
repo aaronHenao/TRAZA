@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
+import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/widgets/barra_progresion.dart';
 
 import '../utiles/experiencia_falsa.dart';
+import '../utiles/insignias_falsas.dart';
 import '../utiles/niveles_falso.dart';
 
 /// Los casos borde de la progresión (SCRUM-189).
@@ -65,6 +67,8 @@ void main() {
           experienciaRepositoryProvider.overrideWithValue(
             ExperienciaFalsa(acumulada: experiencia),
           ),
+          // Sin insignias: estos casos son de la progresión (SCRUM-193).
+          insigniasRepositoryProvider.overrideWithValue(InsigniasFalsas()),
         ],
         child: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(escalaTexto)),

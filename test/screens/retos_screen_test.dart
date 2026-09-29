@@ -268,7 +268,7 @@ void main() {
 
       await tocarPestana(tester, PeriodicidadReto.mensual);
 
-      expect(find.text('Ningún reto de este tipo'), findsOneWidget);
+      expect(find.text('Ningún reto mensual'), findsOneWidget);
       expect(find.text('No hay retos disponibles'), findsNothing);
     });
 

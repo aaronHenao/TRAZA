@@ -48,7 +48,7 @@ class ChipFiltro extends StatelessWidget {
   }
 }
 
-/// Fila de chips que salta de línea cuando no caben.
+/// Fila de chips centrada, que salta de línea cuando no caben.
 class FilaChips extends StatelessWidget {
   const FilaChips({required this.children, super.key});
 
@@ -63,7 +63,20 @@ class FilaChips extends StatelessWidget {
         AppSpacing.lg,
         AppSpacing.md,
       ),
-      child: Wrap(spacing: 6, runSpacing: 6, children: children),
+      // Ancho completo: sin esto el Wrap mide lo que ocupan los chips y su
+      // `alignment` no tiene espacio donde centrarlos, porque las columnas
+      // que lo contienen alinean a la izquierda.
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          // Centrados: pegados a un lado, la última línea de un salto queda
+          // descolgada del resto.
+          alignment: WrapAlignment.center,
+          spacing: 6,
+          runSpacing: 6,
+          children: children,
+        ),
+      ),
     );
   }
 }

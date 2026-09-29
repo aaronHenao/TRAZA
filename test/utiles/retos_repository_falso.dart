@@ -20,5 +20,8 @@ abstract class RetosRepositorioFalso implements RetosRepository {
   Future<List<Reto>> vigentes({required DateTime hoy}) async => const [];
 
   @override
+  Future<List<Reto>> caducados({required DateTime hoy}) async => const [];
+
+  @override
   Future<List<RetoDelUsuario>> misRetos() async => const [];
 }

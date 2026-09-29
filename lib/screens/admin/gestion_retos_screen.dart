@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/periodicidad_reto.dart';
 import '../../models/reto.dart';
+import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -27,7 +28,7 @@ class GestionRetosScreen extends ConsumerWidget {
 
   static const claveBotonNuevo = Key('admin-nuevo-reto');
 
-  static Key claveEstado(EstadoReto estado) => Key('filtro-${estado.valorDb}');
+  static Key claveVista(VistaGestionRetos vista) => Key('vista-${vista.name}');
 
   /// `null` es la opción "Todos", que no filtra nada.
   static Key clavePeriodicidad(PeriodicidadReto? periodicidad) =>
@@ -138,7 +139,7 @@ class _Filtros extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final estado = ref.watch(filtroEstadoRetosProvider);
+    final vista = ref.watch(vistaGestionRetosProvider);
     final periodicidad = ref.watch(filtroPeriodicidadRetosProvider);
 
     return Column(
@@ -154,16 +155,14 @@ class _Filtros extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                for (final opcion in EstadoReto.values)
+                for (final opcion in VistaGestionRetos.values)
                   Expanded(
                     child: _Pestana(
-                      key: GestionRetosScreen.claveEstado(opcion),
-                      texto: opcion == EstadoReto.activo
-                          ? 'Activos'
-                          : 'Retirados',
-                      activa: opcion == estado,
+                      key: GestionRetosScreen.claveVista(opcion),
+                      texto: opcion.etiqueta,
+                      activa: opcion == vista,
                       onTap: () =>
-                          ref.read(filtroEstadoRetosProvider.notifier).state =
+                          ref.read(vistaGestionRetosProvider.notifier).state =
                               opcion,
                     ),
                   ),
@@ -172,32 +171,26 @@ class _Filtros extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          // Wrap y no una fila deslizable: en pantallas estrechas los cuatro
-          // no caben, y un chip cortado en el borde no se ve como algo que
-          // se pueda arrastrar.
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              // null es "todas": no filtra nada.
-              for (final opcion in <PeriodicidadReto?>[
-                null,
-                ...PeriodicidadReto.values,
-              ])
-                ChipFiltro(
-                  key: GestionRetosScreen.clavePeriodicidad(opcion),
-                  texto: opcion?.etiqueta ?? 'Todos',
-                  activo: opcion == periodicidad,
-                  onTap: () =>
-                      ref.read(filtroPeriodicidadRetosProvider.notifier).state =
-                          opcion,
-                ),
-            ],
-          ),
+        // Chips y no una fila deslizable: en pantallas estrechas los cuatro
+        // no caben, y un chip cortado en el borde no se ve como algo que se
+        // pueda arrastrar.
+        FilaChips(
+          children: [
+            // null es "todas": no filtra nada.
+            for (final opcion in <PeriodicidadReto?>[
+              null,
+              ...PeriodicidadReto.values,
+            ])
+              ChipFiltro(
+                key: GestionRetosScreen.clavePeriodicidad(opcion),
+                texto: opcion?.etiqueta ?? 'Todos',
+                activo: opcion == periodicidad,
+                onTap: () =>
+                    ref.read(filtroPeriodicidadRetosProvider.notifier).state =
+                        opcion,
+              ),
+          ],
         ),
-        const SizedBox(height: AppSpacing.md),
       ],
     );
   }
@@ -240,13 +233,17 @@ class _Pestana extends StatelessWidget {
   }
 }
 
-class _Lista extends StatelessWidget {
+class _Lista extends ConsumerWidget {
   const _Lista({required this.retos});
 
   final List<Reto> retos;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // El mismo día para toda la lista: si cada tarjeta leyera el reloj por su
+    // cuenta, dos podrían decidir distinto al cruzar la medianoche.
+    final hoy = ref.read(relojProvider)();
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -257,16 +254,19 @@ class _Lista extends StatelessWidget {
       ),
       itemCount: retos.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (context, i) => TarjetaRetoAdmin(reto: retos[i]),
+      itemBuilder: (context, i) => TarjetaRetoAdmin(reto: retos[i], hoy: hoy),
     );
   }
 }
 
 /// Un reto del catálogo, con lo que el administrador necesita reconocerlo.
 class TarjetaRetoAdmin extends StatelessWidget {
-  const TarjetaRetoAdmin({required this.reto, super.key});
+  const TarjetaRetoAdmin({required this.reto, required this.hoy, super.key});
 
   final Reto reto;
+
+  /// Desde cuándo se mira la vigencia, para decir si ya caducó.
+  final DateTime hoy;
 
   @override
   Widget build(BuildContext context) {
@@ -329,12 +329,7 @@ class TarjetaRetoAdmin extends StatelessWidget {
                     '${_fecha(reto.vigencia.inicio)} – '
                     '${_fecha(reto.vigencia.fin)}',
               ),
-              if (reto.estaActivo)
-                const InsigniaReto(
-                  texto: 'Activo',
-                  fondo: AppColors.accentTint,
-                  color: AppColors.accentInk,
-                ),
+              _Situacion(reto: reto, hoy: hoy),
             ],
           ),
         ],
@@ -360,23 +355,72 @@ class TarjetaRetoAdmin extends StatelessWidget {
   static String _fecha(DateTime dia) => '${dia.day} ${_meses[dia.month - 1]}';
 }
 
+/// En qué situación está el reto de verdad.
+///
+/// No basta con `estado`: un reto activo cuya vigencia terminó seguiría
+/// diciendo "Activo" dentro de la pestaña de caducados, que es justo lo que
+/// confunde.
+class _Situacion extends StatelessWidget {
+  const _Situacion({required this.reto, required this.hoy});
+
+  final Reto reto;
+  final DateTime hoy;
+
+  @override
+  Widget build(BuildContext context) {
+    final (texto, fondo, color) = switch (reto) {
+      _ when !reto.estaActivo => (
+        'Retirado',
+        AppColors.dangerTint,
+        AppColors.danger,
+      ),
+      _ when reto.vigencia.diasRestantesDesde(hoy) == 0 => (
+        'Caducado',
+        AppColors.bgAlt,
+        AppColors.ink3,
+      ),
+      _ => ('Vigente', AppColors.accentTint, AppColors.accentInk),
+    };
+
+    return InsigniaReto(texto: texto, fondo: fondo, color: color);
+  }
+}
+
 class _SinRetos extends ConsumerWidget {
   const _SinRetos();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Vacío por el filtro y vacío de verdad no son lo mismo: si no se
-    // distinguen, el administrador cree que perdió sus retos.
-    final hayFiltro =
-        ref.watch(filtroPeriodicidadRetosProvider) != null ||
-        ref.watch(filtroEstadoRetosProvider) != EstadoReto.activo;
+    final vista = ref.watch(vistaGestionRetosProvider);
+    final periodicidad = ref.watch(filtroPeriodicidadRetosProvider);
+
+    // Cada combinación dice qué falta: un mensaje común obliga a mirar qué
+    // pestaña y qué chip están activos para entenderlo.
+    final (titulo, detalle) = switch ((vista, periodicidad)) {
+      (VistaGestionRetos.vigentes, null) => (
+        'No hay retos vigentes',
+        'Toca el botón + para publicar uno.',
+      ),
+      (VistaGestionRetos.caducados, null) => (
+        'Ningún reto ha caducado',
+        'Aquí aparecerán los que pasen su fecha de fin.',
+      ),
+      (VistaGestionRetos.retirados, null) => (
+        'No has retirado ningún reto',
+        'Los que retires del catálogo aparecerán aquí.',
+      ),
+      (_, final p) => (
+        'Ningún reto ${p!.etiqueta.toLowerCase()} en ${vista.etiqueta.toLowerCase()}',
+        'Prueba con otra periodicidad o con otra pestaña.',
+      ),
+    };
 
     return EstadoVacio(
-      icono: hayFiltro ? Icons.filter_alt_outlined : Icons.flag_outlined,
-      titulo: hayFiltro ? 'Ningún reto con este filtro' : 'Aún no hay retos',
-      detalle: hayFiltro
-          ? 'Prueba con otro estado o periodicidad.'
-          : 'Toca el botón + para crear el primero.',
+      icono: periodicidad == null
+          ? vista.iconoVacio
+          : Icons.filter_alt_outlined,
+      titulo: titulo,
+      detalle: detalle,
     );
   }
 }

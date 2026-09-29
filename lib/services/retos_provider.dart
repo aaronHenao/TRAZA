@@ -43,24 +43,37 @@ class RetoNoGuardado extends ResultadoCreacionReto {
   final String mensaje;
 }
 
-/// Qué estado muestra la gestión de retos. Cambia la consulta.
-final filtroEstadoRetosProvider = StateProvider.autoDispose<EstadoReto>(
-  (ref) => EstadoReto.activo,
+/// Qué conjunto de retos mira el administrador. Cambia la consulta.
+final vistaGestionRetosProvider = StateProvider.autoDispose<VistaGestionRetos>(
+  (ref) => VistaGestionRetos.vigentes,
 );
 
 /// Qué periodicidad muestra la gestión, o null para todas.
 final filtroPeriodicidadRetosProvider =
     StateProvider.autoDispose<PeriodicidadReto?>((ref) => null);
 
-/// Catálogo que ve el administrador, según el estado elegido.
+/// Catálogo que ve el administrador, según la vista elegida.
+///
+/// Cada vista es una consulta distinta y no un filtro en memoria: separar lo
+/// vigente de lo caducado depende de la fecha de hoy, que la base no conoce
+/// —está en UTC— y que el cliente sí.
 ///
 /// `autoDispose`: se vuelve a consultar cada vez que se entra, así el reto
 /// recién creado aparece sin trucos (criterio 1 de SCRUM-132).
-final catalogoRetosProvider = FutureProvider.autoDispose<List<Reto>>(
-  (ref) => ref
-      .watch(retosRepositoryProvider)
-      .listar(estado: ref.watch(filtroEstadoRetosProvider)),
-);
+final catalogoRetosProvider = FutureProvider.autoDispose<List<Reto>>((
+  ref,
+) async {
+  final repositorio = ref.watch(retosRepositoryProvider);
+  final hoy = ref.read(relojProvider)();
+
+  return switch (ref.watch(vistaGestionRetosProvider)) {
+    VistaGestionRetos.vigentes => repositorio.vigentes(hoy: hoy),
+    VistaGestionRetos.caducados => repositorio.caducados(hoy: hoy),
+    VistaGestionRetos.retirados => repositorio.listar(
+      estado: EstadoReto.retirado,
+    ),
+  };
+});
 
 /// El catálogo ya filtrado por periodicidad.
 ///

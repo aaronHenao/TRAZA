@@ -73,6 +73,13 @@ abstract interface class RetosRepository {
   /// eso es lo primero que el corredor necesita ver.
   Future<List<Reto>> vigentes({required DateTime hoy});
 
+  /// Los retos activos cuya vigencia ya pasó.
+  ///
+  /// Para el administrador: siguen publicados y se pueden consultar, pero
+  /// ningún corredor puede intentarlos. Del que venció más recientemente al
+  /// más antiguo.
+  Future<List<Reto>> caducados({required DateTime hoy});
+
   /// Los retos que el corredor ha activado, del más reciente al más antiguo
   /// (SCRUM-173 y SCRUM-174).
   ///
@@ -175,6 +182,23 @@ class SupabaseRetosRepository implements RetosRepository {
         // `order` es descendente, así que sin esto lo que más falta hacía
         // quedaba al final.
         .order('fecha_fin', ascending: true)
+        .limit(limite);
+
+    return filas.map(Reto.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<Reto>> caducados({required DateTime hoy}) async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tabla)
+        .select()
+        .eq('estado', EstadoReto.activo.valorDb)
+        .lt('fecha_fin', VigenciaReto.aTexto(hoy))
+        // Lo que acaba de vencer primero: es lo que el administrador
+        // probablemente quiera renovar o retirar.
+        .order('fecha_fin', ascending: false)
         .limit(limite);
 
     return filas.map(Reto.desdeSupabase).toList();

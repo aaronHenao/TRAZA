@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
+import '../../widgets/traza_card.dart';
+import '../home/runner_experto_screen.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../services/perfil_provider.dart';
@@ -26,6 +28,8 @@ class PerfilScreen extends StatelessWidget {
   /// Si viene del registro, guardar sigue hacia Permisos. Si no, guardar es
   /// solo guardar y se vuelve a la portada.
   final bool enOnboarding;
+
+  static const claveRunnerExperto = Key('perfil-runner-experto');
 
   @override
   Widget build(BuildContext context) {
@@ -64,10 +68,16 @@ class _Cuerpo extends ConsumerWidget {
                 AppSpacing.lg,
                 AppSpacing.xl,
               ),
-              children: const [
-                _CabeceraPerfil(),
-                SizedBox(height: AppSpacing.xl),
-                MisObjetivosSection(),
+              children: [
+                const _CabeceraPerfil(),
+                // Recién registrado todavía no hay nada que alcanzar: primero
+                // termina el onboarding.
+                if (!enOnboarding) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  const _InvitacionRunnerExperto(),
+                ],
+                const SizedBox(height: AppSpacing.xl),
+                const MisObjetivosSection(),
               ],
             ),
           ),
@@ -244,6 +254,55 @@ class _CabeceraPerfil extends StatelessWidget {
   }
 }
 
+/// La entrada a los requisitos y ventajas de Runner Experto (SCRUM-212).
+class _InvitacionRunnerExperto extends StatelessWidget {
+  const _InvitacionRunnerExperto();
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      key: PerfilScreen.claveRunnerExperto,
+      // `push`: al cerrarla se vuelve al perfil.
+      onTap: () => context.push(RunnerExpertoScreen.ruta),
+      child: const Row(
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: AppColors.accentTint,
+            child: Icon(
+              Icons.workspace_premium_rounded,
+              size: 22,
+              color: AppColors.accentInk,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '¿Quieres ser Runner Experto?',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Mira qué necesitas y qué ganas.',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: AppColors.ink3),
+        ],
+      ),
+    );
+  }
+}
+
 /// El usuario autenticado, o null si Supabase todavía no está inicializado
 /// (por ejemplo en pruebas de widget) o no hay sesión.
 User? _usuarioActual() {
@@ -261,7 +320,10 @@ String? _nombreDe(User? usuario) {
 }
 
 String _iniciales(String nombre, String? correo) {
-  final palabras = nombre.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  final palabras = nombre
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
   if (palabras.length >= 2) {
     return (palabras[0][0] + palabras[1][0]).toUpperCase();
   }

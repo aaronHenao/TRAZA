@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/ascenso.dart';
 import '../models/experiencia_ganada.dart';
+import '../models/progresion.dart';
 import '../models/regla_experiencia.dart';
 import '../services/experiencia_provider.dart';
 import '../theme/app_colors.dart';
@@ -10,16 +12,29 @@ import '../theme/app_dimens.dart';
 /// La XP que dejó el entrenamiento, en su resumen (SCRUM-207).
 ///
 /// Muestra lo ganado por la actividad y por cada reto completado, por qué la
-/// actividad dio menos si fue el caso, y siempre el tope del día: quien quiera
-/// sumar mucho en un solo día lo sabe antes de chocar con él.
+/// actividad dio menos si fue el caso, el nivel con su progreso (SCRUM-198) y
+/// siempre el tope del día: quien quiera sumar mucho en un solo día lo sabe
+/// antes de chocar con él. Si el entrenamiento lo hizo subir de nivel, lo
+/// anuncia arriba (SCRUM-199).
 ///
 /// Trae su propio margen superior, como `SeccionSalud`.
 class SeccionExperiencia extends ConsumerWidget {
-  const SeccionExperiencia({required this.entrenamientoId, super.key});
+  const SeccionExperiencia({
+    required this.entrenamientoId,
+    this.anunciarAscenso = false,
+    super.key,
+  });
 
   final String entrenamientoId;
 
+  /// Solo en el resumen recién finalizado. Desde el historial, la XP ganada
+  /// después falsearía qué niveles cruzó este entrenamiento.
+  final bool anunciarAscenso;
+
   static const claveTotal = Key('seccion-experiencia-total');
+  static const claveAscenso = Key('seccion-experiencia-ascenso');
+  static const claveNivel = Key('seccion-experiencia-nivel');
+  static const claveAvanceNivel = Key('seccion-experiencia-avance-nivel');
 
   /// La nota del tope, armada con las constantes de la regla.
   static String get notaTope {
@@ -48,26 +63,164 @@ class SeccionExperiencia extends ConsumerWidget {
               : _Detalle(xp),
         );
 
+    // El nivel es un dato secundario: si no carga, la XP se muestra igual.
+    final nivel = ref
+        .watch(nivelTrasEntrenamientoProvider(entrenamientoId))
+        .valueOrNull;
+    final ascenso = anunciarAscenso ? nivel?.ascenso : null;
+
     return Padding(
       padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (ascenso != null) ...[
+            _BannerAscenso(ascenso),
+            const SizedBox(height: 10),
+          ],
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.primaryTint,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                contenido,
+                if (nivel != null && nivel.progresion.hayNiveles) ...[
+                  const SizedBox(height: 12),
+                  _Nivel(nivel.progresion),
+                ],
+                const SizedBox(height: 10),
+                Text(
+                  notaTope,
+                  style: const TextStyle(fontSize: 11, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El aviso de que subió de nivel (SCRUM-199).
+///
+/// No hay que confirmarlo ni cerrarlo: está en la pantalla que sigue siempre a
+/// "Finalizar". Entra con una animación corta para que se sienta como un
+/// logro y no como un dato más.
+class _BannerAscenso extends StatelessWidget {
+  const _BannerAscenso(this.ascenso);
+
+  final Ascenso ascenso;
+
+  @override
+  Widget build(BuildContext context) {
+    final cruzados = ascenso.niveles.length;
+    final titulo = cruzados == 1
+        ? '¡Subiste a ${ascenso.nivelFinal.nombre}!'
+        : '¡Subiste $cruzados niveles!';
+    final detalle = cruzados == 1
+        ? 'Lo lograste con este entrenamiento.'
+        : 'Llegaste a ${ascenso.nivelFinal.nombre} con este entrenamiento.';
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutBack,
+      builder: (context, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.scale(scale: 0.9 + 0.1 * t, child: child),
+      ),
       child: Container(
+        key: SeccionExperiencia.claveAscenso,
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.primaryTint,
+          color: AppColors.accent,
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            contenido,
-            const SizedBox(height: 10),
-            Text(
-              notaTope,
-              style: const TextStyle(fontSize: 11, color: AppColors.ink2),
+            const Icon(
+              Icons.emoji_events_rounded,
+              size: 30,
+              color: AppColors.accentInk,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titulo,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detalle,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.accentInk,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// El nivel en que quedó y cuánto le falta para el siguiente (SCRUM-198).
+class _Nivel extends StatelessWidget {
+  const _Nivel(this.progresion);
+
+  final Progresion progresion;
+
+  @override
+  Widget build(BuildContext context) {
+    final siguiente = progresion.siguienteNivel;
+    final nota = siguiente == null
+        ? 'Estás en el nivel más alto.'
+        : 'Te faltan ${progresion.experienciaFaltante} XP para '
+              '${siguiente.nombre}.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          // SCRUM-200: por debajo del primer umbral todavía no hay nivel.
+          'Nivel: ${progresion.nivelActual?.nombre ?? 'aún sin nivel'}',
+          key: SeccionExperiencia.claveNivel,
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          child: LinearProgressIndicator(
+            key: SeccionExperiencia.claveAvanceNivel,
+            // En el último nivel no hay tramo que recorrer: llena.
+            value: progresion.avance ?? 1,
+            minHeight: 6,
+            backgroundColor: AppColors.bg,
+            valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(nota, style: const TextStyle(fontSize: 12, color: AppColors.ink2)),
+      ],
     );
   }
 }

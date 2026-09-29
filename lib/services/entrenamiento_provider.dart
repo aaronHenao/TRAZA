@@ -8,6 +8,7 @@ import '../models/resumen_entrenamiento.dart';
 import 'actividad_provider.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'entrenamiento_service.dart';
+import 'insignias_provider.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
 import 'progresion_provider.dart';
 import 'ubicacion_provider.dart';
@@ -257,8 +258,11 @@ class CierreEntrenamiento {
     // (SCRUM-96).
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
     // La XP la asignó el trigger en el mismo cierre (SCRUM-206): la
-    // progresión vuelve a leer la acumulada.
-    _ref.invalidate(progresionProvider);
+    // progresión vuelve a leer la acumulada, y las insignias que esa XP
+    // haya desbloqueado (SCRUM-193).
+    _ref
+      ..invalidate(progresionProvider)
+      ..invalidate(insigniasProvider);
     return null;
   }
 }

@@ -75,10 +75,7 @@ void main() {
     final router = GoRouter(
       initialLocation: '/actividad',
       routes: [
-        GoRoute(
-          path: '/actividad',
-          builder: (_, _) => const ActividadScreen(),
-        ),
+        GoRoute(path: '/actividad', builder: (_, _) => const ActividadScreen()),
         GoRoute(
           path: '/tracking',
           builder: (_, _) =>
@@ -206,7 +203,8 @@ void main() {
 
       // Se vuelve al inicio sin terminar la actividad, como haria el sistema
       // al restaurar la app.
-      container.read(actividadSeleccionadaProvider.notifier)
+      container
+          .read(actividadSeleccionadaProvider.notifier)
           .seleccionar(const TipoActividad(id: 'id-trote', nombre: 'Trote'));
 
       // La actividad elegida no cambia: hay un entrenamiento en curso

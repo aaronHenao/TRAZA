@@ -117,8 +117,7 @@ void main() {
       expect(enCurso(), isNull);
     });
 
-    test('sin catálogo cargado todavía no hay actividad que iniciar',
-        () async {
+    test('sin catálogo cargado todavía no hay actividad que iniciar', () async {
       container = crearContainer(catalogo: const []);
       await cargarCatalogo();
 
@@ -128,17 +127,19 @@ void main() {
       expect(repositorio.creados, isEmpty);
     });
 
-    test('si la sesión se cerró entre medias avisa que inicie sesión',
-        () async {
-      container = crearContainer();
-      await cargarCatalogo();
-      repositorio.error = const SesionRequeridaException();
+    test(
+      'si la sesión se cerró entre medias avisa que inicie sesión',
+      () async {
+        container = crearContainer();
+        await cargarCatalogo();
+        repositorio.error = const SesionRequeridaException();
 
-      final error = await iniciar();
+        final error = await iniciar();
 
-      expect(error, InicioEntrenamiento.sinSesion);
-      expect(enCurso(), isNull);
-    });
+        expect(error, InicioEntrenamiento.sinSesion);
+        expect(enCurso(), isNull);
+      },
+    );
 
     test('con la ubicación del teléfono apagada no crea nada', () async {
       container = crearContainer();

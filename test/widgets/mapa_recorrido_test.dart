@@ -72,21 +72,20 @@ void main() {
   MapController controlador(WidgetTester tester) =>
       tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController!;
 
-  LatLng marcador(WidgetTester tester) => tester
-      .widget<MarkerLayer>(find.byType(MarkerLayer))
-      .markers
-      .single
-      .point;
+  LatLng marcador(WidgetTester tester) =>
+      tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers.single.point;
 
-  testWidgets('no dibuja el mapa hasta tener la primera posición',
-      (tester) async {
+  testWidgets('no dibuja el mapa hasta tener la primera posición', (
+    tester,
+  ) async {
     await montar(tester);
 
     expect(find.byType(FlutterMap), findsNothing);
   });
 
-  testWidgets('con la primera posición centra el mapa y pone el marcador ahí',
-      (tester) async {
+  testWidgets('con la primera posición centra el mapa y pone el marcador ahí', (
+    tester,
+  ) async {
     await montar(tester);
 
     await emitir(tester, puntoDePrueba(latitud: 6.2311, longitud: -75.6105));
@@ -94,25 +93,20 @@ void main() {
     expect(find.byType(FlutterMap), findsOneWidget);
     expect(find.byKey(MapaRecorrido.claveMarcador), findsOneWidget);
     expect(marcador(tester), const LatLng(6.2311, -75.6105));
-    expect(
-      controlador(tester).camera.center,
-      const LatLng(6.2311, -75.6105),
-    );
+    expect(controlador(tester).camera.center, const LatLng(6.2311, -75.6105));
     expect(controlador(tester).camera.zoom, MapaRecorrido.zoomInicial);
   });
 
-  testWidgets('conforme avanza mueve el marcador y sigue con la cámara',
-      (tester) async {
+  testWidgets('conforme avanza mueve el marcador y sigue con la cámara', (
+    tester,
+  ) async {
     await montar(tester);
     await emitir(tester, puntoDePrueba(latitud: 6.2311, longitud: -75.6105));
 
     await emitir(tester, puntoDePrueba(latitud: 6.2350, longitud: -75.6140));
 
     expect(marcador(tester), const LatLng(6.2350, -75.6140));
-    expect(
-      controlador(tester).camera.center,
-      const LatLng(6.2350, -75.6140),
-    );
+    expect(controlador(tester).camera.center, const LatLng(6.2350, -75.6140));
   });
 
   testWidgets('al seguir al usuario conserva el zoom actual', (tester) async {
@@ -136,8 +130,9 @@ void main() {
     detenerActividad();
   });
 
-  testWidgets('conforme avanza deja el trazo del recorrido detrás',
-      (tester) async {
+  testWidgets('conforme avanza deja el trazo del recorrido detrás', (
+    tester,
+  ) async {
     await montar(tester);
     iniciarActividad();
     await emitir(tester, puntoDePrueba(latitud: 6.2311, longitud: -75.6105));
@@ -154,8 +149,9 @@ void main() {
     detenerActividad();
   });
 
-  testWidgets('el trazo se dibuja con el color y grosor del prototipo',
-      (tester) async {
+  testWidgets('el trazo se dibuja con el color y grosor del prototipo', (
+    tester,
+  ) async {
     await montar(tester);
     iniciarActividad();
     await emitir(tester, puntoDePrueba(latitud: 6.2311, longitud: -75.6105));
@@ -170,8 +166,9 @@ void main() {
     detenerActividad();
   });
 
-  testWidgets('en pausa el marcador sigue al usuario pero el trazo no crece',
-      (tester) async {
+  testWidgets('en pausa el marcador sigue al usuario pero el trazo no crece', (
+    tester,
+  ) async {
     await montar(tester);
     iniciarActividad();
     await emitir(tester, puntoDePrueba(latitud: 6.2311, longitud: -75.6105));
@@ -188,8 +185,7 @@ void main() {
     detenerActividad();
   });
 
-  testWidgets('usa los tiles de CARTO identificando la app',
-      (tester) async {
+  testWidgets('usa los tiles de CARTO identificando la app', (tester) async {
     await montar(tester);
     await emitir(tester, puntoDePrueba());
 

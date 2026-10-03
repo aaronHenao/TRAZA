@@ -54,8 +54,9 @@ void main() {
     return punto.color!;
   }
 
-  testWidgets('al entrar abre la captura y avisa mientras busca señal',
-      (tester) async {
+  testWidgets('al entrar abre la captura y avisa mientras busca señal', (
+    tester,
+  ) async {
     await montar(tester);
 
     expect(fuente.suscripcionesAbiertas, 1);
@@ -63,8 +64,9 @@ void main() {
     expect(colorDelPunto(tester), isNot(const Color(0xFFD7F204)));
   });
 
-  testWidgets('con posición quita la nota y enciende la píldora',
-      (tester) async {
+  testWidgets('con posición quita la nota y enciende la píldora', (
+    tester,
+  ) async {
     await montar(tester);
 
     await emitir(tester, puntoDePrueba());
@@ -82,8 +84,9 @@ void main() {
     expect(find.byKey(MapaRecorrido.claveMarcador), findsOneWidget);
   });
 
-  testWidgets('si la fuente falla a mitad de la actividad lo avisa',
-      (tester) async {
+  testWidgets('si la fuente falla a mitad de la actividad lo avisa', (
+    tester,
+  ) async {
     await montar(tester);
     await emitir(tester, puntoDePrueba());
 

@@ -7,12 +7,14 @@ import 'reloj_provider.dart';
 import 'ubicacion_service.dart';
 
 /// Fuente real de posiciones. Las pruebas la sobrescriben.
-final fuenteUbicacionProvider =
-    Provider<FuenteUbicacion>((ref) => const UbicacionGeolocator());
+final fuenteUbicacionProvider = Provider<FuenteUbicacion>(
+  (ref) => const UbicacionGeolocator(),
+);
 
 /// Frecuencia y calidad del rastreo (SCRUM-110).
-final configuracionRastreoProvider =
-    Provider<ConfiguracionRastreo>((ref) => const ConfiguracionRastreo());
+final configuracionRastreoProvider = Provider<ConfiguracionRastreo>(
+  (ref) => const ConfiguracionRastreo(),
+);
 
 /// Posición del usuario en vivo mientras la actividad está en curso
 /// (SCRUM-108).

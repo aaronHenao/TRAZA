@@ -321,6 +321,7 @@ class TarjetaRetoAdmin extends StatelessWidget {
             runSpacing: 6,
             children: [
               InsigniaReto(texto: reto.periodicidad.etiqueta),
+              InsigniaReto(texto: reto.tipoActividad.nombre),
               InsigniaReto(
                 texto: 'Meta ${TarjetaReto.textoKm(reto.metaKm)} km',
               ),

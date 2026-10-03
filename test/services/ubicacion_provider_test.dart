@@ -29,14 +29,16 @@ void main() {
       container.listen(posicionEnVivoProvider, (_, _) {});
 
   group('posicionEnVivoProvider', () {
-    test('al observarlo abre la fuente y queda esperando la primera lectura',
-        () async {
-      observar();
-      await pumpEventQueue();
+    test(
+      'al observarlo abre la fuente y queda esperando la primera lectura',
+      () async {
+        observar();
+        await pumpEventQueue();
 
-      expect(fuente.suscripcionesAbiertas, 1);
-      expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
-    });
+        expect(fuente.suscripcionesAbiertas, 1);
+        expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
+      },
+    );
 
     test('entrega cada posición conforme el usuario avanza', () async {
       observar();
@@ -52,26 +54,27 @@ void main() {
       expect(container.read(posicionEnVivoProvider).value, segundo);
     });
 
-    test('descarta las lecturas más imprecisas que el tope configurado',
-        () async {
-      observar();
+    test(
+      'descarta las lecturas más imprecisas que el tope configurado',
+      () async {
+        observar();
 
-      fuente.emitir(puntoDePrueba(latitud: 6.9, precisionMetros: 200));
-      await pumpEventQueue();
-      expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
+        fuente.emitir(puntoDePrueba(latitud: 6.9, precisionMetros: 200));
+        await pumpEventQueue();
+        expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
 
-      fuente.emitir(puntoDePrueba(latitud: 6.2311, precisionMetros: 12));
-      await pumpEventQueue();
-      expect(container.read(posicionEnVivoProvider).value!.latitud, 6.2311);
-    });
+        fuente.emitir(puntoDePrueba(latitud: 6.2311, precisionMetros: 12));
+        await pumpEventQueue();
+        expect(container.read(posicionEnVivoProvider).value!.latitud, 6.2311);
+      },
+    );
 
     test('descarta la ultima posicion conocida si es vieja', () async {
       observar();
 
-      fuente.emitir(puntoDePrueba(
-        latitud: 6.9,
-        capturadoEn: DateTime(2026, 1, 1, 7, 30),
-      ));
+      fuente.emitir(
+        puntoDePrueba(latitud: 6.9, capturadoEn: DateTime(2026, 1, 1, 7, 30)),
+      );
       await pumpEventQueue();
       expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
 
@@ -100,38 +103,42 @@ void main() {
       expect(fuente.suscripcionesAbiertas, 0);
     });
 
-    test('cierra la fuente aunque aún no haya llegado la primera lectura',
-        () async {
-      // Riverpod por sí solo dejaría la suscripción abierta en este caso.
-      final sub = observar();
-      await pumpEventQueue();
+    test(
+      'cierra la fuente aunque aún no haya llegado la primera lectura',
+      () async {
+        // Riverpod por sí solo dejaría la suscripción abierta en este caso.
+        final sub = observar();
+        await pumpEventQueue();
 
-      sub.close();
-      await pumpEventQueue();
+        sub.close();
+        await pumpEventQueue();
 
-      expect(fuente.suscripcionesAbiertas, 0);
-      expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
-    });
+        expect(fuente.suscripcionesAbiertas, 0);
+        expect(container.read(posicionEnVivoProvider).isLoading, isTrue);
+      },
+    );
 
-    test('abre la fuente con la configuración de rastreo del provider',
-        () async {
-      const configuracion = ConfiguracionRastreo(
-        distanciaMinimaMetros: 7,
-        altaPrecision: false,
-      );
-      final otro = ProviderContainer(
-        overrides: [
-          fuenteUbicacionProvider.overrideWithValue(fuente),
-          configuracionRastreoProvider.overrideWithValue(configuracion),
-          relojProvider.overrideWithValue(RelojFalso().call),
-        ],
-      );
-      addTearDown(otro.dispose);
+    test(
+      'abre la fuente con la configuración de rastreo del provider',
+      () async {
+        const configuracion = ConfiguracionRastreo(
+          distanciaMinimaMetros: 7,
+          altaPrecision: false,
+        );
+        final otro = ProviderContainer(
+          overrides: [
+            fuenteUbicacionProvider.overrideWithValue(fuente),
+            configuracionRastreoProvider.overrideWithValue(configuracion),
+            relojProvider.overrideWithValue(RelojFalso().call),
+          ],
+        );
+        addTearDown(otro.dispose);
 
-      otro.listen(posicionEnVivoProvider, (_, _) {});
-      await pumpEventQueue();
+        otro.listen(posicionEnVivoProvider, (_, _) {});
+        await pumpEventQueue();
 
-      expect(fuente.ultimaConfiguracion, same(configuracion));
-    });
+        expect(fuente.ultimaConfiguracion, same(configuracion));
+      },
+    );
   });
 }

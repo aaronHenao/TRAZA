@@ -4,17 +4,20 @@ import 'package:traza/models/tipo_actividad.dart';
 
 /// Pruebas de la configuración de inicio (SCRUM-93).
 void main() {
-  test('con un tipo de la base arma la configuración con su id y su nombre', () {
-    expect(
-      ConfiguracionInicio.para(
-        const TipoActividad(id: 'id-trote', nombre: 'Trote'),
-      ),
-      const ConfiguracionInicio(
-        tipoActividadId: 'id-trote',
-        nombreActividad: 'Trote',
-      ),
-    );
-  });
+  test(
+    'con un tipo de la base arma la configuración con su id y su nombre',
+    () {
+      expect(
+        ConfiguracionInicio.para(
+          const TipoActividad(id: 'id-trote', nombre: 'Trote'),
+        ),
+        const ConfiguracionInicio(
+          tipoActividadId: 'id-trote',
+          nombreActividad: 'Trote',
+        ),
+      );
+    },
+  );
 
   test('sin tipo elegido no hay configuración', () {
     expect(ConfiguracionInicio.para(null), isNull);

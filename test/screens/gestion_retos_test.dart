@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
@@ -63,10 +64,15 @@ void main() {
     xpOtorgada: xp,
     vigencia: periodicidad.vigenciaDesde(ahora),
     estado: estado,
+    tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
   );
 
   final catalogo = [
-    reto(id: '1', nombre: 'Corre 5 km hoy', periodicidad: PeriodicidadReto.diaria),
+    reto(
+      id: '1',
+      nombre: 'Corre 5 km hoy',
+      periodicidad: PeriodicidadReto.diaria,
+    ),
     reto(
       id: '2',
       nombre: 'Corre 15 km esta semana',
@@ -100,6 +106,7 @@ void main() {
         fin: DateTime(2026, 9, 21),
       ),
       estado: EstadoReto.activo,
+      tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
     ),
   ];
 
@@ -208,7 +215,10 @@ void main() {
     testWidgets('elegir Semanal deja solo los semanales', (tester) async {
       await abrirGestion(tester);
 
-      await tocarFiltro(tester, GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.semanal));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.semanal),
+      );
 
       expect(find.text('Corre 15 km esta semana'), findsOneWidget);
       expect(find.text('Corre 5 km hoy'), findsNothing);
@@ -221,14 +231,20 @@ void main() {
       await abrirGestion(tester);
       final antes = repositorio.consultas;
 
-      await tocarFiltro(tester, GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.diaria));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.diaria),
+      );
 
       expect(repositorio.consultas, antes);
     });
 
     testWidgets('volver a Todos los muestra de nuevo', (tester) async {
       await abrirGestion(tester);
-      await tocarFiltro(tester, GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.diaria));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.diaria),
+      );
 
       await tocarFiltro(tester, GestionRetosScreen.clavePeriodicidad(null));
 
@@ -240,7 +256,10 @@ void main() {
     ) async {
       await abrirGestion(tester, retos: [catalogo.first]);
 
-      await tocarFiltro(tester, GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.mensual));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.mensual),
+      );
 
       // Nombra la periodicidad y la pestaña: un mensaje común obligaría a
       // mirar qué está activo para entenderlo.
@@ -255,7 +274,10 @@ void main() {
     ) async {
       await abrirGestion(tester);
 
-      await tocarFiltro(tester, GestionRetosScreen.claveVista(VistaGestionRetos.retirados));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.retirados),
+      );
 
       expect(find.text('Trote de 8 km'), findsOneWidget);
       expect(find.text('Corre 5 km hoy'), findsNothing);
@@ -267,7 +289,10 @@ void main() {
       await abrirGestion(tester);
       final antes = repositorio.consultas;
 
-      await tocarFiltro(tester, GestionRetosScreen.claveVista(VistaGestionRetos.retirados));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.retirados),
+      );
 
       expect(repositorio.consultas, greaterThan(antes));
     });
@@ -374,7 +399,11 @@ void main() {
       // El reto que se acaba de crear tiene que aparecer al volver.
       repositorio.retos = [
         ...catalogo,
-        reto(id: '9', nombre: 'Reto nuevo', periodicidad: PeriodicidadReto.diaria),
+        reto(
+          id: '9',
+          nombre: 'Reto nuevo',
+          periodicidad: PeriodicidadReto.diaria,
+        ),
       ];
       tester.state<NavigatorState>(find.byType(Navigator).last).pop();
       await tester.pumpAndSettle();

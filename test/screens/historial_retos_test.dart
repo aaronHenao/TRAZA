@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/reto_del_usuario.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/retos/historial_retos_screen.dart';
@@ -48,6 +49,7 @@ void main() {
     xpOtorgada: xp,
     vigencia: VigenciaReto(inicio: DateTime(2026, 9, 21), fin: fin),
     estado: EstadoReto.activo,
+    tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
   );
 
   final enCurso = RetoDelUsuario(

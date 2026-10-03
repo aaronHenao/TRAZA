@@ -73,16 +73,10 @@ class SupabaseObjetivosRepository implements ObjetivosRepository {
     // El upsert se apoya en la restricción unique (usuario_id, tipo) que crea
     // la migración 0003.
     if (objetivos.isNotEmpty) {
-      await _cliente
-          .from(_tabla)
-          .upsert([
-            for (final MapEntry(key: tipo, value: valor) in objetivos.entries)
-              {
-                'usuario_id': usuarioId,
-                'tipo': tipo.valorDb,
-                'valor_meta': valor,
-              },
-          ], onConflict: 'usuario_id,tipo');
+      await _cliente.from(_tabla).upsert([
+        for (final MapEntry(key: tipo, value: valor) in objetivos.entries)
+          {'usuario_id': usuarioId, 'tipo': tipo.valorDb, 'valor_meta': valor},
+      ], onConflict: 'usuario_id,tipo');
     }
 
     // Los tipos que el usuario desmarcó. Son dos como máximo, así que se

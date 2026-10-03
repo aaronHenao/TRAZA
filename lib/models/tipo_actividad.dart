@@ -23,7 +23,8 @@ class TipoActividad {
   /// Los tipos que siembra la migración, sin id. Se usan mientras no hay
   /// sesión.
   static final catalogoLocal = List<TipoActividad>.unmodifiable([
-    for (final nombre in ordenPreferido) TipoActividad(id: null, nombre: nombre),
+    for (final nombre in ordenPreferido)
+      TipoActividad(id: null, nombre: nombre),
   ]);
 
   @override

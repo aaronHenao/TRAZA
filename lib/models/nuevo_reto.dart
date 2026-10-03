@@ -1,13 +1,14 @@
 import 'package:flutter/foundation.dart';
 
 import 'periodicidad_reto.dart';
+import 'tipo_actividad.dart';
 import 'vigencia_reto.dart';
 
 /// Campos del formulario de reto.
 ///
 /// El criterio 2 de SCRUM-132 pide señalar *cuáles* requieren corrección, no
 /// solo avisar que algo está mal: por eso los errores se devuelven por campo.
-enum CampoReto { nombre, descripcion, periodicidad, meta, xp }
+enum CampoReto { nombre, descripcion, periodicidad, tipoActividad, meta, xp }
 
 /// Cuánto puede medir el nombre de un reto. Entra en una línea de la tarjeta
 /// del catálogo; más largo, se corta.
@@ -24,6 +25,7 @@ class BorradorReto {
     this.nombre = '',
     this.descripcion = '',
     this.periodicidad,
+    this.tipoActividad,
     this.meta = '',
     this.xp = '',
   });
@@ -31,6 +33,10 @@ class BorradorReto {
   final String nombre;
   final String descripcion;
   final PeriodicidadReto? periodicidad;
+
+  /// Correr, Trote o Caminar. Null hasta que el administrador elige.
+  final TipoActividad? tipoActividad;
+
   final String meta;
   final String xp;
 
@@ -38,12 +44,14 @@ class BorradorReto {
     String? nombre,
     String? descripcion,
     PeriodicidadReto? periodicidad,
+    TipoActividad? tipoActividad,
     String? meta,
     String? xp,
   }) => BorradorReto(
     nombre: nombre ?? this.nombre,
     descripcion: descripcion ?? this.descripcion,
     periodicidad: periodicidad ?? this.periodicidad,
+    tipoActividad: tipoActividad ?? this.tipoActividad,
     meta: meta ?? this.meta,
     xp: xp ?? this.xp,
   );
@@ -61,8 +69,7 @@ class BorradorReto {
     if (nombre.trim().isEmpty) {
       errores[CampoReto.nombre] = 'Ponle un nombre al reto.';
     } else if (nombre.trim().length > maxCaracteresNombreReto) {
-      errores[CampoReto.nombre] =
-          'Máximo $maxCaracteresNombreReto caracteres.';
+      errores[CampoReto.nombre] = 'Máximo $maxCaracteresNombreReto caracteres.';
     }
 
     if (descripcion.trim().isEmpty) {
@@ -72,6 +79,12 @@ class BorradorReto {
 
     if (periodicidad == null) {
       errores[CampoReto.periodicidad] = 'Elige cada cuánto se renueva.';
+    }
+
+    // El id, y no solo el nombre: sin sesión el catálogo local viene sin
+    // ellos, y la columna de la tabla es una clave foránea.
+    if (tipoActividad?.id == null) {
+      errores[CampoReto.tipoActividad] = 'Elige el tipo de actividad.';
     }
 
     final meta = metaKm;
@@ -124,6 +137,7 @@ class BorradorReto {
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
       periodicidad: periodicidad,
+      tipoActividad: tipoActividad!,
       metaKm: metaKm!,
       xpOtorgada: xpOtorgada!,
       // SCRUM-142: la vigencia no se escribe, se calcula.
@@ -142,6 +156,7 @@ class NuevoReto {
     required this.nombre,
     required this.descripcion,
     required this.periodicidad,
+    required this.tipoActividad,
     required this.metaKm,
     required this.xpOtorgada,
     required this.vigencia,
@@ -150,6 +165,7 @@ class NuevoReto {
   final String nombre;
   final String descripcion;
   final PeriodicidadReto periodicidad;
+  final TipoActividad tipoActividad;
   final double metaKm;
   final int xpOtorgada;
   final VigenciaReto vigencia;
@@ -162,6 +178,7 @@ class NuevoReto {
     'nombre': nombre,
     'descripcion': descripcion,
     'periodicidad': periodicidad.valorDb,
+    'tipo_actividad_id': tipoActividad.id,
     'meta_km': metaKm,
     'xp_otorgada': xpOtorgada,
     'fecha_inicio': vigencia.inicioTexto,
@@ -174,6 +191,7 @@ class NuevoReto {
       other.nombre == nombre &&
       other.descripcion == descripcion &&
       other.periodicidad == periodicidad &&
+      other.tipoActividad == tipoActividad &&
       other.metaKm == metaKm &&
       other.xpOtorgada == xpOtorgada &&
       other.vigencia == vigencia;
@@ -183,6 +201,7 @@ class NuevoReto {
     nombre,
     descripcion,
     periodicidad,
+    tipoActividad,
     metaKm,
     xpOtorgada,
     vigencia,
@@ -190,5 +209,6 @@ class NuevoReto {
 
   @override
   String toString() =>
-      'NuevoReto($nombre, ${periodicidad.valorDb}, $metaKm km, $xpOtorgada XP)';
+      'NuevoReto($nombre, ${periodicidad.valorDb}, '
+      '${tipoActividad.nombre}, $metaKm km, $xpOtorgada XP)';
 }

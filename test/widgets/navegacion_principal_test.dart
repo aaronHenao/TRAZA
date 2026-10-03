@@ -22,10 +22,7 @@ void main() {
       initialLocation: seccion.ruta,
       routes: [
         for (final destino in SeccionPrincipal.values)
-          GoRoute(
-            path: destino.ruta,
-            builder: (_, _) => seccionDe(destino),
-          ),
+          GoRoute(path: destino.ruta, builder: (_, _) => seccionDe(destino)),
       ],
     );
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
@@ -59,10 +56,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Contenido de Perfil'), findsOneWidget);
-    expect(
-      router.routerDelegate.currentConfiguration.uri.path,
-      '/perfil',
-    );
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/perfil');
   });
 
   testWidgets('las secciones no se apilan: cambiar de una a otra no deja '

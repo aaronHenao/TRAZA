@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/periodicidad_reto.dart';
+import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/screens/admin/formulario_reto_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_provider.dart';
@@ -33,6 +35,7 @@ class _RetosFalso extends RetosRepositorioFalso {
       xpOtorgada: reto.xpOtorgada,
       vigencia: reto.vigencia,
       estado: EstadoReto.activo,
+      tipoActividad: reto.tipoActividad,
     );
   }
 }
@@ -42,6 +45,13 @@ class _RetosFalso extends RetosRepositorioFalso {
 void main() {
   // Miércoles 23 de septiembre de 2026.
   final ahora = DateTime(2026, 9, 23, 11, 30);
+
+  const correr = TipoActividad(id: 'tipo-correr', nombre: 'Correr');
+  const tipos = [
+    correr,
+    TipoActividad(id: 'tipo-trote', nombre: 'Trote'),
+    TipoActividad(id: 'tipo-caminar', nombre: 'Caminar'),
+  ];
 
   late _RetosFalso repositorio;
 
@@ -76,6 +86,7 @@ void main() {
         overrides: [
           retosRepositoryProvider.overrideWithValue(repositorio),
           relojProvider.overrideWithValue(() => ahora),
+          tiposActividadProvider.overrideWith((ref) async => tipos),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -89,18 +100,28 @@ void main() {
     String nombre = 'Corre 5 km hoy',
     String descripcion = 'Una sola sesión de carrera.',
     PeriodicidadReto? periodicidad = PeriodicidadReto.diaria,
+    TipoActividad? tipoActividad = correr,
     String meta = '5',
     String xp = '50',
   }) async {
-    await tester.enterText(find.widgetWithText(TextField, 'Corre 5 km hoy').first, nombre);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Corre 5 km hoy').first,
+      nombre,
+    );
     await tester.enterText(
       find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.hintText?.startsWith('Qué tiene') == true,
+        (w) =>
+            w is TextField &&
+            w.decoration?.hintText?.startsWith('Qué tiene') == true,
       ),
       descripcion,
     );
     if (periodicidad != null) {
       await tester.tap(find.text(periodicidad.etiqueta));
+      await tester.pump();
+    }
+    if (tipoActividad != null) {
+      await tester.tap(find.text(tipoActividad.nombre));
       await tester.pump();
     }
     await tester.enterText(
@@ -130,7 +151,10 @@ void main() {
       await tocarCrear(tester);
 
       expect(find.text('Ponle un nombre al reto.'), findsOneWidget);
-      expect(find.text('Explica qué hay que hacer para cumplirlo.'), findsOneWidget);
+      expect(
+        find.text('Explica qué hay que hacer para cumplirlo.'),
+        findsOneWidget,
+      );
       expect(find.text('Elige cada cuánto se renueva.'), findsOneWidget);
       expect(find.text('Indica la meta en kilómetros.'), findsOneWidget);
       expect(find.text('Indica cuánta XP otorga.'), findsOneWidget);

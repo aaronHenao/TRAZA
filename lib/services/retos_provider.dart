@@ -103,6 +103,28 @@ final retosVigentesProvider = FutureProvider.autoDispose<List<Reto>>(
       .vigentes(hoy: ref.read(relojProvider)()),
 );
 
+/// Separa el catálogo en lo que el corredor ya lleva y lo que puede tomar,
+/// y marca de esto último lo que su regla de un reto por hueco no le deja.
+VistaRetosCorredor _repartir(
+  List<Reto> catalogo,
+  List<RetoDelUsuario> activados,
+  DateTime ahora,
+) {
+  final enCurso = activados.where((mio) => mio.enCursoEn(ahora)).toList();
+  final disponibles = catalogo
+      .where((reto) => !activados.any((mio) => mio.reto.id == reto.id))
+      .toList();
+
+  return (
+    enCurso: enCurso,
+    disponibles: disponibles,
+    bloqueados: {
+      // La entrada desaparece sola cuando no hay motivo.
+      for (final reto in disponibles) reto.id: ?motivoDeBloqueo(reto, enCurso),
+    },
+  );
+}
+
 /// Qué periodicidad está mirando el corredor, o null para todas.
 ///
 /// Se filtra en memoria y no en la consulta: los retos vigentes de un día son
@@ -127,7 +149,31 @@ final misRetosProvider = FutureProvider.autoDispose<List<RetoDelUsuario>>(
 typedef VistaRetosCorredor = ({
   List<RetoDelUsuario> enCurso,
   List<Reto> disponibles,
+
+  /// Los de [disponibles] que hoy no se pueden activar, con el motivo listo
+  /// para mostrar. Se marcan en vez de esconderse: un reto que desaparece sin
+  /// explicación se lee como un fallo.
+  Map<String, String> bloqueados,
 });
+
+/// Por qué no se puede activar [reto] teniendo [enCurso] entre manos, o null
+/// si sí se puede.
+///
+/// Es la misma regla del trigger `retos_usuario_un_reto_por_hueco`: un reto
+/// por pareja de periodicidad y tipo de actividad, comparando vigencias. Aquí
+/// está para poder decirlo antes, no para sustituirla.
+String? motivoDeBloqueo(Reto reto, List<RetoDelUsuario> enCurso) {
+  final choca = enCurso.any(
+    (mio) =>
+        mio.reto.periodicidad == reto.periodicidad &&
+        mio.reto.tipoActividad == reto.tipoActividad &&
+        mio.reto.vigencia.solapaCon(reto.vigencia),
+  );
+  if (!choca) return null;
+
+  return 'Ya tienes un reto ${reto.periodicidad.etiqueta.toLowerCase()} '
+      'de ${reto.tipoActividad.nombre} en curso.';
+}
 
 /// Reparte los retos vigentes entre las dos secciones de la pantalla.
 ///
@@ -148,14 +194,7 @@ final retosCorredorProvider =
           AsyncError(:final error, :final stackTrace),
         ) => AsyncError(error, stackTrace),
         (AsyncData(value: final catalogo), AsyncData(value: final activados)) =>
-          AsyncData((
-            enCurso: activados.where((mio) => mio.enCursoEn(ahora)).toList(),
-            disponibles: catalogo
-                .where(
-                  (reto) => !activados.any((mio) => mio.reto.id == reto.id),
-                )
-                .toList(),
-          )),
+          AsyncData(_repartir(catalogo, activados, ahora)),
         // Con una sola de las dos no se puede pintar nada: sin saber qué tiene
         // activado, el catálogo ofrecería retos que ya son suyos.
         _ => const AsyncLoading(),
@@ -207,6 +246,14 @@ class ActivacionReto {
       // activado y aparece en "En curso".
       _ref.invalidate(misRetosProvider);
       return RetoActivado(mio);
+    } on RetoDelMismoHuecoException {
+      // La pantalla ya lo marcaba: si se llegó hasta aquí, el reparto venía de
+      // antes de activar el otro. Se refresca para que lo refleje.
+      _ref.invalidate(misRetosProvider);
+      return RetoNoActivado(
+        'Ya tienes un reto ${reto.periodicidad.etiqueta.toLowerCase()} '
+        'de ${reto.tipoActividad.nombre} en curso.',
+      );
     } on RetoYaActivadoException {
       // No es un fallo que haya que reintentar: el reto ya está donde el
       // corredor quería. Se refresca el historial por si lo activó desde

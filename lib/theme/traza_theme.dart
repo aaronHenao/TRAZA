@@ -63,9 +63,8 @@ ThemeData buildTrazaTheme() {
   );
 
   return base.copyWith(
-    textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
-      bodyColor: TrazaColors.ink,
-      displayColor: TrazaColors.ink,
-    ),
+    textTheme: GoogleFonts.interTextTheme(
+      base.textTheme,
+    ).apply(bodyColor: TrazaColors.ink, displayColor: TrazaColors.ink),
   );
 }

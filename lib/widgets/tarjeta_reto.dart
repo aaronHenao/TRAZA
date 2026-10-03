@@ -13,7 +13,13 @@ import 'traza_card.dart';
 /// decisión — no es lo mismo un reto que termina esta noche que uno al que le
 /// quedan tres semanas.
 class TarjetaReto extends StatelessWidget {
-  const TarjetaReto({required this.reto, required this.hoy, this.onTap, super.key});
+  const TarjetaReto({
+    required this.reto,
+    required this.hoy,
+    this.onTap,
+    this.bloqueo,
+    super.key,
+  });
 
   final Reto reto;
 
@@ -23,6 +29,11 @@ class TarjetaReto extends StatelessWidget {
 
   /// Abre el detalle del reto (SCRUM-166).
   final VoidCallback? onTap;
+
+  /// Por qué hoy no se puede activar, o null si sí se puede. La tarjeta se
+  /// sigue pudiendo abrir: el reto existe y sus condiciones se pueden leer,
+  /// lo que no se puede es tomarlo ahora.
+  final String? bloqueo;
 
   static Key claveDe(String retoId) => Key('reto-$retoId');
 
@@ -80,10 +91,15 @@ class TarjetaReto extends StatelessWidget {
             runSpacing: 6,
             children: [
               InsigniaReto(texto: reto.periodicidad.etiqueta),
+              InsigniaReto(texto: reto.tipoActividad.nombre),
               InsigniaReto(texto: 'Meta ${textoKm(reto.metaKm)} km'),
               _Vigencia(reto: reto, hoy: hoy),
             ],
           ),
+          if (bloqueo != null) ...[
+            const SizedBox(height: 10),
+            _Bloqueo(motivo: bloqueo!),
+          ],
         ],
       ),
     );
@@ -168,6 +184,37 @@ class IconoPeriodicidad extends StatelessWidget {
 }
 
 /// Etiqueta redondeada del prototipo (`.badge`).
+/// El aviso de por qué un reto no se puede activar todavía.
+///
+/// Se dice en la tarjeta y no al pulsar: enterarse después de haber decidido
+/// es lo que molesta.
+class _Bloqueo extends StatelessWidget {
+  const _Bloqueo({required this.motivo});
+
+  final String motivo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.lock_outline, size: 14, color: AppColors.ink3),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            motivo,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.ink3,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class InsigniaReto extends StatelessWidget {
   const InsigniaReto({
     required this.texto,

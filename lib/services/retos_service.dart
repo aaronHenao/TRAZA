@@ -49,6 +49,36 @@ class DatosDeRetoInvalidosException implements Exception {
   String toString() => 'DatosDeRetoInvalidosException: $detalle';
 }
 
+/// Se lanza cuando el corredor intenta activar un reto que ya tiene activo
+/// (SCRUM-169).
+///
+/// Quien lo impide es la restricción `unique (usuario_id, reto_id)` de la
+/// tabla, no esta clase: aquí solo se traduce su rechazo. Esa diferencia
+/// importa porque dos toques seguidos pueden llegar a la vez, y entre
+/// consultar si ya existe y crearlo cabe el otro.
+class RetoYaActivadoException implements Exception {
+  const RetoYaActivadoException();
+
+  @override
+  String toString() =>
+      'RetoYaActivadoException: el corredor ya tiene este reto activo';
+}
+
+/// Se lanza cuando el corredor ya tiene en curso otro reto de la misma
+/// periodicidad y el mismo tipo de actividad.
+///
+/// Es un reto distinto del que intenta activar; por eso no es
+/// [RetoYaActivadoException]. Quien lo impide es el trigger
+/// `retos_usuario_un_reto_por_hueco`, que compara vigencias.
+class RetoDelMismoHuecoException implements Exception {
+  const RetoDelMismoHuecoException();
+
+  @override
+  String toString() =>
+      'RetoDelMismoHuecoException: ya hay un reto en curso de esa '
+      'periodicidad y ese tipo de actividad';
+}
+
 /// Acceso a la tabla `retos`.
 abstract interface class RetosRepository {
   /// Registra [reto] y devuelve la fila creada (SCRUM-143).
@@ -111,9 +141,15 @@ class SupabaseRetosRepository implements RetosRepository {
   /// entera.
   static const limite = 100;
 
+  /// Las columnas de `retos` más el nombre de su tipo de actividad, que
+  /// vive en otra tabla y viene anidado.
+  static const _columnas = '*, tipos_actividad(nombre)';
+
   /// Códigos de error de Postgres que hay que distinguir.
   static const _rlsDenegado = '42501';
   static const _restriccionIncumplida = '23514';
+  static const _filaDuplicada = '23505';
+  static const _huecoOcupado = '23P01';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -123,8 +159,7 @@ class SupabaseRetosRepository implements RetosRepository {
   SupabaseClient get _cliente => _clienteInyectado ?? Supabase.instance.client;
 
   String _usuarioId() {
-    final id =
-        _usuarioActual?.call() ?? _cliente.auth.currentUser?.id;
+    final id = _usuarioActual?.call() ?? _cliente.auth.currentUser?.id;
     if (id == null) throw const SesionRequeridaParaRetosException();
     return id;
   }
@@ -141,7 +176,7 @@ class SupabaseRetosRepository implements RetosRepository {
           .insert({...reto.aSupabase(), 'creado_por': usuarioId})
           // Se devuelve la fila completa para conocer el id y el estado que
           // asignó la base, en vez de darlos por supuestos.
-          .select()
+          .select(_columnas)
           .single();
 
       return Reto.desdeSupabase(fila);
@@ -164,7 +199,7 @@ class SupabaseRetosRepository implements RetosRepository {
 
     final filas = await _cliente
         .from(_tabla)
-        .select()
+        .select(_columnas)
         .eq('estado', estado.valorDb)
         .order('fecha_creacion', ascending: false)
         .limit(limite);
@@ -181,7 +216,7 @@ class SupabaseRetosRepository implements RetosRepository {
     // "vencida" mañana sin que cambien los permisos.
     final filas = await _cliente
         .from(_tabla)
-        .select()
+        .select(_columnas)
         .eq('estado', EstadoReto.activo.valorDb)
         .lte('fecha_inicio', dia)
         .gte('fecha_fin', dia)
@@ -200,7 +235,7 @@ class SupabaseRetosRepository implements RetosRepository {
 
     final filas = await _cliente
         .from(_tabla)
-        .select()
+        .select(_columnas)
         .eq('estado', EstadoReto.activo.valorDb)
         .lt('fecha_fin', VigenciaReto.aTexto(hoy))
         // Lo que acaba de vencer primero: es lo que el administrador
@@ -218,15 +253,24 @@ class SupabaseRetosRepository implements RetosRepository {
     // Ni `estado` ni `progreso_km` van en el insert: los pone la base.
     // Activar no es haber corrido nada todavía, y mandar el estado desde el
     // cliente abriría la puerta a nacer ya completado.
-    final fila = await _cliente
-        .from(_tablaRetosUsuario)
-        .insert({'usuario_id': usuarioId, 'reto_id': reto.id})
-        // Se pide el reto de vuelta para no tener que consultarlo aparte:
-        // sin su meta y su vigencia, el progreso no significa nada.
-        .select('*, retos(*)')
-        .single();
+    try {
+      final fila = await _cliente
+          .from(_tablaRetosUsuario)
+          .insert({'usuario_id': usuarioId, 'reto_id': reto.id})
+          // Se pide el reto de vuelta para no tener que consultarlo aparte:
+          // sin su meta y su vigencia, el progreso no significa nada.
+          .select('*, retos($_columnas)')
+          .single();
 
-    return RetoDelUsuario.desdeSupabase(fila);
+      return RetoDelUsuario.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // El reto ya estaba activado: la restricción unique de la tabla no
+      // deja tenerlo dos veces, y perder el progreso del primero por un
+      // toque de más sería peor que no activar nada.
+      if (e.code == _filaDuplicada) throw const RetoYaActivadoException();
+      if (e.code == _huecoOcupado) throw const RetoDelMismoHuecoException();
+      rethrow;
+    }
   }
 
   @override
@@ -241,7 +285,7 @@ class SupabaseRetosRepository implements RetosRepository {
     // decir qué pide, no confiar en que alguien la recorte por detrás.
     final filas = await _cliente
         .from(_tablaRetosUsuario)
-        .select('*, retos(*)')
+        .select('*, retos($_columnas)')
         .eq('usuario_id', usuarioId)
         .order('fecha_activacion', ascending: false)
         .limit(limite);

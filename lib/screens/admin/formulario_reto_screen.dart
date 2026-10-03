@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/nuevo_reto.dart';
 import '../../models/periodicidad_reto.dart';
+import '../../services/actividad_provider.dart';
+import '../../models/tipo_actividad.dart';
 import '../../models/vigencia_reto.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
@@ -38,6 +40,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
   final _xp = TextEditingController();
 
   PeriodicidadReto? _periodicidad;
+  TipoActividad? _tipoActividad;
 
   /// Los errores solo se pintan después del primer intento de guardar. Marcar
   /// en rojo lo que el administrador todavía no ha llegado a escribir sería
@@ -59,6 +62,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     nombre: _nombre.text,
     descripcion: _descripcion.text,
     periodicidad: _periodicidad,
+    tipoActividad: _tipoActividad,
     meta: _meta.text,
     xp: _xp.text,
   );
@@ -139,6 +143,16 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
                         _periodicidad = periodicidad;
                         _errores = {..._errores}
                           ..remove(CampoReto.periodicidad);
+                      }),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _TipoActividad(
+                      elegido: _tipoActividad,
+                      error: _errores[CampoReto.tipoActividad],
+                      onElegir: (tipo) => setState(() {
+                        _tipoActividad = tipo;
+                        _errores = {..._errores}
+                          ..remove(CampoReto.tipoActividad);
                       }),
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -372,6 +386,130 @@ class _Periodicidad extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Correr · Trote · Caminar, con la misma forma que la periodicidad: son dos
+/// decisiones del mismo tipo, y juntas definen de qué va el reto.
+///
+/// El administrador crea los retos que quiera de cualquier tipo; el límite de
+/// uno por hueco es de quien los activa, no de quien los publica.
+class _TipoActividad extends ConsumerWidget {
+  const _TipoActividad({
+    required this.elegido,
+    required this.onElegir,
+    this.error,
+  });
+
+  final TipoActividad? elegido;
+  final ValueChanged<TipoActividad> onElegir;
+  final String? error;
+
+  static Key claveDe(String nombre) => Key('tipo-actividad-$nombre');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final catalogo = ref.watch(tiposActividadProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Tipo de actividad',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 7),
+        switch (catalogo) {
+          AsyncData(value: final tipos) => Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.bgAlt,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: error == null
+                  ? null
+                  : Border.all(color: AppColors.danger, width: 1.5),
+            ),
+            child: Row(
+              children: [
+                for (final tipo in ordenarTiposActividad(tipos))
+                  Expanded(
+                    child: _BotonTipo(
+                      key: claveDe(tipo.nombre),
+                      tipo: tipo,
+                      activo: tipo == elegido,
+                      onTap: () => onElegir(tipo),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Sin el catálogo no se puede elegir: los ids vienen de la tabla y
+          // son lo que se guarda.
+          AsyncError() => const Text(
+            'No pudimos cargar los tipos de actividad.',
+            style: TextStyle(fontSize: 12, color: AppColors.danger),
+          ),
+          _ => const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Center(
+              child: SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        },
+        if (error != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            error!,
+            style: const TextStyle(fontSize: 12, color: AppColors.danger),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BotonTipo extends StatelessWidget {
+  const _BotonTipo({
+    required this.tipo,
+    required this.activo,
+    required this.onTap,
+    super.key,
+  });
+
+  final TipoActividad tipo;
+  final bool activo;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: activo ? AppColors.bg : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Text(
+          tipo.nombre,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: activo ? AppColors.ink : AppColors.ink2,
+          ),
+        ),
+      ),
     );
   }
 }

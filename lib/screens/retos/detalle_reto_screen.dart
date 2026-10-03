@@ -128,6 +128,16 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
     // segundo después es peor que un botón quieto.
     final cargando = mios.isLoading;
 
+    // La regla de un reto por periodicidad y tipo de actividad. Se consulta
+    // aquí para decirlo antes de que lo pulse, no después.
+    final bloqueo = mio != null
+        ? null
+        : motivoDeBloqueo(
+            reto,
+            mios.valueOrNull?.where((m) => m.enCursoEn(hoy)).toList() ??
+                const [],
+          );
+
     return Scaffold(
       body: SafeArea(
         child: AnchoContenido(
@@ -155,6 +165,9 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
                 // Ya es suyo: lo que falta por saber es cuánto le queda, no
                 // si lo acepta.
                 final activo? => _PieConProgreso(mio: activo),
+                // Tiene otro del mismo hueco: el botón no se ofrece, y en su
+                // lugar va el motivo.
+                _ when bloqueo != null => _PieBloqueado(motivo: bloqueo),
                 _ => _PieConBoton(
                   activando: _activando,
                   onActivar: _activando || cargando ? null : _activar,
@@ -227,6 +240,64 @@ class _PieConProgreso extends StatelessWidget {
               minHeight: 6,
               backgroundColor: AppColors.bgAlt,
               valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lo que ve quien ya lleva otro reto de la misma periodicidad y tipo.
+class _PieBloqueado extends StatelessWidget {
+  const _PieBloqueado({required this.motivo});
+
+  final String motivo;
+
+  static const clave = Key('reto-bloqueado');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: clave,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        14,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline, size: 18, color: AppColors.ink3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  motivo,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'Termínalo o espera a que acabe su plazo para tomar otro.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.ink2,
+                    height: 1.3,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -311,6 +382,7 @@ class _Encabezado extends StatelessWidget {
                     color: AppColors.primaryDark,
                   ),
                   InsigniaReto(texto: reto.periodicidad.etiqueta),
+                  InsigniaReto(texto: reto.tipoActividad.nombre),
                 ],
               ),
             ],

@@ -13,16 +13,18 @@ void main() {
   late String infoPlist;
 
   setUpAll(() {
-    manifestPrincipal =
-        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
-    manifestDebug =
-        File('android/app/src/debug/AndroidManifest.xml').readAsStringSync();
+    manifestPrincipal = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    manifestDebug = File(
+      'android/app/src/debug/AndroidManifest.xml',
+    ).readAsStringSync();
     infoPlist = File('ios/Runner/Info.plist').readAsStringSync();
   });
 
   bool declaraPermiso(String manifest, String permiso) => manifest.contains(
-        '<uses-permission android:name="android.permission.$permiso" />',
-      );
+    '<uses-permission android:name="android.permission.$permiso" />',
+  );
 
   group('AndroidManifest.xml (main)', () {
     test('declara los permisos de ubicación', () {
@@ -47,8 +49,7 @@ void main() {
       expect(declaraPermiso(manifestPrincipal, 'INTERNET'), isTrue);
     });
 
-    test('no pide ubicación en segundo plano (revisión especial en Play)',
-        () {
+    test('no pide ubicación en segundo plano (revisión especial en Play)', () {
       expect(
         declaraPermiso(manifestPrincipal, 'ACCESS_BACKGROUND_LOCATION'),
         isFalse,
@@ -80,8 +81,7 @@ void main() {
   });
 
   group('Info.plist', () {
-    test('explica para qué usa la ubicación mientras la app está en uso',
-        () {
+    test('explica para qué usa la ubicación mientras la app está en uso', () {
       expect(infoPlist, contains('NSLocationWhenInUseUsageDescription'));
       final descripcion = RegExp(
         r'<key>NSLocationWhenInUseUsageDescription</key>\s*<string>([^<]+)</string>',

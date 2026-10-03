@@ -132,6 +132,7 @@ class _Contenido extends ConsumerWidget {
                 key: TarjetaReto.claveDe(reto.id),
                 reto: reto,
                 hoy: hoy,
+                bloqueo: datos.bloqueados[reto.id],
                 // SCRUM-166: del listado al detalle.
                 onTap: () => context.push('/retos/${reto.id}', extra: reto),
               ),

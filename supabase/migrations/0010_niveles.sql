@@ -7,6 +7,10 @@
 --
 -- Corre esto DESPUÉS de 0005_rol_administrador.sql, que trae la
 -- función es_admin() de la que dependen las policies.
+--
+-- Renumerada de 0008 a 0010: `retos_usuario` ya ocupaba el 0008
+-- desde el día anterior. El contenido no cambió, así que quien ya
+-- la corrió no tiene que hacer nada.
 -- =============================================================
 
 create table niveles (

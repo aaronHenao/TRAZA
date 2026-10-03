@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'periodicidad_reto.dart';
+import 'tipo_actividad.dart';
 import 'vigencia_reto.dart';
 
 /// En qué situación está un reto dentro del catálogo.
@@ -40,6 +41,7 @@ class Reto {
     required this.xpOtorgada,
     required this.vigencia,
     required this.estado,
+    required this.tipoActividad,
   });
 
   final String id;
@@ -50,6 +52,10 @@ class Reto {
   final int xpOtorgada;
   final VigenciaReto vigencia;
   final EstadoReto estado;
+
+  /// Correr, Trote o Caminar. Un reto es "5 km corriendo", no "5 km" a
+  /// secas, y de eso depende cuál ocupa el mismo hueco que cuál.
+  final TipoActividad tipoActividad;
 
   /// SCRUM-145: si aparece en el catálogo de los corredores.
   bool get estaActivo => estado == EstadoReto.activo;
@@ -72,6 +78,10 @@ class Reto {
     final xp = fila['xp_otorgada'];
     final inicio = fila['fecha_inicio'];
     final fin = fila['fecha_fin'];
+    final tipoId = fila['tipo_actividad_id'];
+    // La consulta pide `tipos_actividad(nombre)`: viene anidado, no plano.
+    final tipo = fila['tipos_actividad'];
+    final tipoNombre = tipo is Map ? tipo['nombre'] : null;
 
     if (id is! String ||
         nombre is! String ||
@@ -81,7 +91,9 @@ class Reto {
         meta is! num ||
         xp is! num ||
         inicio is! String ||
-        fin is! String) {
+        fin is! String ||
+        tipoId is! String ||
+        tipoNombre is! String) {
       throw FormatException('Fila de retos incompleta o inesperada', fila);
     }
 
@@ -97,6 +109,7 @@ class Reto {
         fin: VigenciaReto.desdeTexto(fin),
       ),
       estado: estado,
+      tipoActividad: TipoActividad(id: tipoId, nombre: tipoNombre),
     );
   }
 
@@ -108,7 +121,8 @@ class Reto {
 
   @override
   String toString() =>
-      'Reto($nombre, ${periodicidad.valorDb}, ${estado.valorDb})';
+      'Reto($nombre, ${periodicidad.valorDb}, ${tipoActividad.nombre}, '
+      '${estado.valorDb})';
 }
 
 /// Qué conjunto de retos mira el administrador en su pantalla de gestión.

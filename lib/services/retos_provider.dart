@@ -122,6 +122,46 @@ final misRetosProvider = FutureProvider.autoDispose<List<RetoDelUsuario>>(
   (ref) => ref.watch(retosRepositoryProvider).misRetos(),
 );
 
+/// Lo que el corredor ve en Retos: lo que tiene en juego y lo que puede
+/// activar (SCRUM-170).
+typedef VistaRetosCorredor = ({
+  List<RetoDelUsuario> enCurso,
+  List<Reto> disponibles,
+});
+
+/// Reparte los retos vigentes entre las dos secciones de la pantalla.
+///
+/// Un reto ya activado sale de "Disponibles": tenerlo en las dos listas haría
+/// pensar que se puede activar otra vez, y la tabla no lo permitiría. También
+/// salen los ya completados, porque un reto no se repite dentro de su
+/// vigencia.
+final retosCorredorProvider =
+    Provider.autoDispose<AsyncValue<VistaRetosCorredor>>((ref) {
+      final ahora = ref.read(relojProvider)();
+      final vigentes = ref.watch(retosVigentesProvider);
+      final mios = ref.watch(misRetosProvider);
+
+      return switch ((vigentes, mios)) {
+        (AsyncError(:final error, :final stackTrace), _) ||
+        (
+          _,
+          AsyncError(:final error, :final stackTrace),
+        ) => AsyncError(error, stackTrace),
+        (AsyncData(value: final catalogo), AsyncData(value: final activados)) =>
+          AsyncData((
+            enCurso: activados.where((mio) => mio.enCursoEn(ahora)).toList(),
+            disponibles: catalogo
+                .where(
+                  (reto) => !activados.any((mio) => mio.reto.id == reto.id),
+                )
+                .toList(),
+          )),
+        // Con una sola de las dos no se puede pintar nada: sin saber qué tiene
+        // activado, el catálogo ofrecería retos que ya son suyos.
+        _ => const AsyncLoading(),
+      };
+    });
+
 /// Cómo terminó un intento de activar un reto.
 ///
 /// Tipo cerrado para que la pantalla tenga que contemplar los dos casos: el
@@ -157,6 +197,7 @@ class ActivacionReto {
   final Ref _ref;
 
   static const sinSesion = 'Inicia sesión para activar retos.';
+  static const yaActivado = 'Ya tienes este reto activo.';
   static const noSePudo = 'No pudimos activar el reto. Inténtalo de nuevo.';
 
   Future<ResultadoActivacion> activar(Reto reto) async {
@@ -166,6 +207,12 @@ class ActivacionReto {
       // activado y aparece en "En curso".
       _ref.invalidate(misRetosProvider);
       return RetoActivado(mio);
+    } on RetoYaActivadoException {
+      // No es un fallo que haya que reintentar: el reto ya está donde el
+      // corredor quería. Se refresca el historial por si lo activó desde
+      // otro dispositivo y esta pantalla aún no lo sabía.
+      _ref.invalidate(misRetosProvider);
+      return const RetoNoActivado(yaActivado);
     } on SesionRequeridaParaRetosException {
       return const RetoNoActivado(sinSesion);
     } catch (error) {

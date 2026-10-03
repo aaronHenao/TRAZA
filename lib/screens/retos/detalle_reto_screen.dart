@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/periodicidad_reto.dart';
 import '../../models/reto.dart';
+import '../../models/reto_del_usuario.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
@@ -117,6 +118,16 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
     final reto = widget.reto;
     final hoy = ref.read(relojProvider)();
 
+    // SCRUM-170: si el corredor ya lo tiene en juego, la pantalla lo dice en
+    // vez de ofrecerle activarlo otra vez.
+    final mios = ref.watch(misRetosProvider);
+    final mio = mios.valueOrNull
+        ?.where((m) => m.reto.id == reto.id && m.enCursoEn(hoy))
+        .firstOrNull;
+    // Mientras no se sepa, el botón espera: ofrecer activar y rectificar un
+    // segundo después es peor que un botón quieto.
+    final cargando = mios.isLoading;
+
     return Scaffold(
       body: SafeArea(
         child: AnchoContenido(
@@ -140,13 +151,85 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
                   ],
                 ),
               ),
-              _PieConBoton(
-                activando: _activando,
-                onActivar: _activando ? null : _activar,
-              ),
+              switch (mio) {
+                // Ya es suyo: lo que falta por saber es cuánto le queda, no
+                // si lo acepta.
+                final activo? => _PieConProgreso(mio: activo),
+                _ => _PieConBoton(
+                  activando: _activando,
+                  onActivar: _activando || cargando ? null : _activar,
+                ),
+              },
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Lo que ve quien ya tiene el reto activo: cuánto lleva hecho.
+class _PieConProgreso extends StatelessWidget {
+  const _PieConProgreso({required this.mio});
+
+  final RetoDelUsuario mio;
+
+  static const clave = Key('reto-ya-activo');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: clave,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.directions_run,
+                size: 18,
+                color: AppColors.secondaryDark,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Ya lo tienes activo',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              Text(
+                '${TarjetaReto.textoKm(mio.progresoKm)} de '
+                '${TarjetaReto.textoKm(mio.reto.metaKm)} km',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: LinearProgressIndicator(
+              value: mio.progreso,
+              minHeight: 6,
+              backgroundColor: AppColors.bgAlt,
+              valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
+            ),
+          ),
+        ],
       ),
     );
   }

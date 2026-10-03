@@ -145,7 +145,7 @@ void main() {
   }
 
   group('validaciones (SCRUM-144)', () {
-    testWidgets('el formulario vacío señala los cinco campos', (tester) async {
+    testWidgets('el formulario vacío señala todos los campos', (tester) async {
       await abrirFormulario(tester);
 
       await tocarCrear(tester);
@@ -156,6 +156,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Elige cada cuánto se renueva.'), findsOneWidget);
+      expect(find.text('Elige el tipo de actividad.'), findsOneWidget);
       expect(find.text('Indica la meta en kilómetros.'), findsOneWidget);
       expect(find.text('Indica cuánta XP otorga.'), findsOneWidget);
       // Lo importante: no se intentó guardar nada.
@@ -215,6 +216,83 @@ void main() {
       await tester.pump();
 
       expect(find.text('Elige cada cuánto se renueva.'), findsNothing);
+    });
+  });
+
+  group('tipo de actividad', () {
+    testWidgets('ofrece los tres del catálogo', (tester) async {
+      await abrirFormulario(tester);
+
+      expect(find.text('Tipo de actividad'), findsOneWidget);
+      for (final tipo in tipos) {
+        expect(find.text(tipo.nombre), findsOneWidget, reason: tipo.nombre);
+      }
+    });
+
+    testWidgets('sin elegirlo no se guarda', (tester) async {
+      await abrirFormulario(tester);
+      await llenar(tester, tipoActividad: null);
+
+      await tocarCrear(tester);
+
+      expect(find.text('Elige el tipo de actividad.'), findsOneWidget);
+      expect(repositorio.recibido, isNull);
+    });
+
+    testWidgets('el elegido es el que se guarda', (tester) async {
+      await abrirFormulario(tester);
+      await llenar(
+        tester,
+        tipoActividad: const TipoActividad(
+          id: 'tipo-caminar',
+          nombre: 'Caminar',
+        ),
+      );
+
+      await tocarCrear(tester);
+
+      expect(repositorio.recibido!.tipoActividad.nombre, 'Caminar');
+      // Lo que viaja a la base es el id, que es la clave foránea.
+      expect(
+        repositorio.recibido!.aSupabase()['tipo_actividad_id'],
+        'tipo-caminar',
+      );
+    });
+
+    testWidgets('el error se quita al elegir, sin tener que reintentar', (
+      tester,
+    ) async {
+      await abrirFormulario(tester);
+      await tocarCrear(tester);
+
+      await tester.tap(find.text('Trote'));
+      await tester.pump();
+
+      expect(find.text('Elige el tipo de actividad.'), findsNothing);
+    });
+
+    testWidgets('el administrador puede crear retos del mismo hueco: el '
+        'límite es de quien los activa', (tester) async {
+      await abrirFormulario(tester);
+      await llenar(tester, periodicidad: PeriodicidadReto.diaria);
+      await tocarCrear(tester);
+
+      // El aviso del primero tapa el botón del segundo: se deja pasar.
+      await tester.pump(const Duration(milliseconds: 2500));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Gestión'));
+      await tester.pumpAndSettle();
+      await llenar(
+        tester,
+        nombre: 'Otro diario de correr',
+        periodicidad: PeriodicidadReto.diaria,
+      );
+      await tocarCrear(tester);
+
+      // Dos diarios de Correr con el mismo plazo: la pantalla no se interpone.
+      expect(repositorio.recibido!.nombre, 'Otro diario de correr');
+      expect(find.text('Gestión'), findsOneWidget);
     });
   });
 

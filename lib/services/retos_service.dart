@@ -80,6 +80,13 @@ abstract interface class RetosRepository {
   /// más antiguo.
   Future<List<Reto>> caducados({required DateTime hoy});
 
+  /// Apunta al corredor a [reto] y devuelve la fila creada (SCRUM-168 y
+  /// SCRUM-172).
+  ///
+  /// Lo que vuelve trae el estado y el progreso que puso la base, no los que
+  /// mandó el cliente.
+  Future<RetoDelUsuario> activar(Reto reto);
+
   /// Los retos que el corredor ha activado, del más reciente al más antiguo
   /// (SCRUM-173 y SCRUM-174).
   ///
@@ -202,6 +209,24 @@ class SupabaseRetosRepository implements RetosRepository {
         .limit(limite);
 
     return filas.map(Reto.desdeSupabase).toList();
+  }
+
+  @override
+  Future<RetoDelUsuario> activar(Reto reto) async {
+    final usuarioId = _usuarioId();
+
+    // Ni `estado` ni `progreso_km` van en el insert: los pone la base.
+    // Activar no es haber corrido nada todavía, y mandar el estado desde el
+    // cliente abriría la puerta a nacer ya completado.
+    final fila = await _cliente
+        .from(_tablaRetosUsuario)
+        .insert({'usuario_id': usuarioId, 'reto_id': reto.id})
+        // Se pide el reto de vuelta para no tener que consultarlo aparte:
+        // sin su meta y su vigencia, el progreso no significa nada.
+        .select('*, retos(*)')
+        .single();
+
+    return RetoDelUsuario.desdeSupabase(fila);
   }
 
   @override

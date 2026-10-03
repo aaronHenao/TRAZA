@@ -11,6 +11,7 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/tarjeta_reto.dart';
 import '../../widgets/traza_card.dart';
+import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
 /// Abre el detalle del reto que pide la ruta.
@@ -68,18 +69,52 @@ class _NoEncontrado extends StatelessWidget {
   }
 }
 
-/// Detalle de un reto (SCRUM-165).
+/// Detalle de un reto (SCRUM-165), desde donde el corredor lo activa
+/// (SCRUM-136).
 ///
 /// Responde lo que el criterio 3 de SCRUM-135 pide: el objetivo del reto y
-/// las condiciones para cumplirlo, para que el corredor decida si lo intenta.
-/// Activarlo es de SCRUM-136.
-class DetalleRetoScreen extends ConsumerWidget {
+/// las condiciones para cumplirlo, para que decida si lo intenta.
+class DetalleRetoScreen extends ConsumerStatefulWidget {
   const DetalleRetoScreen({required this.reto, super.key});
 
   final Reto reto;
 
+  static const claveActivar = Key('reto-activar');
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DetalleRetoScreen> createState() => _DetalleRetoScreenState();
+}
+
+class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
+  /// Se está creando la fila. Es estado de la pantalla, no del dominio: evita
+  /// que un segundo toque mande otra activación mientras la primera va.
+  bool _activando = false;
+
+  Future<void> _activar() async {
+    if (_activando) return;
+    setState(() => _activando = true);
+    try {
+      final resultado = await ref
+          .read(activacionRetoProvider)
+          .activar(widget.reto);
+      if (!mounted) return;
+
+      switch (resultado) {
+        case RetoActivado():
+          // `pop`: vuelve al catálogo, donde el reto ya figura activado.
+          context.pop();
+          mostrarToast(context, 'Reto activado. ¡A por él!');
+        case RetoNoActivado(:final mensaje):
+          mostrarToast(context, mensaje, separacionInferior: 90);
+      }
+    } finally {
+      if (mounted) setState(() => _activando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reto = widget.reto;
     final hoy = ref.read(relojProvider)();
 
     return Scaffold(
@@ -105,9 +140,52 @@ class DetalleRetoScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              _PieConBoton(
+                activando: _activando,
+                onActivar: _activando ? null : _activar,
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// El botón de activar, separado del contenido para que no se desplace con
+/// él: es la decisión que trae al corredor a esta pantalla.
+class _PieConBoton extends StatelessWidget {
+  const _PieConBoton({required this.activando, required this.onActivar});
+
+  final bool activando;
+  final VoidCallback? onActivar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: FilledButton(
+        key: DetalleRetoScreen.claveActivar,
+        onPressed: onActivar,
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        child: activando
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text('Activar reto'),
       ),
     );
   }

@@ -122,6 +122,59 @@ final misRetosProvider = FutureProvider.autoDispose<List<RetoDelUsuario>>(
   (ref) => ref.watch(retosRepositoryProvider).misRetos(),
 );
 
+/// Cómo terminó un intento de activar un reto.
+///
+/// Tipo cerrado para que la pantalla tenga que contemplar los dos casos: el
+/// reto quedó activado, o no se pudo y hay algo que decirle al corredor.
+sealed class ResultadoActivacion {
+  const ResultadoActivacion();
+}
+
+/// El reto quedó registrado como en progreso.
+class RetoActivado extends ResultadoActivacion {
+  const RetoActivado(this.mio);
+
+  final RetoDelUsuario mio;
+}
+
+/// No se pudo activar. Lo que el corredor estaba mirando sigue ahí.
+class RetoNoActivado extends ResultadoActivacion {
+  const RetoNoActivado(this.mensaje);
+
+  final String mensaje;
+}
+
+/// Activación de un reto (SCRUM-168).
+final activacionRetoProvider = Provider<ActivacionReto>(ActivacionReto.new);
+
+/// Apunta al corredor a un reto del catálogo.
+///
+/// Al activarlo, el reto pasa a su lista de retos en curso con el progreso en
+/// cero: activar es comprometerse, no haber avanzado.
+class ActivacionReto {
+  const ActivacionReto(this._ref);
+
+  final Ref _ref;
+
+  static const sinSesion = 'Inicia sesión para activar retos.';
+  static const noSePudo = 'No pudimos activar el reto. Inténtalo de nuevo.';
+
+  Future<ResultadoActivacion> activar(Reto reto) async {
+    try {
+      final mio = await _ref.read(retosRepositoryProvider).activar(reto);
+      // El catálogo y el historial cambian con esto: el reto pasa a estar
+      // activado y aparece en "En curso".
+      _ref.invalidate(misRetosProvider);
+      return RetoActivado(mio);
+    } on SesionRequeridaParaRetosException {
+      return const RetoNoActivado(sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo activar el reto: $error');
+      return const RetoNoActivado(noSePudo);
+    }
+  }
+}
+
 /// Creación de retos (SCRUM-143).
 final creacionRetoProvider = Provider<CreacionReto>(CreacionReto.new);
 

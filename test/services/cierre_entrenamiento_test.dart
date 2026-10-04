@@ -10,6 +10,7 @@ import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/insignias_provider.dart';
 import 'package:traza/services/insignias_service.dart';
+import 'package:traza/services/mapa_progresion_provider.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/progresion_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
@@ -87,6 +88,44 @@ void main() {
 
     await container.read(progresionProvider.future);
     expect(experiencia.consultas, 1);
+  });
+
+  group('mapa de progresión (SCRUM-226, criterio 3)', () {
+    setUp(() {
+      // Como el mapa abierto en su pestaña: lo mantiene vivo. Va solo en este
+      // grupo para no alterar las consultas que cuentan las pruebas de arriba.
+      container.listen(mapaProgresionProvider, (_, _) {});
+    });
+
+    test('al finalizar, el mapa vuelve a leer la XP y muestra la nueva '
+        'posición', () async {
+      final antes = await container.read(mapaProgresionProvider.future);
+      expect(antes.experiencia, 100);
+      expect(antes.indiceActual, 0);
+
+      // Lo que habría sumado el trigger al cerrar: pasa Bronce (120).
+      experiencia.acumulada = 125;
+      expect(await finalizar(), isNull);
+
+      final despues = await container.read(mapaProgresionProvider.future);
+      expect(despues.experiencia, 125);
+      expect(despues.indiceActual, 1);
+      expect(despues.paradas[despues.indiceActual].nombre, 'Bronce');
+    });
+
+    test('si el cierre no se guardó, el mapa no se vuelve a leer', () async {
+      final antes = await container.read(mapaProgresionProvider.future);
+      expect(antes.experiencia, 100);
+      entrenamientos.fallar = true;
+
+      // Aunque la base cambiara, sin cierre no hay motivo para releer.
+      experiencia.acumulada = 125;
+      expect(await finalizar(), isNotNull);
+
+      final despues = await container.read(mapaProgresionProvider.future);
+      expect(despues.experiencia, 100);
+      expect(despues.indiceActual, 0);
+    });
   });
 
   group('insignias (SCRUM-193)', () {

@@ -13,6 +13,7 @@ import '../../widgets/traza_top_bar.dart';
 import '../../services/perfil_provider.dart';
 import '../../models/perfil_state.dart';
 import '../../widgets/mis_objetivos_section.dart';
+import '../../widgets/seccion_insignias.dart';
 
 /// Pantalla de perfil (`screen-profile`).
 ///
@@ -78,6 +79,13 @@ class _Cuerpo extends ConsumerWidget {
                 ],
                 const SizedBox(height: AppSpacing.xl),
                 const MisObjetivosSection(),
+                // Los logros del corredor (SCRUM-222), debajo de los
+                // objetivos, que son lo que guarda el botón. En el onboarding
+                // todavía no hay XP: ni se muestran ni se consultan.
+                if (!enOnboarding) ...const [
+                  SizedBox(height: AppSpacing.xl),
+                  SeccionInsignias(),
+                ],
               ],
             ),
           ),

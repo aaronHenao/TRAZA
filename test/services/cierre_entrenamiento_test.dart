@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/models/insignia.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/models/recorrido.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
@@ -7,11 +8,14 @@ import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
+import 'package:traza/services/insignias_provider.dart';
+import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/progresion_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
 
 import '../utiles/experiencia_falsa.dart';
+import '../utiles/insignias_falsas.dart';
 import '../utiles/niveles_falso.dart';
 import '../utiles/reloj_falso.dart';
 
@@ -22,11 +26,13 @@ import '../utiles/reloj_falso.dart';
 void main() {
   late _EntrenamientosFalso entrenamientos;
   late ExperienciaFalsa experiencia;
+  late InsigniasFalsas insignias;
   late ProviderContainer container;
 
   setUp(() {
     entrenamientos = _EntrenamientosFalso();
     experiencia = ExperienciaFalsa(acumulada: 100);
+    insignias = InsigniasFalsas(catalogo: const [_diezMil]);
 
     container = ProviderContainer(
       overrides: [
@@ -41,11 +47,14 @@ void main() {
           ),
         ),
         relojProvider.overrideWithValue(RelojFalso().call),
+        insigniasRepositoryProvider.overrideWithValue(insignias),
       ],
     );
     addTearDown(container.dispose);
     // Como la pantalla de progresión abierta: la mantiene viva.
     container.listen(progresionProvider, (_, _) {});
+    // Las insignias se ven en la misma pantalla (SCRUM-193).
+    container.listen(insigniasProvider, (_, _) {});
   });
 
   Future<String?> finalizar() => container
@@ -79,7 +88,53 @@ void main() {
     await container.read(progresionProvider.future);
     expect(experiencia.consultas, 1);
   });
+
+  group('insignias (SCRUM-193)', () {
+    test('al finalizar, las insignias se vuelven a leer', () async {
+      final antes = await container.read(insigniasProvider.future);
+      expect(antes.single.obtenida, isFalse);
+      expect(insignias.consultas, 1);
+
+      // Lo que habría otorgado el trigger al acreditar la XP del cierre.
+      insignias.catalogo = [
+        Insignia(
+          id: _diezMil.id,
+          nombre: _diezMil.nombre,
+          descripcion: _diezMil.descripcion,
+          icono: _diezMil.icono,
+          xpRequerida: _diezMil.xpRequerida,
+          obtenidaEl: DateTime.utc(2026, 9, 29, 7),
+        ),
+      ];
+      expect(await finalizar(), isNull);
+
+      final despues = await container.read(insigniasProvider.future);
+      expect(insignias.consultas, 2);
+      expect(despues.single.obtenida, isTrue);
+    });
+
+    test(
+      'si el cierre no se guardó, no hay insignias nuevas que leer',
+      () async {
+        await container.read(insigniasProvider.future);
+        entrenamientos.fallar = true;
+
+        expect(await finalizar(), isNotNull);
+
+        await container.read(insigniasProvider.future);
+        expect(insignias.consultas, 1);
+      },
+    );
+  });
 }
+
+const _diezMil = Insignia(
+  id: 'i-3',
+  nombre: 'Diez mil',
+  descripcion: 'Tus primeros 10 km en una salida',
+  icono: 'diez',
+  xpRequerida: 105,
+);
 
 class _EntrenamientosFalso implements EntrenamientoRepository {
   bool fallar = false;

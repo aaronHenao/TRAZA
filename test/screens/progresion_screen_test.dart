@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/models/insignia.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
+import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/widgets/barra_progresion.dart';
+import 'package:traza/widgets/seccion_insignias.dart';
 
 import '../utiles/experiencia_falsa.dart';
+import '../utiles/insignias_falsas.dart';
 import '../utiles/niveles_falso.dart';
 
 /// Pruebas de la pantalla de requisitos del siguiente nivel (SCRUM-187).
@@ -164,6 +168,107 @@ void main() {
       '600 XP acumulados',
     );
   });
+
+  group('insignias (SCRUM-193, criterio 6)', () {
+    final primeraHuella = Insignia(
+      id: 'i-1',
+      nombre: 'Primera huella',
+      descripcion: 'Tu primer kilómetro con TRAZA',
+      icono: 'huella',
+      xpRequerida: 5,
+      obtenidaEl: DateTime.utc(2026, 9, 20, 15),
+    );
+    const diezMil = Insignia(
+      id: 'i-3',
+      nombre: 'Diez mil',
+      descripcion: 'Tus primeros 10 km en una salida',
+      icono: 'diez',
+      xpRequerida: 105,
+    );
+
+    Finder dentroDe(String id, Finder buscado) => find.descendant(
+      of: find.byKey(ValueKey('insignia-$id')),
+      matching: buscado,
+    );
+
+    testWidgets('con niveles, las insignias obtenidas se ven debajo de la '
+        'progresión', (tester) async {
+      await _montar(
+        tester,
+        catalogo: niveles,
+        experiencia: 300,
+        insignias: [primeraHuella, diezMil],
+      );
+
+      expect(find.byKey(SeccionInsignias.clave), findsOneWidget);
+      expect(dentroDe('i-1', find.text('Primera huella')), findsOneWidget);
+      expect(dentroDe('i-1', find.text('Obtenida')), findsOneWidget);
+      expect(dentroDe('i-3', find.text('Obtenida')), findsNothing);
+      expect(
+        tester.getTopLeft(find.byKey(SeccionInsignias.clave)).dy,
+        greaterThan(
+          tester.getTopLeft(find.byKey(ProgresionScreen.claveNivelActual)).dy,
+        ),
+      );
+    });
+
+    testWidgets('sin niveles configurados también se ven las insignias', (
+      tester,
+    ) async {
+      // Las insignias dependen de la XP, no de que el administrador haya
+      // creado niveles.
+      await _montar(
+        tester,
+        catalogo: const [],
+        experiencia: 300,
+        insignias: [primeraHuella],
+      );
+
+      expect(find.text('Todavía no hay niveles'), findsOneWidget);
+      expect(find.byKey(SeccionInsignias.clave), findsOneWidget);
+      expect(dentroDe('i-1', find.text('Obtenida')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(SeccionInsignias.clave)).dy,
+        greaterThan(tester.getTopLeft(find.text('Todavía no hay niveles')).dy),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('al refrescar se ven las insignias ganadas desde la última '
+        'visita', (tester) async {
+      final insignias = InsigniasFalsas(catalogo: const [diezMil]);
+      await _montar(
+        tester,
+        catalogo: niveles,
+        experiencia: 300,
+        repositorioInsignias: insignias,
+      );
+
+      expect(dentroDe('i-3', find.text('Obtenida')), findsNothing);
+      final consultasAntes = insignias.consultas;
+
+      // El trigger se la otorgó en un entrenamiento posterior.
+      insignias.catalogo = [
+        Insignia(
+          id: 'i-3',
+          nombre: 'Diez mil',
+          descripcion: 'Tus primeros 10 km en una salida',
+          icono: 'diez',
+          xpRequerida: 105,
+          obtenidaEl: DateTime.utc(2026, 9, 28, 7),
+        ),
+      ];
+      await tester.fling(
+        find.byType(ListView).first,
+        const Offset(0, 300),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(insignias.consultas, greaterThan(consultasAntes));
+      expect(dentroDe('i-3', find.text('Obtenida')), findsOneWidget);
+    });
+  });
 }
 
 String _texto(WidgetTester tester, Key clave) =>
@@ -176,6 +281,8 @@ Future<void> _montar(
   NivelesFalso? repositorioNiveles,
   int experiencia = 0,
   ExperienciaFalsa? repositorioExperiencia,
+  List<Insignia> insignias = const [],
+  InsigniasFalsas? repositorioInsignias,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -201,6 +308,9 @@ Future<void> _montar(
         ),
         experienciaRepositoryProvider.overrideWithValue(
           repositorioExperiencia ?? ExperienciaFalsa(acumulada: experiencia),
+        ),
+        insigniasRepositoryProvider.overrideWithValue(
+          repositorioInsignias ?? InsigniasFalsas(catalogo: insignias),
         ),
       ],
       child: MaterialApp.router(routerConfig: router),

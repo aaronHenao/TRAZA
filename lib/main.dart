@@ -11,6 +11,7 @@ import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
+import 'screens/home/mapa_progresion_screen.dart';
 import 'screens/home/progresion_screen.dart';
 import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
@@ -135,6 +136,15 @@ final _navegacion = GoRouter(
     GoRoute(
       path: ProgresionScreen.ruta,
       builder: (context, state) => const ProgresionScreen(),
+    ),
+    // Mapa de progresión (SCRUM-226): una sección de la barra inferior, para
+    // que esté a la vista desde las demás.
+    GoRoute(
+      path: MapaProgresionScreen.ruta,
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.progreso,
+        child: MapaProgresionScreen(),
+      ),
     ),
     // Requisitos y ventajas de Runner Experto (SCRUM-195). Se abre con `push`
     // desde el perfil, así se vuelve a él al cerrarla.

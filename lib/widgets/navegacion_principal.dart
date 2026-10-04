@@ -6,6 +6,12 @@ import '../theme/app_colors.dart';
 /// Secciones a las que se llega desde la barra inferior.
 enum SeccionPrincipal {
   inicio(etiqueta: 'Inicio', icono: Icons.home_outlined, ruta: '/inicio'),
+  // El mapa de progresión, a un toque desde cualquier sección (SCRUM-226).
+  progreso(
+    etiqueta: 'Progreso',
+    icono: Icons.route_outlined,
+    ruta: '/progreso',
+  ),
   retos(etiqueta: 'Retos', icono: Icons.flag_outlined, ruta: '/retos'),
   historial(
     etiqueta: 'Historial',

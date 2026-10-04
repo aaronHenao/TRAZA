@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import 'periodicidad_reto.dart';
 import 'vigencia_reto.dart';
@@ -61,7 +61,9 @@ class Reto {
   /// no encaje significa que el esquema y esta clase se desalinearon, y eso se
   /// arregla, no se disimula con valores por defecto.
   factory Reto.desdeSupabase(Map<String, dynamic> fila) {
-    final periodicidad = PeriodicidadReto.desdeDb(fila['periodicidad'] as String?);
+    final periodicidad = PeriodicidadReto.desdeDb(
+      fila['periodicidad'] as String?,
+    );
     final estado = EstadoReto.desdeDb(fila['estado'] as String?);
     final id = fila['id'];
     final nombre = fila['nombre'];
@@ -107,4 +109,28 @@ class Reto {
   @override
   String toString() =>
       'Reto($nombre, ${periodicidad.valorDb}, ${estado.valorDb})';
+}
+
+/// Qué conjunto de retos mira el administrador en su pantalla de gestión.
+///
+/// "Activo" y "vigente" no son lo mismo: un reto activo cuya fecha de fin ya
+/// pasó sigue publicado, pero ningún corredor puede intentarlo. Mezclarlos
+/// hacía que el administrador viera como disponible algo que ya nadie ve.
+enum VistaGestionRetos {
+  /// Lo que los corredores tienen hoy en su catálogo.
+  vigentes(etiqueta: 'Vigentes', iconoVacio: Icons.flag_outlined),
+
+  /// Activos pero con la vigencia cumplida. Siguen en la base y se pueden
+  /// consultar; simplemente ya no se ofrecen.
+  caducados(etiqueta: 'Caducados', iconoVacio: Icons.schedule),
+
+  /// Dados de baja a mano (SCRUM-134).
+  retirados(etiqueta: 'Retirados', iconoVacio: Icons.inventory_2_outlined);
+
+  const VistaGestionRetos({required this.etiqueta, required this.iconoVacio});
+
+  final String etiqueta;
+
+  /// Qué icono usar cuando esta vista no tiene retos.
+  final IconData iconoVacio;
 }

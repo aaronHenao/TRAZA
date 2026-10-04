@@ -4,10 +4,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/periodicidad_reto.dart';
 import '../../models/reto.dart';
+import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/chip_filtro.dart';
+import '../../widgets/estado_vacio.dart';
+import '../../widgets/tarjeta_reto.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -24,7 +28,7 @@ class GestionRetosScreen extends ConsumerWidget {
 
   static const claveBotonNuevo = Key('admin-nuevo-reto');
 
-  static Key claveEstado(EstadoReto estado) => Key('filtro-${estado.valorDb}');
+  static Key claveVista(VistaGestionRetos vista) => Key('vista-${vista.name}');
 
   /// `null` es la opción "Todos", que no filtra nada.
   static Key clavePeriodicidad(PeriodicidadReto? periodicidad) =>
@@ -135,7 +139,7 @@ class _Filtros extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final estado = ref.watch(filtroEstadoRetosProvider);
+    final vista = ref.watch(vistaGestionRetosProvider);
     final periodicidad = ref.watch(filtroPeriodicidadRetosProvider);
 
     return Column(
@@ -151,16 +155,14 @@ class _Filtros extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                for (final opcion in EstadoReto.values)
+                for (final opcion in VistaGestionRetos.values)
                   Expanded(
                     child: _Pestana(
-                      key: GestionRetosScreen.claveEstado(opcion),
-                      texto: opcion == EstadoReto.activo
-                          ? 'Activos'
-                          : 'Retirados',
-                      activa: opcion == estado,
+                      key: GestionRetosScreen.claveVista(opcion),
+                      texto: opcion.etiqueta,
+                      activa: opcion == vista,
                       onTap: () =>
-                          ref.read(filtroEstadoRetosProvider.notifier).state =
+                          ref.read(vistaGestionRetosProvider.notifier).state =
                               opcion,
                     ),
                   ),
@@ -169,32 +171,26 @@ class _Filtros extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          // Wrap y no una fila deslizable: en pantallas estrechas los cuatro
-          // no caben, y un chip cortado en el borde no se ve como algo que
-          // se pueda arrastrar.
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              // null es "todas": no filtra nada.
-              for (final opcion in <PeriodicidadReto?>[
-                null,
-                ...PeriodicidadReto.values,
-              ])
-                _ChipFiltro(
-                  key: GestionRetosScreen.clavePeriodicidad(opcion),
-                  texto: opcion?.etiqueta ?? 'Todos',
-                  activo: opcion == periodicidad,
-                  onTap: () =>
-                      ref.read(filtroPeriodicidadRetosProvider.notifier).state =
-                          opcion,
-                ),
-            ],
-          ),
+        // Chips y no una fila deslizable: en pantallas estrechas los cuatro
+        // no caben, y un chip cortado en el borde no se ve como algo que se
+        // pueda arrastrar.
+        FilaChips(
+          children: [
+            // null es "todas": no filtra nada.
+            for (final opcion in <PeriodicidadReto?>[
+              null,
+              ...PeriodicidadReto.values,
+            ])
+              ChipFiltro(
+                key: GestionRetosScreen.clavePeriodicidad(opcion),
+                texto: opcion?.etiqueta ?? 'Todos',
+                activo: opcion == periodicidad,
+                onTap: () =>
+                    ref.read(filtroPeriodicidadRetosProvider.notifier).state =
+                        opcion,
+              ),
+          ],
         ),
-        const SizedBox(height: AppSpacing.md),
       ],
     );
   }
@@ -237,51 +233,17 @@ class _Pestana extends StatelessWidget {
   }
 }
 
-class _ChipFiltro extends StatelessWidget {
-  const _ChipFiltro({
-    required this.texto,
-    required this.activo,
-    required this.onTap,
-    super.key,
-  });
-
-  final String texto;
-  final bool activo;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        // Sin `alignment`: dentro de un Wrap haría que cada chip se estirara
-        // a todo el ancho y cayera uno por línea.
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: activo ? AppColors.ink : AppColors.bg,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: activo ? AppColors.ink : AppColors.line),
-        ),
-        child: Text(
-          texto,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: activo ? AppColors.bg : AppColors.ink2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Lista extends StatelessWidget {
+class _Lista extends ConsumerWidget {
   const _Lista({required this.retos});
 
   final List<Reto> retos;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // El mismo día para toda la lista: si cada tarjeta leyera el reloj por su
+    // cuenta, dos podrían decidir distinto al cruzar la medianoche.
+    final hoy = ref.read(relojProvider)();
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -292,16 +254,19 @@ class _Lista extends StatelessWidget {
       ),
       itemCount: retos.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (context, i) => TarjetaReto(reto: retos[i]),
+      itemBuilder: (context, i) => TarjetaRetoAdmin(reto: retos[i], hoy: hoy),
     );
   }
 }
 
 /// Un reto del catálogo, con lo que el administrador necesita reconocerlo.
-class TarjetaReto extends StatelessWidget {
-  const TarjetaReto({required this.reto, super.key});
+class TarjetaRetoAdmin extends StatelessWidget {
+  const TarjetaRetoAdmin({required this.reto, required this.hoy, super.key});
 
   final Reto reto;
+
+  /// Desde cuándo se mira la vigencia, para decir si ya caducó.
+  final DateTime hoy;
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +277,7 @@ class TarjetaReto extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _IconoPeriodicidad(periodicidad: reto.periodicidad),
+              IconoPeriodicidad(periodicidad: reto.periodicidad),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -343,7 +308,7 @@ class TarjetaReto extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _Insignia(
+              InsigniaReto(
                 texto: '+${reto.xpOtorgada} XP',
                 fondo: AppColors.primaryTint,
                 color: AppColors.primaryDark,
@@ -355,30 +320,21 @@ class TarjetaReto extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _Insignia(texto: reto.periodicidad.etiqueta),
-              _Insignia(texto: 'Meta ${_metaTexto(reto.metaKm)} km'),
-              _Insignia(
+              InsigniaReto(texto: reto.periodicidad.etiqueta),
+              InsigniaReto(
+                texto: 'Meta ${TarjetaReto.textoKm(reto.metaKm)} km',
+              ),
+              InsigniaReto(
                 texto:
                     '${_fecha(reto.vigencia.inicio)} – '
                     '${_fecha(reto.vigencia.fin)}',
               ),
-              if (reto.estaActivo)
-                const _Insignia(
-                  texto: 'Activo',
-                  fondo: AppColors.accentTint,
-                  color: AppColors.accentInk,
-                ),
+              _Situacion(reto: reto, hoy: hoy),
             ],
           ),
         ],
       ),
     );
-  }
-
-  /// `5` en vez de `5.0`, pero `2.5` se mantiene.
-  static String _metaTexto(double meta) {
-    final entero = meta.toInt();
-    return meta == entero ? '$entero' : '$meta';
   }
 
   static const _meses = [
@@ -399,71 +355,34 @@ class TarjetaReto extends StatelessWidget {
   static String _fecha(DateTime dia) => '${dia.day} ${_meses[dia.month - 1]}';
 }
 
-class _IconoPeriodicidad extends StatelessWidget {
-  const _IconoPeriodicidad({required this.periodicidad});
+/// En qué situación está el reto de verdad.
+///
+/// No basta con `estado`: un reto activo cuya vigencia terminó seguiría
+/// diciendo "Activo" dentro de la pestaña de caducados, que es justo lo que
+/// confunde.
+class _Situacion extends StatelessWidget {
+  const _Situacion({required this.reto, required this.hoy});
 
-  final PeriodicidadReto periodicidad;
+  final Reto reto;
+  final DateTime hoy;
 
   @override
   Widget build(BuildContext context) {
-    final (icono, fondo, color) = switch (periodicidad) {
-      PeriodicidadReto.diaria => (
-        Icons.schedule,
-        AppColors.accentTint,
-        AppColors.accentInk,
+    final (texto, fondo, color) = switch (reto) {
+      _ when !reto.estaActivo => (
+        'Retirado',
+        AppColors.dangerTint,
+        AppColors.danger,
       ),
-      PeriodicidadReto.semanal => (
-        Icons.bolt_outlined,
-        AppColors.primaryTint,
-        AppColors.primaryDark,
+      _ when reto.vigencia.diasRestantesDesde(hoy) == 0 => (
+        'Caducado',
+        AppColors.bgAlt,
+        AppColors.ink3,
       ),
-      PeriodicidadReto.mensual => (
-        Icons.calendar_month_outlined,
-        AppColors.secondaryTint,
-        AppColors.secondaryDark,
-      ),
+      _ => ('Vigente', AppColors.accentTint, AppColors.accentInk),
     };
 
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: fondo,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icono, size: 22, color: color),
-    );
-  }
-}
-
-class _Insignia extends StatelessWidget {
-  const _Insignia({
-    required this.texto,
-    this.fondo = AppColors.bgAlt,
-    this.color = AppColors.ink2,
-  });
-
-  final String texto;
-  final Color fondo;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: fondo,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        texto,
-        style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
+    return InsigniaReto(texto: texto, fondo: fondo, color: color);
   }
 }
 
@@ -472,30 +391,36 @@ class _SinRetos extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Vacío por el filtro y vacío de verdad no son lo mismo: si no se
-    // distinguen, el administrador cree que perdió sus retos.
-    final hayFiltro =
-        ref.watch(filtroPeriodicidadRetosProvider) != null ||
-        ref.watch(filtroEstadoRetosProvider) != EstadoReto.activo;
+    final vista = ref.watch(vistaGestionRetosProvider);
+    final periodicidad = ref.watch(filtroPeriodicidadRetosProvider);
 
-    // Sobre un scroll para que "deslizar para refrescar" siga funcionando
-    // cuando no hay nada que mostrar.
-    return ListView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: 60,
+    // Cada combinación dice qué falta: un mensaje común obliga a mirar qué
+    // pestaña y qué chip están activos para entenderlo.
+    final (titulo, detalle) = switch ((vista, periodicidad)) {
+      (VistaGestionRetos.vigentes, null) => (
+        'No hay retos vigentes',
+        'Toca el botón + para publicar uno.',
       ),
-      children: [
-        _Estado(
-          icono: hayFiltro ? Icons.filter_alt_outlined : Icons.flag_outlined,
-          titulo: hayFiltro
-              ? 'Ningún reto con este filtro'
-              : 'Aún no hay retos',
-          detalle: hayFiltro
-              ? 'Prueba con otro estado o periodicidad.'
-              : 'Toca el botón + para crear el primero.',
-        ),
-      ],
+      (VistaGestionRetos.caducados, null) => (
+        'Ningún reto ha caducado',
+        'Aquí aparecerán los que pasen su fecha de fin.',
+      ),
+      (VistaGestionRetos.retirados, null) => (
+        'No has retirado ningún reto',
+        'Los que retires del catálogo aparecerán aquí.',
+      ),
+      (_, final p) => (
+        'Ningún reto ${p!.etiqueta.toLowerCase()} en ${vista.etiqueta.toLowerCase()}',
+        'Prueba con otra periodicidad o con otra pestaña.',
+      ),
+    };
+
+    return EstadoVacio(
+      icono: periodicidad == null
+          ? vista.iconoVacio
+          : Icons.filter_alt_outlined,
+      titulo: titulo,
+      detalle: detalle,
     );
   }
 }
@@ -507,70 +432,14 @@ class _NoSePudoCargar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: 80,
+    return EstadoVacio(
+      icono: Icons.cloud_off_outlined,
+      titulo: 'No pudimos cargar los retos',
+      detalle: 'Revisa tu conexión e inténtalo de nuevo.',
+      accion: OutlinedButton(
+        onPressed: onReintentar,
+        child: const Text('Reintentar'),
       ),
-      children: [
-        _Estado(
-          icono: Icons.cloud_off_outlined,
-          titulo: 'No pudimos cargar los retos',
-          detalle: 'Revisa tu conexión e inténtalo de nuevo.',
-          accion: OutlinedButton(
-            onPressed: onReintentar,
-            child: const Text('Reintentar'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Estado extends StatelessWidget {
-  const _Estado({
-    required this.icono,
-    required this.titulo,
-    required this.detalle,
-    this.accion,
-  });
-
-  final IconData icono;
-  final String titulo;
-  final String detalle;
-  final Widget? accion;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 72,
-          height: 72,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.bgAlt,
-          ),
-          child: Icon(icono, size: 30, color: AppColors.ink3),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          titulo,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          detalle,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
-        ),
-        if (accion != null) ...[const SizedBox(height: AppSpacing.md), accion!],
-      ],
     );
   }
 }

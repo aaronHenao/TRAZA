@@ -2,31 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
 
-/// Catálogo de mentira: guarda los retos y responde según el estado pedido.
-class _RetosFalso implements RetosRepository {
+import '../utiles/retos_repository_falso.dart';
+
+/// Catálogo de mentira: responde a las tres consultas de la gestión como lo
+/// haría la base, para poder comprobar cuál se pide en cada pestaña.
+class _RetosFalso extends RetosRepositorioFalso {
   _RetosFalso(this.retos);
 
   List<Reto> retos;
   Object? error;
   var consultas = 0;
 
-  @override
-  Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo}) async {
+  List<Reto> _responder(bool Function(Reto) filtro) {
     consultas++;
     final error = this.error;
     if (error != null) throw error;
-    return retos.where((reto) => reto.estado == estado).toList();
+    return retos.where(filtro).toList();
   }
 
   @override
-  Future<Reto> crear(NuevoReto reto) async => throw UnimplementedError();
+  Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo}) async =>
+      _responder((reto) => reto.estado == estado);
+
+  @override
+  Future<List<Reto>> vigentes({required DateTime hoy}) async => _responder(
+    (reto) => reto.estaActivo && reto.vigencia.diasRestantesDesde(hoy) > 0,
+  );
+
+  @override
+  Future<List<Reto>> caducados({required DateTime hoy}) async => _responder(
+    (reto) => reto.estaActivo && reto.vigencia.diasRestantesDesde(hoy) == 0,
+  );
 }
 
 /// Pruebas de la gestión de retos del administrador (SCRUM-139): el catálogo
@@ -72,6 +85,21 @@ void main() {
       nombre: 'Trote de 8 km',
       periodicidad: PeriodicidadReto.semanal,
       estado: EstadoReto.retirado,
+    ),
+    // Activo, pero su vigencia terminó hace dos días: ningún corredor puede
+    // intentarlo ya.
+    Reto(
+      id: '5',
+      nombre: 'Corre 10 km la semana pasada',
+      descripcion: 'Un reto que ya caducó.',
+      periodicidad: PeriodicidadReto.semanal,
+      metaKm: 10,
+      xpOtorgada: 100,
+      vigencia: VigenciaReto(
+        inicio: DateTime(2026, 9, 14),
+        fin: DateTime(2026, 9, 21),
+      ),
+      estado: EstadoReto.activo,
     ),
   ];
 
@@ -149,8 +177,8 @@ void main() {
     testWidgets('sin retos invita a crear el primero', (tester) async {
       await abrirGestion(tester, retos: []);
 
-      expect(find.text('Aún no hay retos'), findsOneWidget);
-      expect(find.text('Toca el botón + para crear el primero.'), findsOneWidget);
+      expect(find.text('No hay retos vigentes'), findsOneWidget);
+      expect(find.text('Toca el botón + para publicar uno.'), findsOneWidget);
     });
 
     testWidgets('si la consulta falla lo dice y permite reintentar', (
@@ -214,8 +242,10 @@ void main() {
 
       await tocarFiltro(tester, GestionRetosScreen.clavePeriodicidad(PeriodicidadReto.mensual));
 
-      expect(find.text('Ningún reto con este filtro'), findsOneWidget);
-      expect(find.text('Aún no hay retos'), findsNothing);
+      // Nombra la periodicidad y la pestaña: un mensaje común obligaría a
+      // mirar qué está activo para entenderlo.
+      expect(find.text('Ningún reto mensual en vigentes'), findsOneWidget);
+      expect(find.text('No hay retos vigentes'), findsNothing);
     });
   });
 
@@ -225,7 +255,7 @@ void main() {
     ) async {
       await abrirGestion(tester);
 
-      await tocarFiltro(tester, GestionRetosScreen.claveEstado(EstadoReto.retirado));
+      await tocarFiltro(tester, GestionRetosScreen.claveVista(VistaGestionRetos.retirados));
 
       expect(find.text('Trote de 8 km'), findsOneWidget);
       expect(find.text('Corre 5 km hoy'), findsNothing);
@@ -237,18 +267,89 @@ void main() {
       await abrirGestion(tester);
       final antes = repositorio.consultas;
 
-      await tocarFiltro(tester, GestionRetosScreen.claveEstado(EstadoReto.retirado));
+      await tocarFiltro(tester, GestionRetosScreen.claveVista(VistaGestionRetos.retirados));
 
       expect(repositorio.consultas, greaterThan(antes));
     });
 
-    testWidgets('la insignia Activo solo sale en los activos', (tester) async {
+    testWidgets('la insignia dice la situación real, no el campo estado', (
+      tester,
+    ) async {
+      // Un reto activo con la vigencia cumplida diría "Vigente" si se leyera
+      // solo `estado`, justo dentro de la pestaña de caducados.
       await abrirGestion(tester);
-      expect(find.text('Activo'), findsNWidgets(3));
+      expect(find.text('Vigente'), findsNWidgets(3));
 
-      await tocarFiltro(tester, GestionRetosScreen.claveEstado(EstadoReto.retirado));
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.caducados),
+      );
+      expect(find.text('Caducado'), findsOneWidget);
+      expect(find.text('Vigente'), findsNothing);
 
-      expect(find.text('Activo'), findsNothing);
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.retirados),
+      );
+      expect(find.text('Retirado'), findsOneWidget);
+    });
+  });
+
+  group('las tres vistas', () {
+    testWidgets('Vigentes deja fuera lo caducado y lo retirado', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+
+      expect(find.text('Corre 5 km hoy'), findsOneWidget);
+      // Activo, pero su vigencia terminó: ningún corredor puede intentarlo.
+      expect(find.text('Corre 10 km la semana pasada'), findsNothing);
+      expect(find.text('Trote de 8 km'), findsNothing);
+    });
+
+    testWidgets('Caducados trae lo activo con la vigencia cumplida', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.caducados),
+      );
+
+      expect(find.text('Corre 10 km la semana pasada'), findsOneWidget);
+      expect(find.text('Corre 5 km hoy'), findsNothing);
+    });
+
+    testWidgets('cada vista es una consulta distinta, no un filtro en '
+        'memoria', (tester) async {
+      // Separar lo vigente de lo caducado depende de la fecha de hoy, que la
+      // base no conoce: está en UTC.
+      await abrirGestion(tester);
+      final antes = repositorio.consultas;
+
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.caducados),
+      );
+
+      expect(repositorio.consultas, greaterThan(antes));
+    });
+
+    testWidgets('cada vista vacía dice lo suyo', (tester) async {
+      await abrirGestion(tester, retos: [catalogo.first]);
+
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.caducados),
+      );
+      expect(find.text('Ningún reto ha caducado'), findsOneWidget);
+
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.retirados),
+      );
+      expect(find.text('No has retirado ningún reto'), findsOneWidget);
     });
   });
 

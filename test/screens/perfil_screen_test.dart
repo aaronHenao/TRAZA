@@ -9,6 +9,7 @@ import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/services/perfil_provider.dart';
+import 'package:traza/screens/home/runner_experto_screen.dart';
 import 'package:traza/screens/onboarding/perfil_screen.dart';
 import 'package:traza/models/perfil_state.dart';
 import 'package:traza/widgets/configuracion_valor_objetivo.dart';
@@ -488,10 +489,7 @@ void main() {
       await _montarPerfil(
         tester,
         repositorio: _RepositorioFalso(
-          existentes: {
-            TipoObjetivo.distancia: 20,
-            TipoObjetivo.frecuencia: 5,
-          },
+          existentes: {TipoObjetivo.distancia: 20, TipoObjetivo.frecuencia: 5},
         ),
       );
 
@@ -595,6 +593,32 @@ void main() {
       expect(_botonGuardar(tester).onPressed, isNotNull);
     });
   });
+
+  group('invitación a Runner Experto (SCRUM-212)', () {
+    testWidgets('fuera del onboarding pregunta si quiere serlo', (
+      tester,
+    ) async {
+      await _montarPerfil(tester, enOnboarding: false);
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsOneWidget);
+      expect(find.text('¿Quieres ser Runner Experto?'), findsOneWidget);
+    });
+
+    testWidgets('en el onboarding no aparece', (tester) async {
+      await _montarPerfil(tester);
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsNothing);
+    });
+
+    testWidgets('al tocarla abre los requisitos y ventajas', (tester) async {
+      await _montarPerfil(tester, enOnboarding: false);
+
+      await tester.tap(find.byKey(PerfilScreen.claveRunnerExperto));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Runner Experto'), findsOneWidget);
+    });
+  });
 }
 
 /// Repositorio de mentira: devuelve los objetivos que se le configuren,
@@ -673,6 +697,11 @@ Future<void> _montarPerfil(
       GoRoute(
         path: '/inicio',
         builder: (_, _) => const Scaffold(body: Text('Portada')),
+      ),
+      GoRoute(
+        path: RunnerExpertoScreen.ruta,
+        builder: (_, _) =>
+            const Scaffold(body: Text('Pantalla Runner Experto')),
       ),
     ],
   );

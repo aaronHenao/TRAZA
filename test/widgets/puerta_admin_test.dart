@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:traza/models/nuevo_reto.dart';
-import 'package:traza/models/reto.dart';
 import 'package:traza/screens/admin/panel_admin_screen.dart';
 import 'package:traza/services/rol_provider.dart';
 import 'package:traza/services/retos_service.dart';
 import 'package:traza/widgets/puerta_admin.dart';
+
+import '../utiles/retos_repository_falso.dart';
 
 class _RolFalso implements RolRepository {
   _RolFalso(this.respuesta);
@@ -24,14 +24,7 @@ class _RolFalso implements RolRepository {
   }
 }
 
-class _RetosVacio implements RetosRepository {
-  @override
-  Future<List<Reto>> listar({EstadoReto estado = EstadoReto.activo}) async =>
-      const [];
-
-  @override
-  Future<Reto> crear(NuevoReto reto) async => throw UnimplementedError();
-}
+class _RetosVacio extends RetosRepositorioFalso {}
 
 /// Pruebas de la puerta que decide qué ve cada cuenta al entrar (SCRUM-139).
 void main() {

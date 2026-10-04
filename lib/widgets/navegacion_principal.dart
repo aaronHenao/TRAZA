@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 /// Secciones a las que se llega desde la barra inferior.
 enum SeccionPrincipal {
   inicio(etiqueta: 'Inicio', icono: Icons.home_outlined, ruta: '/inicio'),
+  retos(etiqueta: 'Retos', icono: Icons.flag_outlined, ruta: '/retos'),
   historial(
     etiqueta: 'Historial',
     icono: Icons.schedule_outlined,
@@ -28,8 +29,8 @@ enum SeccionPrincipal {
 /// con el botón "+" flotante para arrancar una actividad.
 ///
 /// El prototipo completo lleva seis secciones (Inicio, Progreso, Retos,
-/// Rutas, Foro, Perfil); aquí están solo las tres que existen hoy. Las demás
-/// se agregan a [SeccionPrincipal] cuando lleguen sus historias.
+/// Rutas, Foro, Perfil); aquí están solo las que existen hoy. Las demás se
+/// agregan a [SeccionPrincipal] cuando lleguen sus historias.
 class NavegacionPrincipal extends StatelessWidget {
   const NavegacionPrincipal({
     required this.seccion,

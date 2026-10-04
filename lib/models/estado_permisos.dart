@@ -51,8 +51,9 @@ class EstadoPermisos {
   /// "falta el permiso" durante el instante que tarda la consulta.
   final bool consultado;
 
-  /// El usuario eligió entrenar sin datos de salud (SCRUM-83). Dura mientras
-  /// la app esté abierta: no se le vuelve a preguntar en cada entrenamiento.
+  /// El usuario eligió entrenar sin datos de salud (SCRUM-131): no se leen ni
+  /// se muestran hasta que los conceda. No evita que la ventana se le vuelva a
+  /// ofrecer en el siguiente inicio.
   final bool saludOmitida;
 
   EstadoPermisos copyWith({

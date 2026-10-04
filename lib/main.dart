@@ -12,15 +12,19 @@ import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/home/progresion_screen.dart';
+import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
+import 'screens/retos/detalle_reto_screen.dart';
+import 'screens/retos/historial_retos_screen.dart';
+import 'screens/retos/retos_screen.dart';
+import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
-import 'widgets/ofrece_permiso_salud.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 import 'widgets/solo_administrador.dart';
@@ -77,9 +81,7 @@ final _navegacion = GoRouter(
         )) {
           // Durante el onboarding no lleva barra: la portada todavía no es un
           // destino válido y el flujo sigue a Permisos.
-          return const PuertaAdmin(
-            corredor: PerfilScreen(enOnboarding: true),
-          );
+          return const PuertaAdmin(corredor: PerfilScreen(enOnboarding: true));
         }
         return const PuertaAdmin(
           corredor: NavegacionPrincipal(
@@ -134,10 +136,39 @@ final _navegacion = GoRouter(
       path: ProgresionScreen.ruta,
       builder: (context, state) => const ProgresionScreen(),
     ),
+    // Requisitos y ventajas de Runner Experto (SCRUM-195). Se abre con `push`
+    // desde el perfil, así se vuelve a él al cerrarla.
+    GoRoute(
+      path: RunnerExpertoScreen.ruta,
+      builder: (context, state) => const RunnerExpertoScreen(),
+    ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(
       path: '/actividad',
       builder: (context, state) => const ActividadScreen(),
+    ),
+    // Catálogo de retos que el corredor puede intentar (SCRUM-135).
+    GoRoute(
+      path: '/retos',
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.retos,
+        child: RetosScreen(),
+      ),
+      routes: [
+        // Antes de ':retoId': si no, 'historial' se tomaría por un id.
+        GoRoute(
+          path: 'historial',
+          builder: (context, state) => const HistorialRetosScreen(),
+        ),
+        // El listado pasa el reto en `extra` para no volver a consultarlo.
+        GoRoute(
+          path: ':retoId',
+          builder: (context, state) => DetalleRetoPorRuta(
+            retoId: state.pathParameters['retoId']!,
+            reto: state.extra as Reto?,
+          ),
+        ),
+      ],
     ),
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(
@@ -152,9 +183,10 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/tracking',
       // Sin permiso de ubicación no se abre: explica por qué y lo pide
-      // (SCRUM-82). Después ofrece el de salud, que es opcional (SCRUM-83).
+      // (SCRUM-82). El de salud, que es opcional, se ofrece antes de llegar
+      // aquí, al tocar "Iniciar actividad" (SCRUM-131).
       builder: (context, state) => const RequierePermisoUbicacion(
-        child: OfrecePermisoSalud(child: TrackingConActividadElegida()),
+        child: TrackingConActividadElegida(),
       ),
     ),
     // Resumen de la sesión recién finalizada (SCRUM-43). El id del

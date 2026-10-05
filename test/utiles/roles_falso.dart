@@ -25,11 +25,32 @@ class RolesFalso implements RolesRepository {
         ],
       );
 
+  /// Los roles que se marcaron como anunciados.
+  final anunciados = <RolGanable>[];
+
   @override
   Future<List<RolGanado>> misRoles() async {
     consultas++;
     final error = this.error;
     if (error != null) throw error;
     return roles;
+  }
+
+  @override
+  Future<void> marcarAnunciado(RolGanable rol) async {
+    anunciados.add(rol);
+    // Como la base: la fecha se escribe una sola vez y la lectura siguiente ya
+    // trae el rol anunciado.
+    roles = [
+      for (final ganado in roles)
+        if (ganado.rol == rol && !ganado.anunciado)
+          RolGanado(
+            rol: ganado.rol,
+            otorgadoEn: ganado.otorgadoEn,
+            anunciadoEn: DateTime.utc(2026, 10, 4, 12),
+          )
+        else
+          ganado,
+    ];
   }
 }

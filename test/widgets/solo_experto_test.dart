@@ -19,6 +19,9 @@ class _RolesFalso implements RolesRepository {
     consultas++;
     return respuesta();
   }
+
+  @override
+  Future<void> marcarAnunciado(RolGanable rol) async {}
 }
 
 /// Pruebas de la barrera de lo exclusivo del Runner Experto (SCRUM-228).

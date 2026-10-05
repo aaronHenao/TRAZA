@@ -30,11 +30,32 @@ final esExpertoProvider = FutureProvider.autoDispose<bool>((ref) async {
   return roles.any((ganado) => ganado.rol == RolGanable.experto);
 });
 
-/// Lectura de `roles_usuario`.
+/// El rol que el corredor desbloqueó y todavía no sabe, o null si no hay
+/// ninguno pendiente de anunciar (SCRUM-229).
+///
+/// Si hubiera varios sin anunciar se avisa del más antiguo primero, que es el
+/// orden en que los ganó.
+final rolPorAnunciarProvider = FutureProvider.autoDispose<RolGanado?>((
+  ref,
+) async {
+  final roles = await ref.watch(rolesGanadosProvider.future);
+  for (final ganado in roles) {
+    if (!ganado.anunciado) return ganado;
+  }
+  return null;
+});
+
+/// Lectura de `roles_usuario` y marcado del anuncio.
 abstract interface class RolesRepository {
   /// Los roles de la cuenta con la sesión abierta, del más antiguo al más
   /// reciente. RLS solo deja ver los propios.
   Future<List<RolGanado>> misRoles();
+
+  /// Deja constancia de que al corredor ya se le avisó de [rol].
+  ///
+  /// Llamarla dos veces no cambia la fecha: el aviso se da una sola vez
+  /// (criterio 5 de SCRUM-224).
+  Future<void> marcarAnunciado(RolGanable rol);
 }
 
 class SupabaseRolesRepository implements RolesRepository {
@@ -77,5 +98,16 @@ class SupabaseRolesRepository implements RolesRepository {
         .map(RolGanado.desdeSupabase)
         .whereType<RolGanado>()
         .toList(growable: false);
+  }
+
+  @override
+  Future<void> marcarAnunciado(RolGanable rol) async {
+    // La función de `0013_anuncio_rol.sql` escribe la fecha solo si estaba
+    // vacía, y solo sobre las filas de la sesión abierta: el cliente no puede
+    // tocar `roles_usuario` de otra forma.
+    await _cliente.rpc<void>(
+      'marcar_rol_anunciado',
+      params: {'p_rol': rol.valorDb},
+    );
   }
 }

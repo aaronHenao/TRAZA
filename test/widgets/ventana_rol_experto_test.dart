@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/rol_ganado.dart';
+import 'package:traza/models/runner_experto.dart';
 import 'package:traza/services/roles_service.dart';
 import 'package:traza/widgets/ventana_rol_experto.dart';
 
@@ -71,14 +72,21 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
-  testWidgets('mientras no se definan, no promete funcionalidades', (
-    tester,
-  ) async {
-    // La lista la define SCRUM-210; hasta entonces la ventana anuncia el rol
-    // sin inventar qué habilita.
+  testWidgets('dice qué funcionalidades le habilita el rol', (tester) async {
+    // Las mismas que explica la pantalla del rol (SCRUM-213): una sola lista
+    // para las dos, así no se contradicen.
     await entrarALaApp(tester, RolesFalso.experto());
 
-    expect(beneficiosRunnerExperto, isEmpty);
-    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+    for (final ventaja in VentajaRunnerExperto.values) {
+      expect(find.text(ventaja.titulo), findsOneWidget);
+    }
+  });
+
+  testWidgets('al entrar le pide a la base revisar la cuenta', (tester) async {
+    // La antigüedad se cumple sola con el tiempo: sin esta revisión, quien ya
+    // tuviera la XP no recibiría el rol hasta su siguiente entrenamiento.
+    await entrarALaApp(tester, RolesFalso());
+
+    expect(repositorio.evaluaciones, 1);
   });
 }

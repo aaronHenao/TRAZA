@@ -28,12 +28,22 @@ class RolesFalso implements RolesRepository {
   /// Los roles que se marcaron como anunciados.
   final anunciados = <RolGanable>[];
 
+  /// Cuántas veces se le pidió a la base revisar la cuenta.
+  var evaluaciones = 0;
+
   @override
   Future<List<RolGanado>> misRoles() async {
     consultas++;
     final error = this.error;
     if (error != null) throw error;
     return roles;
+  }
+
+  @override
+  Future<void> evaluarMisRoles() async {
+    evaluaciones++;
+    final error = this.error;
+    if (error != null) throw error;
   }
 
   @override

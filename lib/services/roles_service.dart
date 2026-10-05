@@ -56,6 +56,16 @@ abstract interface class RolesRepository {
   /// Llamarla dos veces no cambia la fecha: el aviso se da una sola vez
   /// (criterio 5 de SCRUM-224).
   Future<void> marcarAnunciado(RolGanable rol);
+
+  /// Le pide a la base que revise si la cuenta ya califica para algún rol.
+  ///
+  /// Hace falta porque uno de los requisitos del Runner Experto es la
+  /// antigüedad de la cuenta, y eso se cumple solo con el paso del tiempo: no
+  /// hay ningún evento que lo dispare. Quien ya tuviera la XP no recibiría el
+  /// rol hasta su siguiente entrenamiento.
+  ///
+  /// Quien decide sigue siendo la base: esto solo pide la revisión.
+  Future<void> evaluarMisRoles();
 }
 
 class SupabaseRolesRepository implements RolesRepository {
@@ -109,5 +119,12 @@ class SupabaseRolesRepository implements RolesRepository {
       'marcar_rol_anunciado',
       params: {'p_rol': rol.valorDb},
     );
+  }
+
+  @override
+  Future<void> evaluarMisRoles() async {
+    // La función de `0012_rol_experto.sql` evalúa solo la cuenta de la sesión:
+    // nadie puede pedir que se evalúe —ni otorgar— por otra.
+    await _cliente.rpc<void>('evaluar_mi_rol_experto');
   }
 }

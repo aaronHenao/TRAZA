@@ -2,22 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/rol_ganado.dart';
+import '../models/runner_experto.dart';
 import '../services/roles_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
 
-/// Lo que el rol le habilita al corredor, tal como se le cuenta al
-/// desbloquearlo (criterio 2 de SCRUM-224).
-///
-/// Está vacía a propósito: cuáles son las funcionalidades exclusivas lo define
-/// SCRUM-210, y escribir aquí unas inventadas sería prometerle al usuario algo
-/// que la app no hace. Mientras tanto la ventana anuncia el rol sin listar
-/// nada. Cuando esa subtarea aterrice, se llena esta lista y la ventana las
-/// muestra sola.
-const beneficiosRunnerExperto = <String>[];
-
 /// Avisa al corredor de un rol que acaba de desbloquear y lo deja marcado
 /// (SCRUM-229).
+///
+/// Antes de mirar pide a la base que revise la cuenta: uno de los requisitos
+/// es la antigüedad, que se cumple sola con el paso del tiempo y no la
+/// dispara ningún evento.
 ///
 /// Se muestra una sola vez: al cerrarla se escribe `anunciado_en`, y la
 /// función de la base solo lo escribe si estaba vacío. Si el aviso no se
@@ -29,6 +24,7 @@ Future<void> anunciarRolDesbloqueado(
 ) async {
   final RolGanado? pendiente;
   try {
+    await ref.read(rolesRepositoryProvider).evaluarMisRoles();
     pendiente = await ref.read(rolPorAnunciarProvider.future);
   } catch (error) {
     // El aviso es un extra: si los roles no se pueden leer, el corredor entra
@@ -80,42 +76,42 @@ class VentanaRolExperto extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Tus kilómetros te subieron de categoría. Ya tienes acceso a lo '
-            'que el rol habilita.',
+            'Tus kilómetros te subieron de categoría. Esto es lo que te '
+            'habilita:',
             style: TextStyle(
               fontSize: 13.5,
               color: AppColors.ink2,
               height: 1.4,
             ),
           ),
-          if (beneficiosRunnerExperto.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
-            for (final beneficio in beneficiosRunnerExperto)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline,
-                      size: 16,
-                      color: AppColors.primaryDark,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        beneficio,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.ink,
-                          height: 1.35,
-                        ),
+          const SizedBox(height: AppSpacing.md),
+          // Las mismas ventajas que explica la pantalla del rol (SCRUM-213),
+          // leídas de donde ella las lee: una sola lista para las dos.
+          for (final ventaja in VentajaRunnerExperto.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 16,
+                    color: AppColors.primaryDark,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ventaja.titulo,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.ink,
+                        height: 1.35,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-          ],
+            ),
         ],
       ),
       actions: [

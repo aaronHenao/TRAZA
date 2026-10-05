@@ -144,6 +144,24 @@ void main() {
     });
   });
 
+  test(
+    'evaluarMisRoles le pide a la base revisar la cuenta de la sesión',
+    () async {
+      // Sin parámetros: la función de la base usa `auth.uid()`, así que nadie
+      // puede pedir que se evalúe —ni otorgar— por otra cuenta.
+      final supabase = _SupabaseFalso();
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.evaluarMisRoles();
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/evaluar_mi_rol_experto');
+      // Sin parámetros: no viaja nada que pudiera señalar a otra cuenta.
+      expect(jsonDecode(peticion.body), isNull);
+    },
+  );
+
   group('rolPorAnunciarProvider', () {
     ProviderContainer contenedor(RolesFalso repositorio) {
       final container = ProviderContainer(

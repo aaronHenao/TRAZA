@@ -16,6 +16,7 @@ class ResumenEntrenamiento {
     required this.duracion,
     this.distanciaMetros,
     this.puntos = const [],
+    this.cortes = const [],
   });
 
   /// Lo que se muestra cuando un dato no existe, por ejemplo la distancia de
@@ -39,6 +40,10 @@ class ResumenEntrenamiento {
   /// Puntos GPS del recorrido, en orden de captura. Con ellos se dibuja el
   /// trazado (SCRUM-119).
   final List<PuntoGps> puntos;
+
+  /// Índices de [puntos] donde empieza un tramo tras una pausa (BUG-005),
+  /// como en `Recorrido.cortes`.
+  final List<int> cortes;
 
   /// Si este es el resumen del entrenamiento [entrenamientoId] que pide la
   /// navegación (SCRUM-122). Sin sesión ambos son null y también coinciden.

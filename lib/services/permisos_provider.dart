@@ -52,10 +52,19 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
     if (solicitudesSalud != _solicitudesSalud || anterior.solicitandoSalud) {
       salud = anterior.salud;
     }
+    // Una consulta que no sabe (iOS con la salud, o un error del plugin) no
+    // borra lo que ya se sabía. Si no, cada vuelta al frente convertía un
+    // permiso concedido en desconocido: en iOS la ventana de salud volvía a
+    // salir en cada inicio.
+    if (ubicacion == EstadoPermiso.desconocido) ubicacion = anterior.ubicacion;
+    if (salud == EstadoPermiso.desconocido) salud = anterior.salud;
     state = state.copyWith(
       ubicacion: ubicacion,
       salud: salud,
       consultado: true,
+      // Concederlo desde los ajustes deshace el "Continuar sin datos de
+      // salud" (SCRUM-131).
+      saludOmitida: salud == EstadoPermiso.concedido ? false : null,
     );
 
     // Solo si cambió: volver a la app no debe escribir en Supabase cada vez.
@@ -92,14 +101,20 @@ class PermisosNotifier extends Notifier<EstadoPermisos> {
 
     if (_activo) {
       _solicitudesSalud++;
-      state = state.copyWith(salud: resultado, solicitandoSalud: false);
+      state = state.copyWith(
+        salud: resultado,
+        solicitandoSalud: false,
+        // Concederlo deshace un "Continuar sin datos de salud" anterior.
+        saludOmitida: resultado == EstadoPermiso.concedido ? false : null,
+      );
       _registrar(TipoPermiso.salud, resultado);
     }
     return resultado;
   }
 
-  /// Entrenar sin datos de salud (SCRUM-83): no se vuelve a ofrecer el
-  /// permiso hasta que la app se cierre.
+  /// Entrenar sin datos de salud (SCRUM-131): el resumen no los muestra hasta
+  /// que el usuario los conceda. La ventana se le vuelve a ofrecer en el
+  /// siguiente inicio.
   void omitirSalud() => state = state.copyWith(saludOmitida: true);
 
   Future<void> instalarProveedorSalud() => _servicio.instalarProveedorSalud();

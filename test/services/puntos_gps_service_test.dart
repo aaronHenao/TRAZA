@@ -25,6 +25,7 @@ void main() {
         'longitud': -75.6105,
         'capturado_en': '2026-09-12T21:30:15.000Z',
         'orden_secuencia': 7,
+        'tramo': 0,
       });
     });
 
@@ -55,6 +56,23 @@ void main() {
       expect(filas.every((f) => f['entrenamiento_id'] == 'e-123'), isTrue);
     });
 
+    test('filasPara numera el tramo de cada punto según los cortes', () {
+      // Pausa tras el segundo punto (BUG-005).
+      final filas = RepositorioPuntosGpsSupabase.filasPara(
+        entrenamientoId: 'e-123',
+        puntos: [
+          puntoDePrueba(latitud: 6.2311),
+          puntoDePrueba(latitud: 6.2312),
+          puntoDePrueba(latitud: 6.2400),
+          puntoDePrueba(latitud: 6.2401),
+        ],
+        cortes: const [2],
+      );
+
+      expect(filas.map((f) => f['tramo']), [0, 0, 1, 1]);
+      expect(filas.map((f) => f['orden_secuencia']), [0, 1, 2, 3]);
+    });
+
     test('filasPara con lista vacia devuelve lista vacia', () {
       final filas = RepositorioPuntosGpsSupabase.filasPara(
         entrenamientoId: 'e-123',
@@ -79,11 +97,15 @@ void main() {
     // Las lecturas de prueba se capturan a las 08:00; "ahora" es lo mismo.
     final ahora = DateTime(2026, 1, 1, 8);
 
-    test('por defecto filtra cada 5 m, precision alta, tope 50 m y 30 s',
-        () {
+    test('por defecto pide todas las lecturas cada segundo, registra cada '
+        '5 m, precision alta, tope 50 m y 30 s', () {
       const config = ConfiguracionRastreo();
 
-      expect(config.distanciaMinimaMetros, 5);
+      // El sistema no filtra: parado no llegaba ninguna lectura y no había
+      // forma de saber que el usuario se detuvo (SCRUM-116).
+      expect(config.distanciaMinimaMetros, 0);
+      expect(config.intervalo, const Duration(seconds: 1));
+      expect(config.distanciaMinimaRegistroMetros, 5);
       expect(config.altaPrecision, isTrue);
       expect(config.precisionMaximaMetros, 50);
       expect(config.antiguedadMaxima, const Duration(seconds: 30));
@@ -92,28 +114,40 @@ void main() {
     test('acepta lecturas dentro del tope y rechaza las peores', () {
       const config = ConfiguracionRastreo(precisionMaximaMetros: 50);
 
-      expect(config.acepta(puntoDePrueba(precisionMetros: 8), ahora: ahora),
-          isTrue);
-      expect(config.acepta(puntoDePrueba(precisionMetros: 50), ahora: ahora),
-          isTrue);
-      expect(config.acepta(puntoDePrueba(precisionMetros: 51), ahora: ahora),
-          isFalse);
-      expect(config.acepta(puntoDePrueba(precisionMetros: 200), ahora: ahora),
-          isFalse);
+      expect(
+        config.acepta(puntoDePrueba(precisionMetros: 8), ahora: ahora),
+        isTrue,
+      );
+      expect(
+        config.acepta(puntoDePrueba(precisionMetros: 50), ahora: ahora),
+        isTrue,
+      );
+      expect(
+        config.acepta(puntoDePrueba(precisionMetros: 51), ahora: ahora),
+        isFalse,
+      );
+      expect(
+        config.acepta(puntoDePrueba(precisionMetros: 200), ahora: ahora),
+        isFalse,
+      );
     });
 
     test('sin precision reportada acepta la lectura', () {
       const config = ConfiguracionRastreo(precisionMaximaMetros: 50);
 
-      expect(config.acepta(puntoDePrueba(precisionMetros: null), ahora: ahora),
-          isTrue);
+      expect(
+        config.acepta(puntoDePrueba(precisionMetros: null), ahora: ahora),
+        isTrue,
+      );
     });
 
     test('sin tope acepta cualquier precision', () {
       const config = ConfiguracionRastreo(precisionMaximaMetros: null);
 
-      expect(config.acepta(puntoDePrueba(precisionMetros: 500), ahora: ahora),
-          isTrue);
+      expect(
+        config.acepta(puntoDePrueba(precisionMetros: 500), ahora: ahora),
+        isTrue,
+      );
     });
 
     test('rechaza la ultima posicion conocida si es vieja', () {

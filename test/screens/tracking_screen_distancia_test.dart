@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
+import 'package:traza/services/pantalla_encendida_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
@@ -33,6 +35,7 @@ void main() {
           RepositorioPuntosGpsFalso(),
         ),
         entrenamientoActualProvider.overrideWithValue('e-123'),
+        pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),
       ],
     );
     addTearDown(container.dispose);
@@ -62,11 +65,14 @@ void main() {
     WidgetTester tester,
     double latitud, {
     required int segundos,
+    double? velocidad,
   }) async {
     fuente.emitir(
       puntoDePrueba(
         latitud: latitud,
         capturadoEn: DateTime(2026, 1, 1, 8).add(Duration(seconds: segundos)),
+        velocidadMps: velocidad,
+        precisionVelocidadMps: velocidad == null ? null : 0.3,
       ),
     );
     await tester.pump();
@@ -105,17 +111,75 @@ void main() {
     detener();
   });
 
-  testWidgets('el ritmo se calcula con el tiempo del cronómetro', (
+  /// Un segundo de actividad con una lectura del GPS a [velocidad] m/s, a
+  /// la latitud que toque por lo recorrido.
+  Future<void> segundo(
+    WidgetTester tester,
+    int i, {
+    required double velocidad,
+    double latitud = 6.2311,
+  }) async {
+    await correr(tester, const Duration(seconds: 1));
+    await emitir(tester, latitud, segundos: i, velocidad: velocidad);
+  }
+
+  testWidgets('el ritmo es el del paso actual que mide el GPS', (tester) async {
+    await montar(tester);
+
+    for (var i = 0; i <= 10; i++) {
+      await segundo(tester, i, velocidad: 2);
+    }
+
+    // 2 m/s → 500 s/km → 8'20". Y 10 s a 2 m/s son 20 m.
+    expect(find.text("8'20\""), findsOneWidget);
+    expect(find.text('0.02 km'), findsOneWidget);
+
+    detener();
+  });
+
+  testWidgets('parado, el ritmo pasa a 0\'00" al instante sin dispararse', (
     tester,
   ) async {
     await montar(tester);
 
-    await emitir(tester, 6.2311, segundos: 0);
-    await correr(tester, const Duration(minutes: 5));
-    await emitir(tester, 6.2321, segundos: 300); // ≈111 m en 5 min
+    for (var i = 0; i <= 10; i++) {
+      await segundo(tester, i, velocidad: 2);
+    }
+    expect(find.text("8'20\""), findsOneWidget);
 
-    // 300 s / 0.11119 km ≈ 2698 s/km → 44'58".
-    expect(find.text("44'58\""), findsOneWidget);
+    // Antes el ritmo era el promedio de toda la actividad y, parado,
+    // crecía sin techo (SCRUM-116). Ahora la primera lectura quieta basta.
+    await segundo(tester, 11, velocidad: 0.1);
+    expect(find.text("0'00\""), findsOneWidget);
+
+    for (var i = 12; i <= 60; i++) {
+      await segundo(tester, i, velocidad: 0.2);
+    }
+    expect(find.text("0'00\""), findsOneWidget);
+    // Lo recorrido no se pierde ni crece por estar parado.
+    expect(find.text('0.02 km'), findsOneWidget);
+
+    detener();
+  });
+
+  testWidgets('al retomar la marcha el ritmo vuelve en dos lecturas', (
+    tester,
+  ) async {
+    await montar(tester);
+
+    for (var i = 0; i <= 20; i++) {
+      await segundo(tester, i, velocidad: 0.1);
+    }
+    expect(find.text("0'00\""), findsOneWidget);
+
+    // Una sola lectura en movimiento podría ser ruido.
+    await segundo(tester, 21, velocidad: 1.4);
+    expect(find.text("0'00\""), findsOneWidget);
+
+    // A la segunda ya se muestra, y sin arrastrar los segundos parados:
+    // 1.4 m/s → 714 s/km → 11'54".
+    await segundo(tester, 22, velocidad: 1.4);
+    expect(find.text("11'54\""), findsOneWidget);
 
     detener();
   });

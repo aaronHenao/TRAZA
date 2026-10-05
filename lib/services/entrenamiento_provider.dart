@@ -8,7 +8,10 @@ import '../models/resumen_entrenamiento.dart';
 import 'actividad_provider.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'entrenamiento_service.dart';
+import 'insignias_provider.dart';
+import 'mapa_progresion_provider.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
+import 'progresion_provider.dart';
 import 'ubicacion_provider.dart';
 import 'reloj_provider.dart';
 
@@ -135,7 +138,6 @@ class DescarteEntrenamiento {
   /// segundos —lo que más pasa— se resuelve aquí.
   static const intentos = 3;
 
-
   Future<void> descartar() async {
     final entrenamientoId = _ref.read(entrenamientoActualProvider);
 
@@ -256,6 +258,18 @@ class CierreEntrenamiento {
     // Ya no hay entrenamiento en curso: el siguiente empieza con el suyo
     // (SCRUM-96).
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
+    // La XP la asignó el trigger en el mismo cierre (SCRUM-206): la
+    // progresión vuelve a leer la acumulada, las insignias que esa XP haya
+    // desbloqueado (SCRUM-193) y la posición en el mapa (SCRUM-226).
+    _ref
+      ..invalidate(progresionProvider)
+      ..invalidate(insigniasProvider);
+    // Solo si el mapa está abierto: si no, se lee al entrar a su pestaña. Sin
+    // esta guarda, invalidarlo cerrado sumaba una consulta de XP que nadie
+    // iba a ver (lo detecta cierre_entrenamiento_test).
+    if (_ref.exists(mapaProgresionProvider)) {
+      _ref.invalidate(mapaProgresionProvider);
+    }
     return null;
   }
 }

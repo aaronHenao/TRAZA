@@ -555,4 +555,29 @@ void main() {
       await expectLater(servicio.completarOnboarding(), completes);
     });
   });
+
+  group('fecha de creación de la cuenta (SCRUM-195)', () {
+    test('sale de la cuenta con la sesión abierta, en hora local', () {
+      when(() => auth.currentUser).thenReturn(
+        User(
+          id: 'usuario-1',
+          appMetadata: const {},
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-03-15T14:30:00Z',
+        ),
+      );
+
+      expect(
+        servicio.fechaCreacionCuenta,
+        DateTime.utc(2026, 3, 15, 14, 30).toLocal(),
+      );
+    });
+
+    test('sin sesión no hay fecha', () {
+      when(() => auth.currentUser).thenReturn(null);
+
+      expect(servicio.fechaCreacionCuenta, isNull);
+    });
+  });
 }

@@ -3,20 +3,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/admin/formulario_nivel_screen.dart';
+import 'screens/admin/formulario_reto_screen.dart';
+import 'screens/admin/gestion_niveles_screen.dart';
+import 'screens/admin/gestion_retos_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
+import 'screens/home/mapa_progresion_screen.dart';
+import 'screens/home/progresion_screen.dart';
+import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
+import 'screens/retos/detalle_reto_screen.dart';
+import 'screens/retos/historial_retos_screen.dart';
+import 'screens/retos/retos_screen.dart';
+import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
-import 'widgets/ofrece_permiso_salud.dart';
+import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
+import 'widgets/solo_administrador.dart';
+import 'widgets/ventana_rol_experto.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,16 +74,22 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/perfil',
       builder: (context, state) {
-        // Durante el onboarding no lleva barra: la portada todavía no es un
-        // destino válido y el flujo sigue a Permisos.
+        // El administrador no tiene onboarding de corredor: no elige
+        // objetivos ni concede permisos de ubicación. Como el redirect manda
+        // aquí a quien no lo ha terminado, la puerta tiene que estar también
+        // en esta ruta y no solo en /inicio (SCRUM-139).
         if (AuthService.requiereOnboardingDe(
           Supabase.instance.client.auth.currentUser,
         )) {
-          return const PerfilScreen(enOnboarding: true);
+          // Durante el onboarding no lleva barra: la portada todavía no es un
+          // destino válido y el flujo sigue a Permisos.
+          return const PuertaAdmin(corredor: PerfilScreen(enOnboarding: true));
         }
-        return const NavegacionPrincipal(
-          seccion: SeccionPrincipal.perfil,
-          child: PerfilScreen(),
+        return const PuertaAdmin(
+          corredor: NavegacionPrincipal(
+            seccion: SeccionPrincipal.perfil,
+            child: PerfilScreen(),
+          ),
         );
       },
     ),
@@ -78,12 +97,92 @@ final _navegacion = GoRouter(
       path: '/permisos',
       builder: (context, state) => const PermisosScreen(),
     ),
-    // Portada: a donde se llega al entrar y terminar el onboarding.
-    GoRoute(path: '/inicio', builder: (context, state) => const InicioScreen()),
+    // A donde se llega al entrar y al terminar el onboarding. Qué se muestra
+    // depende del rol: el administrador ve su panel (SCRUM-194), los demás su
+    // portada (SCRUM-139).
+    GoRoute(
+      path: '/inicio',
+      // El corredor entra envuelto en AvisoRolNuevo: si desbloqueó un rol y
+      // todavía no lo sabe, se le anuncia aquí (SCRUM-229).
+      builder: (context, state) =>
+          const PuertaAdmin(corredor: AvisoRolNuevo(hijo: InicioScreen())),
+    ),
+    // Gestión de retos (SCRUM-139) con su formulario (SCRUM-132). Ambas se
+    // abren con `push`, así que al volver el catálogo se refresca con el reto
+    // recién creado.
+    GoRoute(
+      path: GestionRetosScreen.ruta,
+      builder: (context, state) => const GestionRetosScreen(),
+      routes: [
+        GoRoute(
+          path: 'nuevo',
+          builder: (context, state) => const FormularioRetoScreen(),
+        ),
+      ],
+    ),
+    // Gestión de niveles de progresión (SCRUM-177), con su formulario. Ambas
+    // van tras SoloAdministrador (SCRUM-183): escribir la dirección a mano no
+    // es un atajo. La barrera de verdad la pone RLS en la tabla.
+    GoRoute(
+      path: GestionNivelesScreen.ruta,
+      builder: (context, state) =>
+          const SoloAdministrador(hijo: GestionNivelesScreen()),
+      routes: [
+        GoRoute(
+          path: 'nuevo',
+          builder: (context, state) =>
+              const SoloAdministrador(hijo: FormularioNivelScreen()),
+        ),
+      ],
+    ),
+    // Cuánto le falta al corredor para el siguiente nivel (SCRUM-178). Se
+    // abre con `push` desde la portada, así se vuelve a ella al cerrarla.
+    GoRoute(
+      path: ProgresionScreen.ruta,
+      builder: (context, state) => const ProgresionScreen(),
+    ),
+    // Mapa de progresión (SCRUM-226): una sección de la barra inferior, para
+    // que esté a la vista desde las demás.
+    GoRoute(
+      path: MapaProgresionScreen.ruta,
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.progreso,
+        child: MapaProgresionScreen(),
+      ),
+    ),
+    // Requisitos y ventajas de Runner Experto (SCRUM-195). Se abre con `push`
+    // desde el perfil, así se vuelve a él al cerrarla.
+    GoRoute(
+      path: RunnerExpertoScreen.ruta,
+      builder: (context, state) => const RunnerExpertoScreen(),
+    ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(
       path: '/actividad',
       builder: (context, state) => const ActividadScreen(),
+    ),
+    // Catálogo de retos que el corredor puede intentar (SCRUM-135).
+    GoRoute(
+      path: '/retos',
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.retos,
+        child: RetosScreen(),
+      ),
+      routes: [
+        // Antes de ':retoId': si no, 'historial' se tomaría por un id.
+        GoRoute(
+          path: 'historial',
+          builder: (context, state) => const HistorialRetosScreen(),
+        ),
+        // El listado pasa el reto en `extra` para no volver a consultarlo.
+        GoRoute(
+          path: ':retoId',
+          builder: (context, state) => DetalleRetoPorRuta(
+            retoId: state.pathParameters['retoId']!,
+            reto: state.extra as Reto?,
+          ),
+        ),
+      ],
     ),
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(
@@ -98,10 +197,10 @@ final _navegacion = GoRouter(
     GoRoute(
       path: '/tracking',
       // Sin permiso de ubicación no se abre: explica por qué y lo pide
-      // (SCRUM-82). Después ofrece el de salud, que es opcional (SCRUM-83).
-      builder: (context, state) => const RequierePermisoUbicacion(
-        child: OfrecePermisoSalud(child: TrackingConActividadElegida()),
-      ),
+      // (SCRUM-82). El de salud, que es opcional, se ofrece antes de llegar
+      // aquí, al tocar "Iniciar actividad" (SCRUM-131).
+      builder: (context, state) =>
+          const RequierePermisoUbicacion(child: TrackingConActividadElegida()),
     ),
     // Resumen de la sesión recién finalizada (SCRUM-43). El id del
     // entrenamiento viaja en la ruta (SCRUM-122); sin sesión no hay id y se

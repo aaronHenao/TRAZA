@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/screens/home/inicio_screen.dart';
+import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/inicio_provider.dart';
 import 'package:traza/services/objetivos_service.dart';
@@ -101,6 +102,10 @@ void main() {
         GoRoute(
           path: '/perfil',
           builder: (_, _) => const Scaffold(body: Text('Pantalla Perfil')),
+        ),
+        GoRoute(
+          path: ProgresionScreen.ruta,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Progresión')),
         ),
       ],
     );
@@ -209,10 +214,12 @@ void main() {
         find.text('No pudimos cargar tu progreso de esta semana.'),
         findsOneWidget,
       );
-      expect(find.text('No pudimos cargar tus entrenamientos.'), findsOneWidget);
+      expect(
+        find.text('No pudimos cargar tus entrenamientos.'),
+        findsOneWidget,
+      );
     });
   });
-
 
   group('últimos entrenamientos', () {
     testWidgets('asoma los tres más recientes', (tester) async {
@@ -274,6 +281,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Historial'), findsOneWidget);
+    });
+
+    testWidgets('la tarjeta de progresión lleva a ver cuánto falta para el '
+        'siguiente nivel', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.byKey(InicioScreen.claveAccesoProgresion));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Progresión'), findsOneWidget);
     });
   });
 }

@@ -128,6 +128,77 @@ void main() {
     );
   });
 
+  group('marcarAnunciado', () {
+    test('llama a la función de la base con el rol, y nada más', () async {
+      // El cliente no escribe en `roles_usuario`: la única forma de marcar el
+      // aviso es esta función (0013_anuncio_rol.sql).
+      final supabase = _SupabaseFalso();
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.marcarAnunciado(RolGanable.experto);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/marcar_rol_anunciado');
+      expect(jsonDecode(peticion.body), {'p_rol': 'experto'});
+    });
+  });
+
+  group('rolPorAnunciarProvider', () {
+    ProviderContainer contenedor(RolesFalso repositorio) {
+      final container = ProviderContainer(
+        overrides: [rolesRepositoryProvider.overrideWithValue(repositorio)],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('devuelve el rol que el corredor todavía no sabe', () async {
+      final container = contenedor(RolesFalso.experto());
+
+      final pendiente = await container.read(rolPorAnunciarProvider.future);
+
+      expect(pendiente?.rol, RolGanable.experto);
+    });
+
+    test('ya anunciado no queda nada pendiente', () async {
+      final container = contenedor(
+        RolesFalso.experto(anunciadoEn: DateTime.utc(2026, 10, 3)),
+      );
+
+      expect(await container.read(rolPorAnunciarProvider.future), isNull);
+    });
+
+    test('sin roles tampoco hay nada que anunciar', () async {
+      final container = contenedor(RolesFalso());
+
+      expect(await container.read(rolPorAnunciarProvider.future), isNull);
+    });
+
+    test('con varios pendientes, avisa primero del más antiguo', () async {
+      // El listado viene del más antiguo al más reciente, que es el orden en
+      // que los ganó.
+      final container = contenedor(
+        RolesFalso(
+          roles: [
+            RolGanado(
+              rol: RolGanable.experto,
+              otorgadoEn: DateTime.utc(2026, 10, 1),
+            ),
+            RolGanado(
+              rol: RolGanable.experto,
+              otorgadoEn: DateTime.utc(2026, 10, 4),
+            ),
+          ],
+        ),
+      );
+
+      final pendiente = await container.read(rolPorAnunciarProvider.future);
+
+      expect(pendiente?.otorgadoEn, DateTime.utc(2026, 10, 1));
+    });
+  });
+
   test('una fila que no cuadra con el modelo no se disimula', () async {
     final supabase = _SupabaseFalso(
       filasLeidas: const [

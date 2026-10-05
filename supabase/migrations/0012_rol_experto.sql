@@ -167,3 +167,76 @@ select public.evaluar_rol_experto();
 --   11                                      as niveles_requeridos,
 --   (select count(*) from roles_usuario
 --     where rol = 'experto')                as expertos;
+
+-- -------------------------------------------------------------
+-- 6. Prueba del desbloqueo (SCRUM-230)
+--
+-- Comprueba lo que no se puede probar desde Flutter, porque vive
+-- en Postgres: que con 10 niveles alcanzados no se otorgue el
+-- rol, que al llegar al 11 se otorgue solo, y que volver a
+-- evaluar no cree otra fila ni mueva `otorgado_en` (criterio 5
+-- de SCRUM-224).
+--
+-- Se descomenta, se pega entero en el SQL Editor y se corre. No
+-- deja rastro: el bloque termina lanzando un error a propósito,
+-- así que Postgres deshace todo lo que hizo. El resultado se lee
+-- en el mensaje de ese error. Necesita un corredor con 11 o más
+-- de XP acumulada.
+-- -------------------------------------------------------------
+-- do $$
+-- declare
+--   v_usuario   uuid;
+--   v_filas     integer;
+--   v_otorgado  timestamptz;
+--   v_despues   timestamptz;
+-- begin
+--   select usuario_id into v_usuario
+--   from experiencia_ganada
+--   group by usuario_id
+--   having sum(cantidad) >= 11
+--   order by sum(cantidad) desc
+--   limit 1;
+--
+--   if v_usuario is null then
+--     raise exception 'Sin datos: nadie tiene 11 XP acumulada todavía.';
+--   end if;
+--
+--   -- Escenario controlado; se deshace al final.
+--   delete from roles_usuario where usuario_id = v_usuario;
+--   delete from niveles;
+--
+--   insert into niveles (nombre, umbral_experiencia)
+--   select 'Prueba ' || i, i from generate_series(1, 10) as i;
+--   perform public.evaluar_rol_experto(v_usuario);
+--
+--   select count(*) into v_filas from roles_usuario
+--   where usuario_id = v_usuario and rol = 'experto';
+--   if v_filas <> 0 then
+--     raise exception 'FALLA: con 10 niveles alcanzados ya otorgó el rol.';
+--   end if;
+--
+--   -- Sin llamar a nada: lo dispara el trigger de `niveles`.
+--   insert into niveles (nombre, umbral_experiencia) values ('Prueba 11', 11);
+--
+--   select count(*), min(otorgado_en) into v_filas, v_otorgado
+--   from roles_usuario where usuario_id = v_usuario and rol = 'experto';
+--   if v_filas <> 1 then
+--     raise exception 'FALLA: al llegar a 11 niveles hay % filas de rol.', v_filas;
+--   end if;
+--
+--   perform public.evaluar_rol_experto(v_usuario);
+--   perform public.evaluar_rol_experto();
+--
+--   select count(*), min(otorgado_en) into v_filas, v_despues
+--   from roles_usuario where usuario_id = v_usuario and rol = 'experto';
+--   if v_filas <> 1 then
+--     raise exception 'FALLA: se duplicó el rol, hay % filas.', v_filas;
+--   end if;
+--   if v_despues <> v_otorgado then
+--     raise exception 'FALLA: `otorgado_en` cambió al volver a evaluar.';
+--   end if;
+--
+--   raise exception 'PRUEBA SUPERADA — no se otorga con 10, se otorga con 11, '
+--     'y no se reasigna (no se guardó nada).';
+-- end;
+-- $$;

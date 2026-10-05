@@ -29,6 +29,7 @@ import 'theme/app_theme.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 import 'widgets/solo_administrador.dart';
+import 'widgets/ventana_rol_experto.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -101,7 +102,10 @@ final _navegacion = GoRouter(
     // portada (SCRUM-139).
     GoRoute(
       path: '/inicio',
-      builder: (context, state) => const PuertaAdmin(corredor: InicioScreen()),
+      // El corredor entra envuelto en AvisoRolNuevo: si desbloqueó un rol y
+      // todavía no lo sabe, se le anuncia aquí (SCRUM-229).
+      builder: (context, state) =>
+          const PuertaAdmin(corredor: AvisoRolNuevo(hijo: InicioScreen())),
     ),
     // Gestión de retos (SCRUM-139) con su formulario (SCRUM-132). Ambas se
     // abren con `push`, así que al volver el catálogo se refresca con el reto
@@ -195,9 +199,8 @@ final _navegacion = GoRouter(
       // Sin permiso de ubicación no se abre: explica por qué y lo pide
       // (SCRUM-82). El de salud, que es opcional, se ofrece antes de llegar
       // aquí, al tocar "Iniciar actividad" (SCRUM-131).
-      builder: (context, state) => const RequierePermisoUbicacion(
-        child: TrackingConActividadElegida(),
-      ),
+      builder: (context, state) =>
+          const RequierePermisoUbicacion(child: TrackingConActividadElegida()),
     ),
     // Resumen de la sesión recién finalizada (SCRUM-43). El id del
     // entrenamiento viaja en la ruta (SCRUM-122); sin sesión no hay id y se

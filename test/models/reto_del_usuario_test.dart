@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/reto_del_usuario.dart';
 import 'package:traza/models/vigencia_reto.dart';
 
@@ -27,6 +28,7 @@ void main() {
       fin: fin ?? DateTime(2026, 10, 4),
     ),
     estado: EstadoReto.activo,
+    tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
   );
 
   RetoDelUsuario mio({
@@ -63,10 +65,7 @@ void main() {
   group('vencido (SCRUM-173)', () {
     test('lo que sigue en progreso con la vigencia pasada está vencido', () {
       final caducado = mio(
-        elReto: reto(
-          inicio: DateTime(2026, 9, 14),
-          fin: DateTime(2026, 9, 20),
-        ),
+        elReto: reto(inicio: DateTime(2026, 9, 14), fin: DateTime(2026, 9, 20)),
       );
 
       expect(caducado.vencidoEn(hoy), isTrue);
@@ -123,10 +122,9 @@ void main() {
 
     test('cada reto cae en una sola', () {
       expect(SeccionHistorialRetos.enCurso.filtrar(todos, hoy), [enCurso]);
-      expect(
-        SeccionHistorialRetos.completados.filtrar(todos, hoy),
-        [completado],
-      );
+      expect(SeccionHistorialRetos.completados.filtrar(todos, hoy), [
+        completado,
+      ]);
       expect(SeccionHistorialRetos.vencidos.filtrar(todos, hoy), [vencido]);
     });
 
@@ -168,6 +166,8 @@ void main() {
         'fecha_inicio': '2026-09-21',
         'fecha_fin': '2026-09-27',
         'estado': 'activo',
+        'tipo_actividad_id': 'tipo-correr',
+        'tipos_actividad': {'nombre': 'Correr'},
       },
     };
 

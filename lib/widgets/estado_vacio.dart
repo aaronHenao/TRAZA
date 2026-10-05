@@ -36,52 +36,82 @@ class EstadoVacio extends StatelessWidget {
           ConstrainedBox(
             constraints: BoxConstraints(minHeight: restricciones.maxHeight),
             child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.xl,
-                  vertical: AppSpacing.xl,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.bgAlt,
-                      ),
-                      child: Icon(icono, size: 30, color: AppColors.ink3),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      titulo,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      detalle,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.ink2,
-                        height: 1.4,
-                      ),
-                    ),
-                    if (accion != null) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      accion!,
-                    ],
-                  ],
-                ),
+              child: MensajeVacio(
+                icono: icono,
+                titulo: titulo,
+                detalle: detalle,
+                accion: accion,
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El mensaje a secas, sin centrar ni envolver en un scroll.
+///
+/// Es lo que va dentro de [EstadoVacio], y aparte para poder usarlo cuando el
+/// hueco vacío es una sección de una lista y no la pantalla entera: ahí no
+/// hay alto que ocupar ni scroll propio que montar.
+class MensajeVacio extends StatelessWidget {
+  const MensajeVacio({
+    required this.icono,
+    required this.titulo,
+    required this.detalle,
+    this.accion,
+    super.key,
+  });
+
+  final IconData icono;
+  final String titulo;
+  final String detalle;
+  final Widget? accion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.xl,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.bgAlt,
+            ),
+            child: Icon(icono, size: 30, color: AppColors.ink3),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            titulo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            detalle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.ink2,
+              height: 1.4,
+            ),
+          ),
+          if (accion != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            accion!,
+          ],
         ],
       ),
     );

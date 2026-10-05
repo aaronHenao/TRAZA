@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/retos/detalle_reto_screen.dart';
 import 'package:traza/screens/retos/retos_screen.dart';
@@ -54,6 +55,7 @@ void main() {
     xpOtorgada: xp,
     vigencia: VigenciaReto(inicio: DateTime(2026, 9, 28), fin: fin),
     estado: EstadoReto.activo,
+    tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
   );
 
   final diario = reto(
@@ -314,7 +316,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Solo hoy, 28 de septiembre'), findsOneWidget);
-      expect(find.text('Es el último día: termina esta noche.'), findsOneWidget);
+      expect(
+        find.text('Es el último día: termina esta noche.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('muestra la descripción que escribió el administrador', (
@@ -344,9 +349,7 @@ void main() {
     ) async {
       await abrirCatalogo(tester);
 
-      final router = GoRouter.of(
-        tester.element(find.byType(RetosScreen)),
-      );
+      final router = GoRouter.of(tester.element(find.byType(RetosScreen)));
       router.push('/retos/fantasma');
       await tester.pumpAndSettle();
 

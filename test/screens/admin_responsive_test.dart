@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/screens/admin/formulario_reto_screen.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
@@ -57,6 +58,7 @@ void main() {
     xpOtorgada: 2000,
     vigencia: periodicidad.vigenciaDesde(ahora),
     estado: EstadoReto.activo,
+    tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
   );
 
   final catalogo = [

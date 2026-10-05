@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_provider.dart';
@@ -40,6 +41,7 @@ class _RetosFalso extends RetosRepositorioFalso {
       xpOtorgada: reto.xpOtorgada,
       vigencia: reto.vigencia,
       estado: EstadoReto.activo,
+      tipoActividad: reto.tipoActividad,
     );
   }
 }
@@ -54,6 +56,7 @@ void main() {
     nombre: 'Corre 5 km hoy',
     descripcion: 'Una sola sesión de carrera de al menos 5 km.',
     periodicidad: PeriodicidadReto.diaria,
+    tipoActividad: TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
     meta: '5',
     xp: '50',
   );
@@ -91,12 +94,15 @@ void main() {
       expect(resultado.reto.estaActivo, isTrue);
     });
 
-    test('la vigencia se calcula con el reloj del momento (SCRUM-142)', () async {
-      await crear(completo.copyWith(periodicidad: PeriodicidadReto.semanal));
+    test(
+      'la vigencia se calcula con el reloj del momento (SCRUM-142)',
+      () async {
+        await crear(completo.copyWith(periodicidad: PeriodicidadReto.semanal));
 
-      expect(repositorio.recibido!.vigencia.inicio, DateTime(2026, 9, 21));
-      expect(repositorio.recibido!.vigencia.fin, DateTime(2026, 9, 27));
-    });
+        expect(repositorio.recibido!.vigencia.inicio, DateTime(2026, 9, 21));
+        expect(repositorio.recibido!.vigencia.fin, DateTime(2026, 9, 27));
+      },
+    );
   });
 
   group('datos inválidos', () {
@@ -108,6 +114,7 @@ void main() {
         CampoReto.nombre,
         CampoReto.descripcion,
         CampoReto.periodicidad,
+        CampoReto.tipoActividad,
         CampoReto.meta,
         CampoReto.xp,
       });
@@ -140,25 +147,31 @@ void main() {
       expect((resultado as RetoNoGuardado).mensaje, CreacionReto.sinSesion);
     });
 
-    test('una cuenta sin rol de administrador recibe un mensaje claro', () async {
-      // Es lo que responde Postgres cuando la policy de insert, que exige
-      // es_admin(), rechaza la fila.
-      repositorio.error = const SoloAdministradorException();
+    test(
+      'una cuenta sin rol de administrador recibe un mensaje claro',
+      () async {
+        // Es lo que responde Postgres cuando la policy de insert, que exige
+        // es_admin(), rechaza la fila.
+        repositorio.error = const SoloAdministradorException();
 
-      final resultado = await crear(completo) as RetoNoGuardado;
+        final resultado = await crear(completo) as RetoNoGuardado;
 
-      expect(resultado.mensaje, CreacionReto.soloAdministrador);
-    });
+        expect(resultado.mensaje, CreacionReto.soloAdministrador);
+      },
+    );
 
-    test('si la base rechaza los datos, se avisa sin culpar a la red', () async {
-      repositorio.error = const DatosDeRetoInvalidosException(
-        'retos_meta_positiva',
-      );
+    test(
+      'si la base rechaza los datos, se avisa sin culpar a la red',
+      () async {
+        repositorio.error = const DatosDeRetoInvalidosException(
+          'retos_meta_positiva',
+        );
 
-      final resultado = await crear(completo) as RetoNoGuardado;
+        final resultado = await crear(completo) as RetoNoGuardado;
 
-      expect(resultado.mensaje, CreacionReto.datosRechazados);
-    });
+        expect(resultado.mensaje, CreacionReto.datosRechazados);
+      },
+    );
 
     test('un fallo de red se traduce a un mensaje reintentable', () async {
       repositorio.error = Exception('sin conexión');
@@ -180,6 +193,8 @@ void main() {
       'fecha_inicio': '2026-09-01',
       'fecha_fin': '2026-09-30',
       'estado': 'activo',
+      'tipo_actividad_id': 'tipo-correr',
+      'tipos_actividad': {'nombre': 'Correr'},
     };
 
     test('se lee completa', () {
@@ -189,10 +204,10 @@ void main() {
       expect(reto.periodicidad, PeriodicidadReto.mensual);
       expect(reto.metaKm, 60.0);
       expect(reto.xpOtorgada, 800);
-      expect(reto.vigencia, VigenciaReto(
-        inicio: DateTime(2026, 9, 1),
-        fin: DateTime(2026, 9, 30),
-      ));
+      expect(
+        reto.vigencia,
+        VigenciaReto(inicio: DateTime(2026, 9, 1), fin: DateTime(2026, 9, 30)),
+      );
       expect(reto.estaActivo, isTrue);
     });
 

@@ -32,5 +32,6 @@ const String atribucionMapa = '© Esri, HERE, Garmin, © OpenStreetMap';
 
 /// De dónde salen las imágenes de los tiles. La app descarga de la red; las
 /// pruebas lo sobrescriben con un proveedor que no toca la red.
-final proveedorTilesProvider =
-    Provider<TileProvider>((ref) => NetworkTileProvider());
+final proveedorTilesProvider = Provider<TileProvider>(
+  (ref) => NetworkTileProvider(),
+);

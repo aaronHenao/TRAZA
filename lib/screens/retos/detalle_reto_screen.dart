@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/periodicidad_reto.dart';
 import '../../models/reto.dart';
+import '../../models/reto_del_usuario.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
@@ -11,6 +12,7 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/tarjeta_reto.dart';
 import '../../widgets/traza_card.dart';
+import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
 /// Abre el detalle del reto que pide la ruta.
@@ -68,19 +70,73 @@ class _NoEncontrado extends StatelessWidget {
   }
 }
 
-/// Detalle de un reto (SCRUM-165).
+/// Detalle de un reto (SCRUM-165), desde donde el corredor lo activa
+/// (SCRUM-136).
 ///
 /// Responde lo que el criterio 3 de SCRUM-135 pide: el objetivo del reto y
-/// las condiciones para cumplirlo, para que el corredor decida si lo intenta.
-/// Activarlo es de SCRUM-136.
-class DetalleRetoScreen extends ConsumerWidget {
+/// las condiciones para cumplirlo, para que decida si lo intenta.
+class DetalleRetoScreen extends ConsumerStatefulWidget {
   const DetalleRetoScreen({required this.reto, super.key});
 
   final Reto reto;
 
+  static const claveActivar = Key('reto-activar');
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DetalleRetoScreen> createState() => _DetalleRetoScreenState();
+}
+
+class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
+  /// Se está creando la fila. Es estado de la pantalla, no del dominio: evita
+  /// que un segundo toque mande otra activación mientras la primera va.
+  bool _activando = false;
+
+  Future<void> _activar() async {
+    if (_activando) return;
+    setState(() => _activando = true);
+    try {
+      final resultado = await ref
+          .read(activacionRetoProvider)
+          .activar(widget.reto);
+      if (!mounted) return;
+
+      switch (resultado) {
+        case RetoActivado():
+          // `pop`: vuelve al catálogo, donde el reto ya figura activado.
+          context.pop();
+          mostrarToast(context, 'Reto activado. ¡A por él!');
+        case RetoNoActivado(:final mensaje):
+          mostrarToast(context, mensaje, separacionInferior: 90);
+      }
+    } finally {
+      if (mounted) setState(() => _activando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reto = widget.reto;
     final hoy = ref.read(relojProvider)();
+
+    // SCRUM-170: si el corredor ya lo tiene en juego, la pantalla lo dice en
+    // vez de ofrecerle activarlo otra vez.
+    final mios = ref.watch(misRetosProvider);
+    final mio = mios.valueOrNull
+        ?.where((m) => m.reto.id == reto.id && m.enCursoEn(hoy))
+        .firstOrNull;
+    // Mientras no se sepa, el botón espera: ofrecer activar y rectificar un
+    // segundo después es peor que un botón quieto.
+    final cargando = mios.isLoading;
+
+    // La regla de un reto por periodicidad y tipo de actividad. Se consulta
+    // aquí para decirlo antes de que lo pulse, no después.
+    final bloqueo = mio != null
+        ? null
+        : motivoDeBloqueo(
+            reto,
+            mios.valueOrNull?.where((m) => m.enCursoEn(hoy)).toList() ??
+                const [],
+          );
 
     return Scaffold(
       body: SafeArea(
@@ -105,9 +161,185 @@ class DetalleRetoScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              switch (mio) {
+                // Ya es suyo: lo que falta por saber es cuánto le queda, no
+                // si lo acepta.
+                final activo? => _PieConProgreso(mio: activo),
+                // Tiene otro del mismo hueco: el botón no se ofrece, y en su
+                // lugar va el motivo.
+                _ when bloqueo != null => _PieBloqueado(motivo: bloqueo),
+                _ => _PieConBoton(
+                  activando: _activando,
+                  onActivar: _activando || cargando ? null : _activar,
+                ),
+              },
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Lo que ve quien ya tiene el reto activo: cuánto lleva hecho.
+class _PieConProgreso extends StatelessWidget {
+  const _PieConProgreso({required this.mio});
+
+  final RetoDelUsuario mio;
+
+  static const clave = Key('reto-ya-activo');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: clave,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.directions_run,
+                size: 18,
+                color: AppColors.secondaryDark,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Ya lo tienes activo',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              Text(
+                '${TarjetaReto.textoKm(mio.progresoKm)} de '
+                '${TarjetaReto.textoKm(mio.reto.metaKm)} km',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: LinearProgressIndicator(
+              value: mio.progreso,
+              minHeight: 6,
+              backgroundColor: AppColors.bgAlt,
+              valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lo que ve quien ya lleva otro reto de la misma periodicidad y tipo.
+class _PieBloqueado extends StatelessWidget {
+  const _PieBloqueado({required this.motivo});
+
+  final String motivo;
+
+  static const clave = Key('reto-bloqueado');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: clave,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        14,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline, size: 18, color: AppColors.ink3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  motivo,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'Termínalo o espera a que acabe su plazo para tomar otro.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.ink2,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El botón de activar, separado del contenido para que no se desplace con
+/// él: es la decisión que trae al corredor a esta pantalla.
+class _PieConBoton extends StatelessWidget {
+  const _PieConBoton({required this.activando, required this.onActivar});
+
+  final bool activando;
+  final VoidCallback? onActivar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: FilledButton(
+        key: DetalleRetoScreen.claveActivar,
+        onPressed: onActivar,
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        child: activando
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text('Activar reto'),
       ),
     );
   }
@@ -150,6 +382,7 @@ class _Encabezado extends StatelessWidget {
                     color: AppColors.primaryDark,
                   ),
                   InsigniaReto(texto: reto.periodicidad.etiqueta),
+                  InsigniaReto(texto: reto.tipoActividad.nombre),
                 ],
               ),
             ],

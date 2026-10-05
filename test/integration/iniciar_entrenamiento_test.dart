@@ -93,10 +93,7 @@ void main() {
     router = GoRouter(
       initialLocation: '/actividad',
       routes: [
-        GoRoute(
-          path: '/actividad',
-          builder: (_, _) => const ActividadScreen(),
-        ),
+        GoRoute(path: '/actividad', builder: (_, _) => const ActividadScreen()),
         GoRoute(
           path: '/permisos',
           builder: (_, _) => const _Pantalla('Permisos'),

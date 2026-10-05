@@ -270,8 +270,10 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
 
   @override
   Future<String> crear({required String tipoActividadId}) =>
-      throw UnimplementedError('La pantalla arranca con el entrenamiento ya '
-          'creado (SCRUM-99)');
+      throw UnimplementedError(
+        'La pantalla arranca con el entrenamiento ya '
+        'creado (SCRUM-99)',
+      );
 
   @override
   Future<ResumenEntrenamiento?> cargarFinalizado(String entrenamientoId) =>

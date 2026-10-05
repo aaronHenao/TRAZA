@@ -118,8 +118,9 @@ void main() {
     detener();
   });
 
-  testWidgets('el cronómetro arranca en cero al entrar a la pantalla',
-      (tester) async {
+  testWidgets('el cronómetro arranca en cero al entrar a la pantalla', (
+    tester,
+  ) async {
     await montar(tester);
 
     expect(tiempoEnPantalla(tester), '00:00:00');
@@ -128,8 +129,9 @@ void main() {
     detener();
   });
 
-  testWidgets('el cronómetro avanza mientras el usuario hace su ruta',
-      (tester) async {
+  testWidgets('el cronómetro avanza mientras el usuario hace su ruta', (
+    tester,
+  ) async {
     await montar(tester);
 
     await correr(tester, const Duration(seconds: 5));
@@ -141,8 +143,9 @@ void main() {
     detener();
   });
 
-  testWidgets('el botón de pausa congela y reanuda el cronómetro',
-      (tester) async {
+  testWidgets('el botón de pausa congela y reanuda el cronómetro', (
+    tester,
+  ) async {
     await montar(tester);
     await correr(tester, const Duration(seconds: 20));
 
@@ -163,8 +166,9 @@ void main() {
     detener();
   });
 
-  testWidgets('finalizar detiene el cronómetro y reporta el tiempo total',
-      (tester) async {
+  testWidgets('finalizar detiene el cronómetro y reporta el tiempo total', (
+    tester,
+  ) async {
     Duration? reportada;
     await montar(tester, onFinalizar: (duracion) => reportada = duracion);
 
@@ -180,8 +184,9 @@ void main() {
     expect(tiempoEnPantalla(tester), '00:32:17');
   });
 
-  testWidgets('al finalizar sincroniza los puntos registrados en un lote',
-      (tester) async {
+  testWidgets('al finalizar sincroniza los puntos registrados en un lote', (
+    tester,
+  ) async {
     await montar(tester, onFinalizar: (_) {});
 
     for (final punto in [
@@ -201,14 +206,16 @@ void main() {
 
     expect(repositorio.lotes.length, 1);
     expect(repositorio.lotes.single.entrenamientoId, 'e-123');
-    expect(
-      repositorio.lotes.single.puntos.map((p) => p.latitud),
-      [6.2311, 6.2312, 6.2313],
-    );
+    expect(repositorio.lotes.single.puntos.map((p) => p.latitud), [
+      6.2311,
+      6.2312,
+      6.2313,
+    ]);
   });
 
-  testWidgets('si la sincronizacion falla lo avisa al finalizar',
-      (tester) async {
+  testWidgets('si la sincronizacion falla lo avisa al finalizar', (
+    tester,
+  ) async {
     await montar(tester);
     fuente.emitir(puntoDePrueba());
     await tester.pump();

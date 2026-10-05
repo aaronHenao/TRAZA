@@ -14,6 +14,14 @@ class VigenciaReto {
   final DateTime inicio;
   final DateTime fin;
 
+  /// Si comparte algún día con [otra].
+  ///
+  /// Es el mismo criterio que el trigger de `0011_reto_tipo_actividad.sql`
+  /// (`daterange && daterange`), y tiene que seguir siéndolo: aquí decide qué
+  /// se ve bloqueado y allá qué se deja activar.
+  bool solapaCon(VigenciaReto otra) =>
+      !inicio.isAfter(otra.fin) && !otra.inicio.isAfter(fin);
+
   /// Cuántos días cubre, contando el primero y el último.
   int get dias => fin.difference(inicio).inDays + 1;
 

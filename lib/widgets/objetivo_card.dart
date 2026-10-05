@@ -49,7 +49,10 @@ class ObjetivoCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       tipo.descripcion,
-                      style: const TextStyle(fontSize: 12, color: AppColors.ink2),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.ink2,
+                      ),
                     ),
                   ],
                 ),

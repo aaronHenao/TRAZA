@@ -37,10 +37,7 @@ class ControlesEntrenamiento extends StatelessWidget {
             onPressed: onPausar,
           ),
           const SizedBox(width: 22),
-          _BotonFinalizar(
-            key: claveFinalizar,
-            onPressed: onFinalizar,
-          ),
+          _BotonFinalizar(key: claveFinalizar, onPressed: onFinalizar),
         ],
       ),
     );

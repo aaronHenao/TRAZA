@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/nuevo_reto.dart';
 import 'package:traza/models/periodicidad_reto.dart';
+import 'package:traza/models/tipo_actividad.dart';
 
 /// Pruebas de las reglas que impiden registrar un reto incompleto o inválido
 /// (SCRUM-141) y del criterio 2 de SCRUM-132: señalar los campos que hay que
@@ -8,11 +9,13 @@ import 'package:traza/models/periodicidad_reto.dart';
 void main() {
   // Miércoles 23 de septiembre de 2026.
   final ahora = DateTime(2026, 9, 23, 11, 30);
+  const correr = TipoActividad(id: 'tipo-correr', nombre: 'Correr');
 
   const completo = BorradorReto(
     nombre: 'Corre 5 km hoy',
     descripcion: 'Una sola sesión de carrera de al menos 5 km.',
     periodicidad: PeriodicidadReto.diaria,
+    tipoActividad: correr,
     meta: '5',
     xp: '50',
   );
@@ -29,6 +32,7 @@ void main() {
         nombre: 'Corre 15 km esta semana',
         descripcion: 'Suma 15 km entre lunes y domingo.',
         periodicidad: PeriodicidadReto.semanal,
+        tipoActividad: correr,
         meta: '15',
         xp: '200',
       ).aNuevoReto(ahora: ahora)!;
@@ -48,13 +52,14 @@ void main() {
   });
 
   group('campos obligatorios', () {
-    test('el borrador vacío señala los cinco campos', () {
+    test('el borrador vacío señala todos los campos', () {
       const vacio = BorradorReto();
 
       expect(vacio.errores.keys, {
         CampoReto.nombre,
         CampoReto.descripcion,
         CampoReto.periodicidad,
+        CampoReto.tipoActividad,
         CampoReto.meta,
         CampoReto.xp,
       });
@@ -69,20 +74,23 @@ void main() {
     });
 
     test('un nombre de solo espacios tampoco es un nombre', () {
-      expect(completo.copyWith(nombre: '   ').errores, contains(CampoReto.nombre));
+      expect(
+        completo.copyWith(nombre: '   ').errores,
+        contains(CampoReto.nombre),
+      );
     });
 
     test('sin descripción no se registra', () {
-      expect(
-        completo.copyWith(descripcion: '  ').errores.keys,
-        {CampoReto.descripcion},
-      );
+      expect(completo.copyWith(descripcion: '  ').errores.keys, {
+        CampoReto.descripcion,
+      });
     });
 
     test('sin periodicidad no se registra: sin ella no hay vigencia', () {
       const sinPeriodicidad = BorradorReto(
         nombre: 'Corre 5 km hoy',
         descripcion: 'Una sesión.',
+        tipoActividad: correr,
         meta: '5',
         xp: '50',
       );
@@ -153,6 +161,7 @@ void main() {
         nombre: 'Mes de 60 km',
         descripcion: 'Acumula 60 km durante el mes.',
         periodicidad: PeriodicidadReto.mensual,
+        tipoActividad: correr,
         meta: '60',
         xp: '800',
       ).aNuevoReto(ahora: ahora)!.aSupabase();
@@ -161,6 +170,7 @@ void main() {
         'nombre': 'Mes de 60 km',
         'descripcion': 'Acumula 60 km durante el mes.',
         'periodicidad': 'mensual',
+        'tipo_actividad_id': 'tipo-correr',
         'meta_km': 60.0,
         'xp_otorgada': 800,
         'fecha_inicio': '2026-09-01',

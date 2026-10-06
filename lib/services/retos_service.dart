@@ -79,6 +79,13 @@ class RetoDelMismoHuecoException implements Exception {
       'periodicidad y ese tipo de actividad';
 }
 
+/// Cómo van los corredores que tienen un reto en curso (SCRUM-151).
+///
+/// `maximoKm` es lo que lleva el que va más adelantado, cero si no hay
+/// nadie. Van juntos porque salen de la misma consulta y se usan para lo
+/// mismo: decidir qué se le puede cambiar a un reto que la gente ya empezó.
+typedef ProgresoEnCurso = ({int corredores, double maximoKm});
+
 /// Acceso a la tabla `retos`.
 abstract interface class RetosRepository {
   /// Registra [reto] y devuelve la fila creada (SCRUM-143).
@@ -86,6 +93,20 @@ abstract interface class RetosRepository {
   /// Lo que vuelve trae el id y el estado que puso la base, no los que mandó
   /// el cliente.
   Future<Reto> crear(NuevoReto reto);
+
+  /// Cómo van los corredores que tienen [reto] en curso (SCRUM-151).
+  ///
+  /// Para avisar al administrador antes de cambiarle la meta o la XP a un
+  /// reto que la gente ya está intentando, y para no dejarle bajar la meta
+  /// por debajo de lo que alguien ya corrió.
+  Future<ProgresoEnCurso> progresoEnCurso(Reto reto);
+
+  /// Guarda los cambios de un reto ya publicado y devuelve cómo quedó
+  /// (SCRUM-147).
+  ///
+  /// [original] es el reto tal como estaba: de ahí sale su id. Lo que no
+  /// aparece en [cambios] no se toca, ni se manda.
+  Future<Reto> editar(Reto original, CambiosReto cambios);
 
   /// Los retos del catálogo con el [estado] pedido, del más reciente al más
   /// antiguo.
@@ -151,6 +172,9 @@ class SupabaseRetosRepository implements RetosRepository {
   static const _filaDuplicada = '23505';
   static const _huecoOcupado = '23P01';
 
+  /// La consulta pidió una fila y no vino ninguna.
+  static const _sinFilas = 'PGRST116';
+
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
 
@@ -184,6 +208,68 @@ class SupabaseRetosRepository implements RetosRepository {
       // La policy de insert exige es_admin(); sin ese rol, Postgres responde
       // que la fila viola la seguridad a nivel de fila.
       if (e.code == _rlsDenegado) throw const SoloAdministradorException();
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDeRetoInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async {
+    _usuarioId();
+
+    // `retos_usuario` solo deja ver al administrador las filas de todos
+    // (0008_retos_usuario.sql); un corredor contaría solo las suyas. Como
+    // esto únicamente se usa desde la pantalla del administrador, no hace
+    // falta distinguirlo aquí.
+    //
+    // El máximo se saca en Dart y no con una agregación de Postgres: son los
+    // corredores de un reto, no una tabla entera, y así la misma consulta
+    // sirve para contarlos.
+    final filas = await _cliente
+        .from(_tablaRetosUsuario)
+        .select('progreso_km')
+        .eq('reto_id', reto.id)
+        .eq('estado', EstadoRetoUsuario.enProgreso.valorDb);
+
+    var maximo = 0.0;
+    for (final fila in filas) {
+      final progreso = fila['progreso_km'];
+      if (progreso is num && progreso > maximo) maximo = progreso.toDouble();
+    }
+
+    return (corredores: filas.length, maximoKm: maximo);
+  }
+
+  @override
+  Future<Reto> editar(Reto original, CambiosReto cambios) async {
+    // Sin sesión, RLS rechazaría el update sin decir por qué; se corta antes
+    // para que el error hable de la sesión y no de los permisos.
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tabla)
+          .update(cambios.aSupabase())
+          .eq('id', original.id)
+          // Se devuelve la fila entera y no la de partida con los cambios
+          // encima: así lo que se pinta es lo que quedó guardado, incluido lo
+          // que la base haya dejado como estaba.
+          .select(_columnas)
+          .single();
+
+      return Reto.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      if (e.code == _rlsDenegado) throw const SoloAdministradorException();
+      // Un update que no encuentra la fila es, casi siempre, la policy
+      // escondiéndosela a quien no es administrador: en un update RLS no
+      // responde "prohibido", simplemente deja la fila fuera de alcance. Y un
+      // reto no desaparece, porque la tabla no tiene policy de delete.
+      if (e.code == _sinFilas) throw const SoloAdministradorException();
+      // Mismo código para las restricciones de la tabla y para el trigger
+      // `retos_cambios_permitidos`: las dos dicen que el reto no puede quedar
+      // así, y el mensaje de Postgres explica cuál fue.
       if (e.code == _restriccionIncumplida) {
         throw DatosDeRetoInvalidosException(e.message);
       }

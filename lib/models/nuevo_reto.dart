@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'periodicidad_reto.dart';
+import 'reto.dart';
 import 'tipo_actividad.dart';
 import 'vigencia_reto.dart';
 
@@ -26,6 +27,7 @@ class BorradorReto {
     this.descripcion = '',
     this.periodicidad,
     this.tipoActividad,
+    this.fin,
     this.meta = '',
     this.xp = '',
   });
@@ -37,6 +39,10 @@ class BorradorReto {
   /// Correr, Trote o Caminar. Null hasta que el administrador elige.
   final TipoActividad? tipoActividad;
 
+  /// Hasta cuándo dura, al editar. Null al crear: ahí la vigencia entera la
+  /// calcula la periodicidad (SCRUM-142).
+  final DateTime? fin;
+
   final String meta;
   final String xp;
 
@@ -45,6 +51,7 @@ class BorradorReto {
     String? descripcion,
     PeriodicidadReto? periodicidad,
     TipoActividad? tipoActividad,
+    DateTime? fin,
     String? meta,
     String? xp,
   }) => BorradorReto(
@@ -52,6 +59,7 @@ class BorradorReto {
     descripcion: descripcion ?? this.descripcion,
     periodicidad: periodicidad ?? this.periodicidad,
     tipoActividad: tipoActividad ?? this.tipoActividad,
+    fin: fin ?? this.fin,
     meta: meta ?? this.meta,
     xp: xp ?? this.xp,
   );
@@ -125,6 +133,49 @@ class BorradorReto {
     return limpio.isEmpty ? null : int.tryParse(limpio);
   }
 
+  /// El borrador que corresponde a un reto ya publicado, para editarlo.
+  ///
+  /// Los números vuelven a texto porque es lo que el formulario maneja; que
+  /// `5.0` se vea como `5` lo resuelve [TarjetaReto.textoKm] al pintarlo, no
+  /// esta clase.
+  factory BorradorReto.de(Reto reto) => BorradorReto(
+    nombre: reto.nombre,
+    descripcion: reto.descripcion,
+    periodicidad: reto.periodicidad,
+    tipoActividad: reto.tipoActividad,
+    meta: _sinDecimalesSobrantes(reto.metaKm),
+    xp: '${reto.xpOtorgada}',
+    fin: reto.vigencia.fin,
+  );
+
+  /// `5.0` se escribe `5`; `2.5` se queda igual.
+  static String _sinDecimalesSobrantes(double valor) =>
+      valor == valor.roundToDouble() ? '${valor.round()}' : '$valor';
+
+  /// Los cambios listos para guardar, o null si el borrador tiene errores.
+  ///
+  /// [original] es el reto tal como está publicado: de él salen la vigencia y
+  /// lo que no se edita.
+  CambiosReto? aCambios(Reto original) {
+    if (!esValido) return null;
+
+    // La fecha de fin solo se mueve hacia adelante. Si el formulario mandara
+    // una anterior, `extendidaHasta` devuelve null y se conserva la que había
+    // en vez de recortarle el plazo a quien lo esté cumpliendo.
+    final nuevaFin = fin;
+    final vigencia = nuevaFin == null
+        ? original.vigencia
+        : original.vigencia.extendidaHasta(nuevaFin) ?? original.vigencia;
+
+    return CambiosReto(
+      nombre: nombre.trim(),
+      descripcion: descripcion.trim(),
+      metaKm: metaKm!,
+      xpOtorgada: xpOtorgada!,
+      vigencia: vigencia,
+    );
+  }
+
   /// El reto listo para guardar, o null si el borrador todavía tiene errores.
   ///
   /// Devolver null y no lanzar es lo que **impide el guardado** que pide
@@ -144,6 +195,93 @@ class BorradorReto {
       vigencia: periodicidad.vigenciaDesde(ahora),
     );
   }
+}
+
+/// Lo que se puede cambiar de un reto ya publicado (SCRUM-133).
+///
+/// No están ni la periodicidad, ni el tipo de actividad, ni la fecha de
+/// inicio: juntos deciden en qué hueco cae el reto y cuándo corre, y moverlos
+/// cambiaría de sitio a quien ya lo tiene activo. Para eso se retira el reto
+/// y se crea otro.
+///
+/// Que exista una instancia significa que sus datos ya pasaron las reglas:
+/// solo se construye desde [BorradorReto.aCambios].
+@immutable
+class CambiosReto {
+  const CambiosReto({
+    required this.nombre,
+    required this.descripcion,
+    required this.metaKm,
+    required this.xpOtorgada,
+    required this.vigencia,
+  });
+
+  final String nombre;
+  final String descripcion;
+  final double metaKm;
+  final int xpOtorgada;
+
+  /// La vigencia resultante. Solo su fin puede haber cambiado, y solo hacia
+  /// adelante: lo garantiza [VigenciaReto.extendidaHasta].
+  final VigenciaReto vigencia;
+
+  /// Las columnas que se mandan en el update.
+  ///
+  /// No va `periodicidad`, ni `tipo_actividad_id`, ni `fecha_inicio`, ni
+  /// `estado`: mandar una columna que no cambia es pedirle a la base que la
+  /// escriba igual, y el trigger `retos_cambios_permitidos` tendría que
+  /// comprobarlas una por una para nada.
+  Map<String, dynamic> aSupabase() => {
+    'nombre': nombre,
+    'descripcion': descripcion,
+    'meta_km': metaKm,
+    'xp_otorgada': xpOtorgada,
+    'fecha_fin': vigencia.finTexto,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CambiosReto &&
+      other.nombre == nombre &&
+      other.descripcion == descripcion &&
+      other.metaKm == metaKm &&
+      other.xpOtorgada == xpOtorgada &&
+      other.vigencia == vigencia;
+
+  @override
+  int get hashCode =>
+      Object.hash(nombre, descripcion, metaKm, xpOtorgada, vigencia);
+
+  @override
+  String toString() =>
+      'CambiosReto($nombre, $metaKm km, $xpOtorgada XP, hasta '
+      '${vigencia.finTexto})';
+}
+
+/// Lo que un cambio le hace a quien ya está haciendo el reto (SCRUM-151).
+///
+/// Solo recoge lo que el corredor nota. Corregir el nombre o la descripción
+/// no cambia lo que tiene que hacer ni lo que va a ganar, así que no entra.
+extension ConsecuenciasParaElCorredor on CambiosReto {
+  /// Las frases que explican qué cambia, en el orden en que importan. Vacía
+  /// si nada de lo que el corredor nota se toca.
+  List<String> consecuenciasSobre(Reto original) => [
+    if (metaKm != original.metaKm)
+      'La meta pasa de ${_km(original.metaKm)} a ${_km(metaKm)} km, '
+          'con el progreso que ya llevan.',
+    if (xpOtorgada != original.xpOtorgada)
+      'La XP pasa de ${original.xpOtorgada} a $xpOtorgada.',
+    if (vigencia.fin != original.vigencia.fin)
+      _plazo(vigencia.dias - original.vigencia.dias),
+  ];
+
+  /// `5` en vez de `5.0`; `2.5` se queda igual.
+  static String _km(double valor) =>
+      valor == valor.roundToDouble() ? '${valor.round()}' : '$valor';
+
+  static String _plazo(int dias) => dias == 1
+      ? 'El plazo se alarga un día.'
+      : 'El plazo se alarga $dias días.';
 }
 
 /// Un reto validado, listo para registrar.

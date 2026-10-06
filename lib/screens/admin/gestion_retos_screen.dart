@@ -254,16 +254,34 @@ class _Lista extends ConsumerWidget {
       ),
       itemCount: retos.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (context, i) => TarjetaRetoAdmin(reto: retos[i], hoy: hoy),
+      itemBuilder: (context, i) {
+        final reto = retos[i];
+        return TarjetaRetoAdmin(
+          reto: reto,
+          hoy: hoy,
+          // `push`: al volver, la gestión se refresca y muestra lo editado
+          // (SCRUM-152).
+          onTap: () =>
+              context.push('${GestionRetosScreen.ruta}/editar', extra: reto),
+        );
+      },
     );
   }
 }
 
 /// Un reto del catálogo, con lo que el administrador necesita reconocerlo.
 class TarjetaRetoAdmin extends StatelessWidget {
-  const TarjetaRetoAdmin({required this.reto, required this.hoy, super.key});
+  const TarjetaRetoAdmin({
+    required this.reto,
+    required this.hoy,
+    this.onTap,
+    super.key,
+  });
 
   final Reto reto;
+
+  /// Abre el reto para editarlo (SCRUM-148).
+  final VoidCallback? onTap;
 
   /// Desde cuándo se mira la vigencia, para decir si ya caducó.
   final DateTime hoy;
@@ -271,6 +289,7 @@ class TarjetaRetoAdmin extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TrazaCard(
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

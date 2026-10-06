@@ -11,9 +11,11 @@ import '../../models/tipo_actividad.dart';
 import '../../models/vigencia_reto.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
+import '../../services/retos_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/tarjeta_reto.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -37,6 +39,7 @@ class FormularioRetoScreen extends ConsumerStatefulWidget {
   static const claveVigencia = Key('reto-vigencia');
   static const claveRecorte = Key('reto-vigencia-recorte');
   static const claveExtender = Key('reto-extender-plazo');
+  static const claveConfirmar = Key('reto-confirmar-cambios');
 
   @override
   ConsumerState<FormularioRetoScreen> createState() =>
@@ -63,6 +66,10 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
 
   bool _guardando = false;
 
+  /// Cómo van los que ya tienen el reto. Nulo mientras no se sepa: al crear
+  /// no hay a quién mirar, y al editar tarda lo que tarde la consulta.
+  ProgresoEnCurso? _enCurso;
+
   @override
   void initState() {
     super.initState();
@@ -79,6 +86,22 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     _periodicidad = borrador.periodicidad;
     _tipoActividad = borrador.tipoActividad;
     _fin = borrador.fin;
+
+    _mirarComoVanLosCorredores(original);
+  }
+
+  /// Pregunta cómo van los corredores en cuanto se abre el formulario.
+  ///
+  /// Se consulta al entrar y no al guardar para que el administrador vea lo
+  /// que lleva la gente mientras decide la meta, en vez de enterarse cuando
+  /// ya la escribió. Si falla, se queda en nulo y el guardado sigue su curso:
+  /// la barrera de verdad es el trigger, no esta pantalla.
+  Future<void> _mirarComoVanLosCorredores(Reto original) async {
+    final enCurso = await ref
+        .read(edicionRetoProvider)
+        .comoVanLosCorredores(original);
+    if (!mounted) return;
+    setState(() => _enCurso = enCurso);
   }
 
   @override
@@ -112,6 +135,12 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     setState(() => _guardando = true);
     try {
       final original = widget.original;
+      if (original != null) {
+        if (_metaDejaAtrasAAlguien(original)) return;
+        if (!await _confirmadoSiAfectaAAlguien(original)) return;
+      }
+      if (!mounted) return;
+
       final resultado = original == null
           ? await ref.read(creacionRetoProvider).crear(_borrador)
           : await ref.read(edicionRetoProvider).guardar(original, _borrador);
@@ -136,6 +165,98 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  /// Si la meta escrita deja por debajo a alguien que ya corrió más.
+  ///
+  /// Bajarla ahí dejaría al corredor con 10 km de 9, en curso y sin cobrar:
+  /// nada reevalúa un reto cuando cambia su meta, solo lo hace el cierre de
+  /// un entrenamiento. Y si no vuelve a correr antes de que acabe el plazo,
+  /// pierde un reto que ya había cumplido.
+  ///
+  /// La regla está escrita dos veces a propósito: aquí, para explicarla antes
+  /// de intentar guardar, y en el trigger `retos_cambios_permitidos`
+  /// (0017_meta_no_baja_del_progreso.sql), que es el que de verdad la
+  /// sostiene — con la publishable key, cualquiera puede llamar a la API sin
+  /// pasar por esta pantalla.
+  bool _metaDejaAtrasAAlguien(Reto original) {
+    final maximo = _kmDelMasAdelantado;
+    final cambios = _borrador.aCambios(original);
+    // Inválido o sin nadie en curso: no es esta regla la que tiene algo que
+    // decir.
+    if (cambios == null || maximo <= 0 || cambios.metaKm >= maximo) {
+      return false;
+    }
+
+    setState(() {
+      _errores = {
+        ..._errores,
+        CampoReto.meta: EdicionReto.metaPorDebajoDeLoCorrido(
+          TarjetaReto.textoKm(maximo),
+        ),
+      };
+    });
+    mostrarToast(context, 'Revisa los campos marcados');
+    return true;
+  }
+
+  /// Lo que lleva el corredor más adelantado, mientras haya alguien.
+  ///
+  /// No se pinta como error: es el dato que hace falta para elegir la meta,
+  /// y el administrador no ha hecho nada mal por abrir el formulario.
+  String? get _notaDeLaMeta {
+    final maximo = _kmDelMasAdelantado;
+    if (maximo <= 0) return null;
+    return 'El que va más adelantado lleva ${TarjetaReto.textoKm(maximo)} km.';
+  }
+
+  /// Lo que lleva el corredor más adelantado, con los dos decimales con los
+  /// que se pintan los km.
+  ///
+  /// El progreso viene del GPS y trae más decimales de los que se ven.
+  /// Compararlo entero dejaría a la app rechazando el mismo número que acaba
+  /// de poner en pantalla: «ya lleva 10.3» y 10.3 no vale. El trigger redondea
+  /// igual, para que las dos reglas digan lo mismo.
+  double get _kmDelMasAdelantado =>
+      double.parse((_enCurso?.maximoKm ?? 0).toStringAsFixed(2));
+
+  /// Si se puede seguir adelante con el guardado.
+  ///
+  /// El criterio 2 de SCRUM-133 pide avisar antes de cambiarle las
+  /// condiciones a un reto que la gente ya está haciendo. Solo se pregunta
+  /// cuando hay las dos cosas: algo que el corredor nota y alguien a quien le
+  /// afecte. Un reto que nadie ha activado se guarda sin preguntar nada.
+  Future<bool> _confirmadoSiAfectaAAlguien(Reto original) async {
+    final cambios = _borrador.aCambios(original);
+    // Inválido: que lo diga la validación con sus mensajes por campo, no un
+    // diálogo.
+    if (cambios == null) return true;
+
+    final consecuencias = cambios.consecuenciasSobre(original);
+    if (consecuencias.isEmpty) return true;
+
+    // Lo que se consultó al abrir, salvo que todavía no hubiera llegado.
+    final enCurso =
+        _enCurso ??
+        await ref.read(edicionRetoProvider).comoVanLosCorredores(original);
+    // Nadie lo está haciendo: no hay a quién avisar.
+    if (enCurso.corredores == 0) return true;
+    if (!mounted) return false;
+
+    // El botón deja de girar mientras está el diálogo: la espera ya no es de
+    // la red, es de una persona decidiendo.
+    setState(() => _guardando = false);
+    final seguir = await showDialog<bool>(
+      context: context,
+      builder: (context) => _ConfirmarCambios(
+        corredores: enCurso.corredores,
+        consecuencias: consecuencias,
+      ),
+    );
+    if (seguir != true || !mounted) return false;
+
+    setState(() => _guardando = true);
+    return true;
   }
 
   @override
@@ -222,6 +343,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
                         pista: '5',
                         sufijo: 'km',
                         error: _errores[CampoReto.meta],
+                        nota: _notaDeLaMeta,
                         teclado: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
@@ -312,6 +434,7 @@ class _Campo extends StatelessWidget {
     required this.pista,
     required this.onCambio,
     this.error,
+    this.nota,
     this.sufijo,
     this.lineas = 1,
     this.maxCaracteres,
@@ -324,6 +447,11 @@ class _Campo extends StatelessWidget {
   final String pista;
   final VoidCallback onCambio;
   final String? error;
+
+  /// Un dato que ayuda a rellenar el campo. Se oculta mientras haya error:
+  /// lo urgente es lo que hay que corregir.
+  final String? nota;
+
   final String? sufijo;
   final int lineas;
   final int? maxCaracteres;
@@ -370,6 +498,16 @@ class _Campo extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.danger,
+              height: 1.4,
+            ),
+          ),
+        ] else if (nota case final nota?) ...[
+          const SizedBox(height: 6),
+          Text(
+            nota,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.ink2,
               height: 1.4,
             ),
           ),
@@ -567,6 +705,73 @@ class _BotonTipo extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// El aviso de que los cambios le tocan a gente que ya está haciendo el reto.
+class _ConfirmarCambios extends StatelessWidget {
+  const _ConfirmarCambios({
+    required this.corredores,
+    required this.consecuencias,
+  });
+
+  final int corredores;
+  final List<String> consecuencias;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Hay gente haciendo este reto'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            corredores == 1
+                ? '1 corredor lo tiene en curso.'
+                : '$corredores corredores lo tienen en curso.',
+            style: const TextStyle(fontSize: 13.5, color: AppColors.ink2),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Qué cambia exactamente, no un "esto afectará a los usuarios":
+          // la decisión es distinta si la meta sube que si la XP baja.
+          for (final consecuencia in consecuencias)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '· ',
+                    style: TextStyle(fontSize: 13.5, color: AppColors.ink),
+                  ),
+                  Expanded(
+                    child: Text(
+                      consecuencia,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: AppColors.ink,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          key: FormularioRetoScreen.claveConfirmar,
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Guardar igual'),
+        ),
+      ],
     );
   }
 }

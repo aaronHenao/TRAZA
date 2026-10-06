@@ -290,6 +290,30 @@ class EdicionReto {
   static const datosRechazados =
       'Revisa los datos del reto: la base no los aceptó.';
 
+  /// Lo que se le dice al administrador cuando la meta que escribió deja
+  /// atrás a quien ya corrió más que eso.
+  ///
+  /// [km] llega ya escrito: quien llama lo formatea con el mismo
+  /// `TarjetaReto.textoKm` con el que se pintan los km en toda la app.
+  static String metaPorDebajoDeLoCorrido(String km) =>
+      'Un corredor ya lleva $km km. La meta no puede bajar de ahí: lo '
+      'dejaría sin poder completarlo.';
+
+  /// Cómo van los corredores que están haciendo [reto] (SCRUM-151).
+  ///
+  /// Si la consulta falla se devuelve que no hay nadie: ni el aviso ni el
+  /// bloqueo de la meta son la barrera de verdad —esa es el trigger
+  /// `retos_cambios_permitidos`—, y no poder contarlos no es motivo para
+  /// impedirle al administrador guardar.
+  Future<ProgresoEnCurso> comoVanLosCorredores(Reto reto) async {
+    try {
+      return await _ref.read(retosRepositoryProvider).progresoEnCurso(reto);
+    } catch (error) {
+      debugPrint('No se pudo ver cómo van los corredores del reto: $error');
+      return (corredores: 0, maximoKm: 0.0);
+    }
+  }
+
   Future<ResultadoCreacionReto> guardar(
     Reto original,
     BorradorReto borrador,

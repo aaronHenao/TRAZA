@@ -13,11 +13,20 @@ import '../utiles/retos_repository_falso.dart';
 
 /// Doble que anota los cambios recibidos y responde lo que la prueba indique.
 class _RetosFalso extends RetosRepositorioFalso {
-  _RetosFalso({this.error});
+  _RetosFalso({this.error, this.enCurso});
 
   final Object? error;
+
+  /// Lo que responde al preguntar cómo van los corredores. Nulo para fallar,
+  /// como una consulta que no llega.
+  final ProgresoEnCurso? enCurso;
+
   CambiosReto? recibido;
   Reto? original;
+
+  @override
+  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async =>
+      enCurso ?? (throw Exception('sin red'));
 
   @override
   Future<Reto> editar(Reto original, CambiosReto cambios) async {
@@ -185,6 +194,39 @@ void main() {
       );
 
       expect((resultado as RetoNoGuardado).mensaje, EdicionReto.noSePudo);
+    });
+  });
+
+  group('cómo van los corredores (SCRUM-151)', () {
+    Future<ProgresoEnCurso> comoVan({ProgresoEnCurso? responde}) async {
+      final container = ProviderContainer(
+        overrides: [
+          retosRepositoryProvider.overrideWithValue(
+            _RetosFalso(enCurso: responde),
+          ),
+          relojProvider.overrideWithValue(() => ahora),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container
+          .read(edicionRetoProvider)
+          .comoVanLosCorredores(publicado);
+    }
+
+    test('devuelve cuántos son y lo que lleva el más adelantado', () async {
+      final enCurso = await comoVan(responde: (corredores: 3, maximoKm: 10.4));
+
+      expect(enCurso.corredores, 3);
+      expect(enCurso.maximoKm, 10.4);
+    });
+
+    test('si la consulta falla, responde que no hay nadie', () async {
+      // Ni el aviso ni el bloqueo de la meta son la barrera de verdad: esa es
+      // el trigger. No poder contarlos no deja al administrador sin guardar.
+      final enCurso = await comoVan();
+
+      expect(enCurso.corredores, 0);
+      expect(enCurso.maximoKm, 0);
     });
   });
 }

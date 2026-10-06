@@ -79,6 +79,13 @@ class RetoDelMismoHuecoException implements Exception {
       'periodicidad y ese tipo de actividad';
 }
 
+/// Cómo van los corredores que tienen un reto en curso (SCRUM-151).
+///
+/// `maximoKm` es lo que lleva el que va más adelantado, cero si no hay
+/// nadie. Van juntos porque salen de la misma consulta y se usan para lo
+/// mismo: decidir qué se le puede cambiar a un reto que la gente ya empezó.
+typedef ProgresoEnCurso = ({int corredores, double maximoKm});
+
 /// Acceso a la tabla `retos`.
 abstract interface class RetosRepository {
   /// Registra [reto] y devuelve la fila creada (SCRUM-143).
@@ -86,6 +93,13 @@ abstract interface class RetosRepository {
   /// Lo que vuelve trae el id y el estado que puso la base, no los que mandó
   /// el cliente.
   Future<Reto> crear(NuevoReto reto);
+
+  /// Cómo van los corredores que tienen [reto] en curso (SCRUM-151).
+  ///
+  /// Para avisar al administrador antes de cambiarle la meta o la XP a un
+  /// reto que la gente ya está intentando, y para no dejarle bajar la meta
+  /// por debajo de lo que alguien ya corrió.
+  Future<ProgresoEnCurso> progresoEnCurso(Reto reto);
 
   /// Guarda los cambios de un reto ya publicado y devuelve cómo quedó
   /// (SCRUM-147).
@@ -199,6 +213,33 @@ class SupabaseRetosRepository implements RetosRepository {
       }
       rethrow;
     }
+  }
+
+  @override
+  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async {
+    _usuarioId();
+
+    // `retos_usuario` solo deja ver al administrador las filas de todos
+    // (0008_retos_usuario.sql); un corredor contaría solo las suyas. Como
+    // esto únicamente se usa desde la pantalla del administrador, no hace
+    // falta distinguirlo aquí.
+    //
+    // El máximo se saca en Dart y no con una agregación de Postgres: son los
+    // corredores de un reto, no una tabla entera, y así la misma consulta
+    // sirve para contarlos.
+    final filas = await _cliente
+        .from(_tablaRetosUsuario)
+        .select('progreso_km')
+        .eq('reto_id', reto.id)
+        .eq('estado', EstadoRetoUsuario.enProgreso.valorDb);
+
+    var maximo = 0.0;
+    for (final fila in filas) {
+      final progreso = fila['progreso_km'];
+      if (progreso is num && progreso > maximo) maximo = progreso.toDouble();
+    }
+
+    return (corredores: filas.length, maximoKm: maximo);
   }
 
   @override

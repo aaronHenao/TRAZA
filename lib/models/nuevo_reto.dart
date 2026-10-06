@@ -258,6 +258,32 @@ class CambiosReto {
       '${vigencia.finTexto})';
 }
 
+/// Lo que un cambio le hace a quien ya está haciendo el reto (SCRUM-151).
+///
+/// Solo recoge lo que el corredor nota. Corregir el nombre o la descripción
+/// no cambia lo que tiene que hacer ni lo que va a ganar, así que no entra.
+extension ConsecuenciasParaElCorredor on CambiosReto {
+  /// Las frases que explican qué cambia, en el orden en que importan. Vacía
+  /// si nada de lo que el corredor nota se toca.
+  List<String> consecuenciasSobre(Reto original) => [
+    if (metaKm != original.metaKm)
+      'La meta pasa de ${_km(original.metaKm)} a ${_km(metaKm)} km, '
+          'con el progreso que ya llevan.',
+    if (xpOtorgada != original.xpOtorgada)
+      'La XP pasa de ${original.xpOtorgada} a $xpOtorgada.',
+    if (vigencia.fin != original.vigencia.fin)
+      _plazo(vigencia.dias - original.vigencia.dias),
+  ];
+
+  /// `5` en vez de `5.0`; `2.5` se queda igual.
+  static String _km(double valor) =>
+      valor == valor.roundToDouble() ? '${valor.round()}' : '$valor';
+
+  static String _plazo(int dias) => dias == 1
+      ? 'El plazo se alarga un día.'
+      : 'El plazo se alarga $dias días.';
+}
+
 /// Un reto validado, listo para registrar.
 ///
 /// Que exista una instancia significa que sus datos ya pasaron las reglas:

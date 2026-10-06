@@ -15,7 +15,19 @@ import 'package:traza/services/retos_service.dart';
 import '../utiles/retos_repository_falso.dart';
 
 class _RetosFalso extends RetosRepositorioFalso {
+  _RetosFalso({this.enCurso = 0, this.llevaMax = 0});
+
+  /// Cuántos corredores tienen el reto en curso.
+  final int enCurso;
+
+  /// Los km del que va más adelantado.
+  final double llevaMax;
+
   CambiosReto? recibido;
+
+  @override
+  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async =>
+      (corredores: enCurso, maximoKm: llevaMax);
 
   @override
   Future<Reto> editar(Reto original, CambiosReto cambios) async {
@@ -66,13 +78,18 @@ void main() {
 
   late _RetosFalso repositorio;
 
-  Future<void> abrir(WidgetTester tester, Reto original) async {
+  Future<void> abrir(
+    WidgetTester tester,
+    Reto original, {
+    int enCurso = 0,
+    double llevaMax = 0,
+  }) async {
     tester.view.physicalSize = const Size(390 * 3, 900 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    repositorio = _RetosFalso();
+    repositorio = _RetosFalso(enCurso: enCurso, llevaMax: llevaMax);
     // Con una pantalla detrás, como en la app: el formulario vuelve a ella
     // al guardar.
     final router = GoRouter(
@@ -244,6 +261,235 @@ void main() {
 
       expect(find.text('La meta debe ser mayor que cero.'), findsOneWidget);
       expect(repositorio.recibido, isNull);
+    });
+  });
+
+  group(
+    'avisar antes de cambiar lo que la gente esta haciendo (criterio 2)',
+    () {
+      Future<void> cambiarMeta(WidgetTester tester, String nueva) async {
+        await tester.enterText(find.widgetWithText(TextField, '15'), nueva);
+        await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('con gente en curso, cambiar la meta pregunta antes', (
+        tester,
+      ) async {
+        await abrir(tester, reto(), enCurso: 3);
+
+        await cambiarMeta(tester, '20');
+
+        expect(find.text('Hay gente haciendo este reto'), findsOneWidget);
+        expect(find.text('3 corredores lo tienen en curso.'), findsOneWidget);
+        // Todavia no se ha guardado nada.
+        expect(repositorio.recibido, isNull);
+      });
+
+      testWidgets('dice que cambia exactamente, no un aviso generico', (
+        tester,
+      ) async {
+        await abrir(tester, reto(), enCurso: 2);
+
+        await cambiarMeta(tester, '20');
+
+        expect(
+          find.text(
+            'La meta pasa de 15 a 20 km, con el progreso que ya llevan.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('con un solo corredor lo dice en singular', (tester) async {
+        await abrir(tester, reto(), enCurso: 1);
+
+        await cambiarMeta(tester, '20');
+
+        expect(find.text('1 corredor lo tiene en curso.'), findsOneWidget);
+      });
+
+      testWidgets('confirmar guarda los cambios', (tester) async {
+        await abrir(tester, reto(), enCurso: 3);
+        await cambiarMeta(tester, '20');
+
+        await tester.tap(find.byKey(FormularioRetoScreen.claveConfirmar));
+        await tester.pumpAndSettle();
+
+        expect(repositorio.recibido?.metaKm, 20);
+      });
+
+      testWidgets('cancelar no guarda y deja lo escrito', (tester) async {
+        await abrir(tester, reto(), enCurso: 3);
+        await cambiarMeta(tester, '20');
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(repositorio.recibido, isNull);
+        // Se vuelve al formulario con el cambio puesto: cancelar es "ahora no",
+        // no "descarta lo que escribi".
+        expect(find.text('Editar reto'), findsOneWidget);
+        expect(find.widgetWithText(TextField, '20'), findsOneWidget);
+      });
+
+      testWidgets('la XP tambien avisa', (tester) async {
+        await abrir(tester, reto(), enCurso: 2);
+
+        await tester.enterText(find.widgetWithText(TextField, '200'), '100');
+        await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+        await tester.pumpAndSettle();
+
+        expect(find.text('La XP pasa de 200 a 100.'), findsOneWidget);
+      });
+
+      testWidgets('extender el plazo tambien avisa', (tester) async {
+        await abrir(tester, reto(), enCurso: 2);
+
+        await tester.tap(find.byKey(FormularioRetoScreen.claveExtender));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+        await tester.pumpAndSettle();
+
+        expect(find.text('El plazo se alarga un día.'), findsOneWidget);
+      });
+
+      testWidgets('sin nadie en curso se guarda sin preguntar', (tester) async {
+        await abrir(tester, reto());
+
+        await cambiarMeta(tester, '20');
+
+        expect(find.text('Hay gente haciendo este reto'), findsNothing);
+        expect(repositorio.recibido?.metaKm, 20);
+      });
+
+      testWidgets('corregir solo el nombre no pregunta aunque haya gente', (
+        tester,
+      ) async {
+        // Lo que no cambia lo que hay que hacer ni lo que se gana no merece
+        // interrumpir al administrador.
+        await abrir(tester, reto(), enCurso: 5);
+
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Corre 15 km esta semana'),
+          'Corre 15 km (corregido)',
+        );
+        await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Hay gente haciendo este reto'), findsNothing);
+        expect(repositorio.recibido?.nombre, 'Corre 15 km (corregido)');
+      });
+
+      testWidgets('con datos invalidos se marcan los campos, no se pregunta', (
+        tester,
+      ) async {
+        await abrir(tester, reto(), enCurso: 3);
+
+        await cambiarMeta(tester, '0');
+
+        expect(find.text('Hay gente haciendo este reto'), findsNothing);
+        expect(find.text('La meta debe ser mayor que cero.'), findsOneWidget);
+      });
+    },
+  );
+
+  group('la meta no baja de lo que alguien ya corrio', () {
+    Future<void> cambiarMeta(WidgetTester tester, String nueva) async {
+      await tester.enterText(find.widgetWithText(TextField, '15'), nueva);
+      await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('al abrir ya dice cuanto lleva el mas adelantado', (
+      tester,
+    ) async {
+      // Antes de escribir nada: el dato que hace falta para elegir la meta,
+      // no un regano por haberla escrito mal (lleva 10 de 15).
+      await abrir(tester, reto(), enCurso: 2, llevaMax: 10);
+
+      expect(
+        find.text('El que va más adelantado lleva 10 km.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sin nadie en curso no habla de progreso ajeno', (
+      tester,
+    ) async {
+      await abrir(tester, reto());
+
+      expect(find.textContaining('más adelantado'), findsNothing);
+    });
+
+    testWidgets('bajarla por debajo de lo corrido no se guarda', (
+      tester,
+    ) async {
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+
+      await cambiarMeta(tester, '9');
+
+      expect(
+        find.text(
+          'Un corredor ya lleva 10 km. La meta no puede bajar de ahí: lo '
+          'dejaría sin poder completarlo.',
+        ),
+        findsOneWidget,
+      );
+      // Ni se pregunta ni se guarda: no es una decision del administrador,
+      // es un dato que no se puede sostener.
+      expect(find.text('Hay gente haciendo este reto'), findsNothing);
+      expect(repositorio.recibido, isNull);
+    });
+
+    testWidgets('puede quedar justo en lo que lleva el mas adelantado', (
+      tester,
+    ) async {
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+
+      await cambiarMeta(tester, '10');
+      await tester.tap(find.byKey(FormularioRetoScreen.claveConfirmar));
+      await tester.pumpAndSettle();
+
+      // Con 10 de 10 el reto se cierra en su proxima carrera, que es el
+      // comportamiento normal de cualquier reto cumplido.
+      expect(repositorio.recibido?.metaKm, 10);
+    });
+
+    testWidgets('bajarla sin dejar a nadie atras sigue siendo posible', (
+      tester,
+    ) async {
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+
+      await cambiarMeta(tester, '12');
+      await tester.tap(find.byKey(FormularioRetoScreen.claveConfirmar));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.recibido?.metaKm, 12);
+    });
+
+    testWidgets('subirla no mira lo que lleve nadie', (tester) async {
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+
+      await cambiarMeta(tester, '20');
+      await tester.tap(find.byKey(FormularioRetoScreen.claveConfirmar));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.recibido?.metaKm, 20);
+    });
+
+    testWidgets('corregido el numero, el campo deja de estar en rojo', (
+      tester,
+    ) async {
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+      await cambiarMeta(tester, '9');
+
+      await tester.enterText(find.widgetWithText(TextField, '9'), '11');
+      await tester.pump();
+
+      expect(find.textContaining('no puede bajar de ahí'), findsNothing);
     });
   });
 }

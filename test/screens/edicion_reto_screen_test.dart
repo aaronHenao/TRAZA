@@ -262,6 +262,35 @@ void main() {
       expect(find.text('La meta debe ser mayor que cero.'), findsOneWidget);
       expect(repositorio.recibido, isNull);
     });
+
+    testWidgets('ni una XP de cero', (tester) async {
+      await abrir(tester, reto());
+
+      await tester.enterText(find.widgetWithText(TextField, '200'), '0');
+      await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+      await tester.pumpAndSettle();
+
+      expect(find.text('La XP debe ser mayor que cero.'), findsOneWidget);
+      expect(repositorio.recibido, isNull);
+    });
+
+    testWidgets('lo escrito se queda donde estaba', (tester) async {
+      // El criterio 3 pide conservar la informacion anterior: ni se pierde
+      // lo que el administrador venia escribiendo ni se guarda a medias.
+      await abrir(tester, reto());
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Corre 15 km esta semana'),
+        'Corre 20 km esta semana',
+      );
+      await tester.enterText(find.widgetWithText(TextField, '15'), '0');
+      await tester.tap(find.byKey(FormularioRetoScreen.claveGuardar));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Corre 20 km esta semana'), findsOneWidget);
+      expect(find.text('0'), findsOneWidget);
+      expect(repositorio.recibido, isNull);
+    });
   });
 
   group(

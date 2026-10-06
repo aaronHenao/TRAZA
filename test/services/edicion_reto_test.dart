@@ -24,6 +24,14 @@ class _RetosFalso extends RetosRepositorioFalso {
   CambiosReto? recibido;
   Reto? original;
 
+  /// El catálogo, como lo devolvería la base: lo que `editar` guarda es lo
+  /// que la siguiente consulta encuentra.
+  final List<Reto> catalogo = [];
+
+  @override
+  Future<List<Reto>> vigentes({required DateTime hoy}) async =>
+      List.of(catalogo);
+
   @override
   Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async =>
       enCurso ?? (throw Exception('sin red'));
@@ -35,7 +43,7 @@ class _RetosFalso extends RetosRepositorioFalso {
     recibido = cambios;
 
     // Como la base: devuelve la fila tal como quedó.
-    return Reto(
+    final guardado = Reto(
       id: original.id,
       nombre: cambios.nombre,
       descripcion: cambios.descripcion,
@@ -46,6 +54,11 @@ class _RetosFalso extends RetosRepositorioFalso {
       estado: original.estado,
       tipoActividad: original.tipoActividad,
     );
+
+    final donde = catalogo.indexWhere((reto) => reto.id == original.id);
+    if (donde >= 0) catalogo[donde] = guardado;
+
+    return guardado;
   }
 }
 
@@ -194,6 +207,60 @@ void main() {
       );
 
       expect((resultado as RetoNoGuardado).mensaje, EdicionReto.noSePudo);
+    });
+  });
+
+  group('el catálogo se refresca tras guardar (SCRUM-152)', () {
+    /// Un contenedor con el catálogo ya cargado, como la pantalla de gestión
+    /// cuando el administrador entra a editar.
+    Future<(ProviderContainer, _RetosFalso)> conElCatalogoCargado() async {
+      final repositorio = _RetosFalso()..catalogo.add(publicado);
+      final container = ProviderContainer(
+        overrides: [
+          retosRepositoryProvider.overrideWithValue(repositorio),
+          relojProvider.overrideWithValue(() => ahora),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Con alguien escuchando, como la pantalla: el provider es autoDispose
+      // y sin suscripción se tiraría entre lecturas, refrescando por su
+      // cuenta y sin probar nada.
+      container.listen(catalogoRetosProvider, (_, _) {});
+      final catalogo = await container.read(catalogoRetosProvider.future);
+      expect(catalogo.single.metaKm, 15);
+
+      return (container, repositorio);
+    }
+
+    test('el catálogo pasa a dar el reto ya cambiado', () async {
+      final (container, _) = await conElCatalogoCargado();
+
+      await container
+          .read(edicionRetoProvider)
+          .guardar(
+            publicado,
+            BorradorReto.de(
+              publicado,
+            ).copyWith(nombre: 'Corre 20 km', meta: '20'),
+          );
+      final catalogo = await container.read(catalogoRetosProvider.future);
+
+      // Sin que nadie vuelva a entrar a la pantalla: lo pide el provider al
+      // quedar invalidado.
+      expect(catalogo.single.nombre, 'Corre 20 km');
+      expect(catalogo.single.metaKm, 20);
+    });
+
+    test('con datos inválidos el catálogo se queda como estaba', () async {
+      final (container, _) = await conElCatalogoCargado();
+
+      await container
+          .read(edicionRetoProvider)
+          .guardar(publicado, BorradorReto.de(publicado).copyWith(meta: '0'));
+      final catalogo = await container.read(catalogoRetosProvider.future);
+
+      expect(catalogo.single.metaKm, 15);
     });
   });
 

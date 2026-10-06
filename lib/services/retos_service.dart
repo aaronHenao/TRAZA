@@ -87,6 +87,13 @@ abstract interface class RetosRepository {
   /// el cliente.
   Future<Reto> crear(NuevoReto reto);
 
+  /// Guarda los cambios de un reto ya publicado y devuelve cómo quedó
+  /// (SCRUM-147).
+  ///
+  /// [original] es el reto tal como estaba: de ahí sale su id. Lo que no
+  /// aparece en [cambios] no se toca, ni se manda.
+  Future<Reto> editar(Reto original, CambiosReto cambios);
+
   /// Los retos del catálogo con el [estado] pedido, del más reciente al más
   /// antiguo.
   ///
@@ -184,6 +191,36 @@ class SupabaseRetosRepository implements RetosRepository {
       // La policy de insert exige es_admin(); sin ese rol, Postgres responde
       // que la fila viola la seguridad a nivel de fila.
       if (e.code == _rlsDenegado) throw const SoloAdministradorException();
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDeRetoInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Reto> editar(Reto original, CambiosReto cambios) async {
+    // Sin sesión, RLS rechazaría el update sin decir por qué; se corta antes
+    // para que el error hable de la sesión y no de los permisos.
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tabla)
+          .update(cambios.aSupabase())
+          .eq('id', original.id)
+          // Se devuelve la fila entera y no la de partida con los cambios
+          // encima: así lo que se pinta es lo que quedó guardado, incluido lo
+          // que la base haya dejado como estaba.
+          .select(_columnas)
+          .single();
+
+      return Reto.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      if (e.code == _rlsDenegado) throw const SoloAdministradorException();
+      // Mismo código para las restricciones de la tabla y para el trigger
+      // `retos_cambios_permitidos`: las dos dicen que el reto no puede quedar
+      // así, y el mensaje de Postgres explica cuál fue.
       if (e.code == _restriccionIncumplida) {
         throw DatosDeRetoInvalidosException(e.message);
       }

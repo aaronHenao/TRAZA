@@ -16,7 +16,7 @@ class VigenciaReto {
 
   /// Si comparte algún día con [otra].
   ///
-  /// Es el mismo criterio que el trigger de `0011_reto_tipo_actividad.sql`
+  /// Es el mismo criterio que el trigger de `0015_reto_tipo_actividad.sql`
   /// (`daterange && daterange`), y tiene que seguir siéndolo: aquí decide qué
   /// se ve bloqueado y allá qué se deja activar.
   bool solapaCon(VigenciaReto otra) =>

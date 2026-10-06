@@ -79,6 +79,22 @@ class RetoDelMismoHuecoException implements Exception {
       'periodicidad y ese tipo de actividad';
 }
 
+/// Se lanza al intentar retirar un reto que alguien todavía puede terminar
+/// (SCRUM-159).
+///
+/// Quien lo impide es el trigger `retos_cambios_permitidos`, que mira el
+/// plazo del reto en hora de Colombia: mientras siga vigente, cualquiera que
+/// lo tenga en curso puede cerrarlo hoy mismo, y retirarlo le quitaría la XP
+/// que está a punto de ganar.
+class RetoConCorredoresEnJuegoException implements Exception {
+  const RetoConCorredoresEnJuegoException();
+
+  @override
+  String toString() =>
+      'RetoConCorredoresEnJuegoException: el reto sigue vigente y hay quien '
+      'lo tiene en curso';
+}
+
 /// Cómo van los corredores que tienen un reto en curso (SCRUM-151).
 ///
 /// `maximoKm` es lo que lleva el que va más adelantado, cero si no hay
@@ -100,6 +116,14 @@ abstract interface class RetosRepository {
   /// reto que la gente ya está intentando, y para no dejarle bajar la meta
   /// por debajo de lo que alguien ya corrió.
   Future<ProgresoEnCurso> progresoEnCurso(Reto reto);
+
+  /// Retira [reto] del catálogo y devuelve cómo quedó (SCRUM-155).
+  ///
+  /// Es una baja lógica: la fila se queda y solo cambia de estado
+  /// (SCRUM-157). `retos` no tiene policy de delete, así que no hay forma de
+  /// borrarla ni queriendo — el historial y la XP de los corredores siguen
+  /// apuntando a ella.
+  Future<Reto> retirar(Reto reto);
 
   /// Guarda los cambios de un reto ya publicado y devuelve cómo quedó
   /// (SCRUM-147).
@@ -272,6 +296,37 @@ class SupabaseRetosRepository implements RetosRepository {
       // así, y el mensaje de Postgres explica cuál fue.
       if (e.code == _restriccionIncumplida) {
         throw DatosDeRetoInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Reto> retirar(Reto reto) async {
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tabla)
+          // Lo único que se manda es el estado. Un `update` con el reto
+          // entero volvería a pasar por el trigger con todas sus columnas y
+          // podría chocar con reglas que no tienen nada que ver con retirar.
+          .update({'estado': EstadoReto.retirado.valorDb})
+          .eq('id', reto.id)
+          .select(_columnas)
+          .single();
+
+      return Reto.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      if (e.code == _rlsDenegado) throw const SoloAdministradorException();
+      // En un update, RLS no responde "prohibido": esconde la fila y no
+      // queda ninguna que devolver. Y un reto no desaparece, porque la tabla
+      // no tiene policy de delete.
+      if (e.code == _sinFilas) throw const SoloAdministradorException();
+      // La única comprobación que puede saltar aquí es la de SCRUM-159: el
+      // update no toca ninguna de las columnas que vigilan las demás.
+      if (e.code == _restriccionIncumplida) {
+        throw const RetoConCorredoresEnJuegoException();
       }
       rethrow;
     }

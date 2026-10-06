@@ -350,6 +350,65 @@ class EdicionReto {
   }
 }
 
+/// Cómo terminó un intento de retirar un reto.
+sealed class ResultadoRetirada {
+  const ResultadoRetirada();
+}
+
+/// El reto salió del catálogo. La fila sigue ahí, con otro estado.
+class RetoRetirado extends ResultadoRetirada {
+  const RetoRetirado(this.reto);
+
+  final Reto reto;
+}
+
+/// No se pudo retirar, y hay algo que explicarle al administrador.
+class RetoNoRetirado extends ResultadoRetirada {
+  const RetoNoRetirado(this.mensaje);
+
+  final String mensaje;
+}
+
+/// Retirada de retos (SCRUM-155).
+final retiradaRetoProvider = Provider<RetiradaReto>(RetiradaReto.new);
+
+/// Saca un reto del catálogo sin borrarlo (SCRUM-134).
+class RetiradaReto {
+  const RetiradaReto(this._ref);
+
+  final Ref _ref;
+
+  static const sinSesion = 'Inicia sesión para retirar retos.';
+  static const soloAdministrador = 'Solo el administrador puede retirar retos.';
+  static const corredoresEnJuego =
+      'Hay corredores que todavía pueden completarlo. Podrás retirarlo '
+      'cuando se acabe su plazo.';
+  static const noSePudo = 'No se pudo retirar el reto. Inténtalo de nuevo.';
+
+  Future<ResultadoRetirada> retirar(Reto reto) async {
+    try {
+      final retirado = await _ref.read(retosRepositoryProvider).retirar(reto);
+
+      // Desaparece de la gestión y del catálogo del corredor. También de sus
+      // retos activados, que llevan el reto embebido y lo seguirían dando
+      // por publicado (SCRUM-158).
+      _ref.invalidate(catalogoRetosProvider);
+      _ref.invalidate(retosVigentesProvider);
+      _ref.invalidate(misRetosProvider);
+      return RetoRetirado(retirado);
+    } on SesionRequeridaParaRetosException {
+      return const RetoNoRetirado(sinSesion);
+    } on SoloAdministradorException {
+      return const RetoNoRetirado(soloAdministrador);
+    } on RetoConCorredoresEnJuegoException {
+      return const RetoNoRetirado(corredoresEnJuego);
+    } catch (error) {
+      debugPrint('No se pudo retirar el reto: $error');
+      return const RetoNoRetirado(noSePudo);
+    }
+  }
+}
+
 /// Creación de retos (SCRUM-143).
 final creacionRetoProvider = Provider<CreacionReto>(CreacionReto.new);
 

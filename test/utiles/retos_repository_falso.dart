@@ -17,6 +17,9 @@ abstract class RetosRepositorioFalso implements RetosRepository {
       throw UnimplementedError();
 
   @override
+  Future<Reto> retirar(Reto reto) => throw UnimplementedError();
+
+  @override
   Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async =>
       (corredores: 0, maximoKm: 0.0);
 

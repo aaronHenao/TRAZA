@@ -3,15 +3,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:traza/models/nivel.dart';
 import 'package:traza/models/runner_experto.dart';
 import 'package:traza/screens/home/runner_experto_screen.dart';
 import 'package:traza/services/auth_service.dart';
 import 'package:traza/services/experiencia_service.dart';
+import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 
 import '../utiles/experiencia_falsa.dart';
+import '../utiles/niveles_falso.dart';
 
 class _MockAuthService extends Mock implements AuthService {}
+
+/// Un mapa de [cantidad] niveles, el primero en [paso] XP y cada uno [paso]
+/// más arriba que el anterior.
+List<Nivel> _mapa(int cantidad, {int paso = 100}) => [
+  for (var i = 1; i <= cantidad; i++)
+    Nivel(id: 'n$i', nombre: 'Etapa $i', umbralExperiencia: i * paso),
+];
 
 /// Pruebas de la pantalla de Runner Experto (SCRUM-212 a SCRUM-215).
 void main() {
@@ -32,12 +42,17 @@ void main() {
     await _montar(
       tester,
       experiencia: 1250,
+      niveles: _mapa(11, paso: 1000),
       fechaRegistro: DateTime(2026, 7, 1),
       ahora: hoy,
     );
 
     expect(texto(tester, RunnerExpertoScreen.claveEstado), 'Bloqueado');
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
+    expect(
+      texto(tester, RunnerExpertoScreen.claveNiveles),
+      contains('Vas en el nivel 1, Etapa 1. Te faltan 10 niveles.'),
+    );
     expect(
       texto(tester, RunnerExpertoScreen.claveExperiencia),
       contains('Llevas 1.250 XP. Te faltan 148.750 XP.'),
@@ -51,11 +66,12 @@ void main() {
     );
   });
 
-  testWidgets('los requisitos dicen la meta: 150.000 XP y 6 meses', (
+  testWidgets('los requisitos dicen la meta: nivel 10, 150.000 XP y 6 meses', (
     tester,
   ) async {
     await _montar(tester, experiencia: 0, fechaRegistro: antiguo, ahora: hoy);
 
+    expect(find.text('Superar el nivel 10 del mapa'), findsOneWidget);
     expect(find.text('150.000 XP acumulados'), findsOneWidget);
     expect(find.text('6 meses usando TRAZA'), findsOneWidget);
   });
@@ -72,7 +88,80 @@ void main() {
     expect(texto(tester, RunnerExpertoScreen.claveEstado), 'Bloqueado');
   });
 
-  testWidgets('con los dos requisitos queda desbloqueado, sin candado', (
+  testWidgets('con la XP y la antigüedad pero sin superar el nivel 10 sigue '
+      'bloqueado', (tester) async {
+    await _montar(
+      tester,
+      experiencia: 150000,
+      niveles: _mapa(11, paso: 15000),
+      fechaRegistro: antiguo,
+      ahora: hoy,
+    );
+
+    expect(texto(tester, RunnerExpertoScreen.claveEstado), 'Bloqueado');
+    expect(
+      texto(tester, RunnerExpertoScreen.claveNiveles),
+      contains('Vas en el nivel 10, Etapa 10. Te falta 1 nivel.'),
+    );
+    expect(
+      find.text('Cumple los tres requisitos para desbloquear el rol.'),
+      findsOneWidget,
+    );
+  });
+
+  group('requisito de niveles (SCRUM-227)', () {
+    testWidgets('sin ningún nivel alcanzado le faltan los 11', (tester) async {
+      await _montar(
+        tester,
+        experiencia: 50,
+        fechaRegistro: antiguo,
+        ahora: hoy,
+      );
+
+      expect(
+        texto(tester, RunnerExpertoScreen.claveNiveles),
+        contains('Aún no alcanzas el primer nivel. Te faltan 11 niveles.'),
+      );
+    });
+
+    testWidgets('si el mapa no llega a 11 niveles lo avisa', (tester) async {
+      await _montar(
+        tester,
+        experiencia: 450,
+        niveles: _mapa(8),
+        fechaRegistro: antiguo,
+        ahora: hoy,
+      );
+
+      expect(
+        texto(tester, RunnerExpertoScreen.claveNiveles),
+        contains(
+          'Vas en el nivel 4, Etapa 4. Te faltan 7 niveles. Por ahora el '
+          'mapa tiene 8 niveles.',
+        ),
+      );
+    });
+
+    testWidgets('sin niveles en el mapa lo dice', (tester) async {
+      await _montar(
+        tester,
+        experiencia: 450,
+        niveles: const [],
+        fechaRegistro: antiguo,
+        ahora: hoy,
+      );
+
+      expect(
+        texto(tester, RunnerExpertoScreen.claveNiveles),
+        contains(
+          'Aún no alcanzas el primer nivel. Te faltan 11 niveles. Por ahora '
+          'el mapa no tiene niveles.',
+        ),
+      );
+    });
+  });
+
+  testWidgets('con los tres requisitos queda desbloqueado, sin candado', (
     tester,
   ) async {
     await _montar(
@@ -84,6 +173,10 @@ void main() {
 
     expect(texto(tester, RunnerExpertoScreen.claveEstado), 'Desbloqueado');
     expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
+    expect(
+      texto(tester, RunnerExpertoScreen.claveNiveles),
+      contains('Cumplido: vas en el nivel 11, Etapa 11.'),
+    );
     expect(
       texto(tester, RunnerExpertoScreen.claveExperiencia),
       contains('Cumplido: tienes 150.000 XP.'),
@@ -123,6 +216,31 @@ void main() {
       );
     });
 
+    testWidgets('si los niveles no cargan, lo dice y deja reintentar', (
+      tester,
+    ) async {
+      final niveles = NivelesFalso(catalogo: _mapa(11))
+        ..errorAlListar = Exception('sin red');
+      await _montar(
+        tester,
+        experiencia: 450,
+        repositorioNiveles: niveles,
+        fechaRegistro: antiguo,
+        ahora: hoy,
+      );
+
+      expect(find.text('No pudimos cargar tu estado'), findsOneWidget);
+
+      niveles.errorAlListar = null;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        texto(tester, RunnerExpertoScreen.claveNiveles),
+        contains('Vas en el nivel 4, Etapa 4.'),
+      );
+    });
+
     testWidgets('sin sesión no inventa una fecha: muestra el error', (
       tester,
     ) async {
@@ -153,6 +271,8 @@ Future<void> _montar(
   required DateTime ahora,
   int experiencia = 0,
   ExperienciaFalsa? repositorio,
+  List<Nivel>? niveles,
+  NivelesFalso? repositorioNiveles,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -179,6 +299,11 @@ Future<void> _montar(
         authServiceProvider.overrideWithValue(auth),
         experienciaRepositoryProvider.overrideWithValue(
           repositorio ?? ExperienciaFalsa(acumulada: experiencia),
+        ),
+        // Por defecto, once niveles que se alcanzan con 1.100 XP: no
+        // estorban cuando la prueba mira otro requisito.
+        nivelesRepositoryProvider.overrideWithValue(
+          repositorioNiveles ?? NivelesFalso(catalogo: niveles ?? _mapa(11)),
         ),
         relojProvider.overrideWithValue(() => ahora),
       ],

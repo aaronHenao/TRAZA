@@ -21,6 +21,7 @@ class RunnerExpertoScreen extends ConsumerWidget {
   static const ruta = '/runner-experto';
 
   static const claveEstado = Key('runner-experto-estado');
+  static const claveNiveles = Key('runner-experto-niveles');
   static const claveExperiencia = Key('runner-experto-experiencia');
   static const claveAntiguedad = Key('runner-experto-antiguedad');
 
@@ -84,6 +85,18 @@ class _Detalle extends StatelessWidget {
           child: Column(
             children: [
               _Requisito(
+                key: RunnerExpertoScreen.claveNiveles,
+                icono: Icons.flag_rounded,
+                // Se pide superar ese nivel: alcanzar uno más (SCRUM-227).
+                titulo:
+                    'Superar el nivel '
+                    '${RequisitosRunnerExperto.nivelesAlcanzados - 1} del mapa',
+                cumplido: estado.cumpleNiveles,
+                avance: estado.avanceNiveles,
+                detalle: _detalleNiveles(estado),
+              ),
+              const Divider(height: AppSpacing.xl, color: AppColors.line),
+              _Requisito(
                 key: RunnerExpertoScreen.claveExperiencia,
                 icono: Icons.bolt_rounded,
                 titulo:
@@ -128,6 +141,30 @@ class _Detalle extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static String _detalleNiveles(EstadoRunnerExperto estado) {
+    final actual = estado.nivelActual;
+    if (estado.cumpleNiveles) {
+      return 'Cumplido: vas en el nivel ${estado.nivelesAlcanzados}, '
+          '${actual!.nombre}.';
+    }
+
+    final dondeVa = actual == null
+        ? 'Aún no alcanzas el primer nivel.'
+        : 'Vas en el nivel ${estado.nivelesAlcanzados}, ${actual.nombre}.';
+    final faltan = estado.nivelesFaltantes;
+    final cuantos = faltan == 1
+        ? 'Te falta 1 nivel.'
+        : 'Te faltan $faltan niveles.';
+    // Sin esto parecería que basta con correr, y el mapa no llega tan lejos.
+    final enMapa = !estado.faltanNivelesEnMapa
+        ? ''
+        : estado.nivelesEnMapa == 0
+        ? ' Por ahora el mapa no tiene niveles.'
+        : ' Por ahora el mapa tiene ${estado.nivelesEnMapa} '
+              '${estado.nivelesEnMapa == 1 ? 'nivel' : 'niveles'}.';
+    return '$dondeVa $cuantos$enMapa';
   }
 
   static String _detalleAntiguedad(EstadoRunnerExperto estado) {
@@ -211,7 +248,7 @@ class _Cabecera extends StatelessWidget {
         Text(
           desbloqueado
               ? 'Cumples los requisitos para ser Runner Experto.'
-              : 'Cumple los dos requisitos para desbloquear el rol.',
+              : 'Cumple los tres requisitos para desbloquear el rol.',
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 13, color: AppColors.ink2),
         ),

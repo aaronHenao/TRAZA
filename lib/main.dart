@@ -118,6 +118,16 @@ final _navegacion = GoRouter(
           path: 'nuevo',
           builder: (context, state) => const FormularioRetoScreen(),
         ),
+        // El reto a editar viaja en `extra`: la gestión ya lo tiene cargado y
+        // volver a pedirlo por id sería consultar dos veces lo mismo. Si
+        // alguien llega aquí sin él (escribiendo la dirección), el formulario
+        // se abre en modo creación, que es lo único que puede hacer sin saber
+        // qué reto edita.
+        GoRoute(
+          path: 'editar',
+          builder: (context, state) =>
+              FormularioRetoScreen(original: state.extra as Reto?),
+        ),
       ],
     ),
     // Gestión de niveles de progresión (SCRUM-177), con su formulario. Ambas

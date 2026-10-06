@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/nuevo_reto.dart';
 import '../../models/periodicidad_reto.dart';
+import '../../models/reto.dart';
 import '../../services/actividad_provider.dart';
 import '../../models/tipo_actividad.dart';
 import '../../models/vigencia_reto.dart';
@@ -16,17 +17,26 @@ import '../../widgets/ancho_contenido.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
-/// Formulario de creación de retos (SCRUM-139), con sus validaciones
-/// (SCRUM-144).
+/// Formulario de retos: crea uno nuevo (SCRUM-139) o edita uno publicado
+/// (SCRUM-149), con las mismas validaciones (SCRUM-144).
 ///
-/// El administrador no escribe las fechas: elige la periodicidad y la vigencia
-/// se calcula sola (SCRUM-142). Aquí solo se ve.
+/// Al crear, el administrador no escribe las fechas: elige la periodicidad y
+/// la vigencia se calcula sola (SCRUM-142). Al editar, lo único que puede
+/// mover de la vigencia es el final, y solo hacia adelante.
 class FormularioRetoScreen extends ConsumerStatefulWidget {
-  const FormularioRetoScreen({super.key});
+  const FormularioRetoScreen({this.original, super.key});
+
+  /// El reto que se está editando, o null si se está creando uno.
+  ///
+  /// De él salen los valores de partida y lo que ya no se puede cambiar.
+  final Reto? original;
+
+  bool get editando => original != null;
 
   static const claveGuardar = Key('reto-guardar');
   static const claveVigencia = Key('reto-vigencia');
   static const claveRecorte = Key('reto-vigencia-recorte');
+  static const claveExtender = Key('reto-extender-plazo');
 
   @override
   ConsumerState<FormularioRetoScreen> createState() =>
@@ -42,12 +52,34 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
   PeriodicidadReto? _periodicidad;
   TipoActividad? _tipoActividad;
 
+  /// Hasta cuándo dura. Solo se usa al editar: al crear lo pone la
+  /// periodicidad.
+  DateTime? _fin;
+
   /// Los errores solo se pintan después del primer intento de guardar. Marcar
   /// en rojo lo que el administrador todavía no ha llegado a escribir sería
   /// regañarlo por adelantado.
   Map<CampoReto, String> _errores = const {};
 
   bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final original = widget.original;
+    if (original == null) return;
+
+    // Editar empieza por lo que ya está publicado: el administrador corrige,
+    // no vuelve a escribirlo todo.
+    final borrador = BorradorReto.de(original);
+    _nombre.text = borrador.nombre;
+    _descripcion.text = borrador.descripcion;
+    _meta.text = borrador.meta;
+    _xp.text = borrador.xp;
+    _periodicidad = borrador.periodicidad;
+    _tipoActividad = borrador.tipoActividad;
+    _fin = borrador.fin;
+  }
 
   @override
   void dispose() {
@@ -63,6 +95,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     descripcion: _descripcion.text,
     periodicidad: _periodicidad,
     tipoActividad: _tipoActividad,
+    fin: _fin,
     meta: _meta.text,
     xp: _xp.text,
   );
@@ -78,15 +111,21 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     if (_guardando) return;
     setState(() => _guardando = true);
     try {
-      final resultado = await ref.read(creacionRetoProvider).crear(_borrador);
+      final original = widget.original;
+      final resultado = original == null
+          ? await ref.read(creacionRetoProvider).crear(_borrador)
+          : await ref.read(edicionRetoProvider).guardar(original, _borrador);
       if (!mounted) return;
 
       switch (resultado) {
         case RetoCreado():
-          // `pop`: la gestión de retos se refresca al recibir el control y el
-          // reto recién creado aparece en el catálogo (criterio 1).
+          // `pop`: la gestión de retos se refresca al recibir el control y lo
+          // guardado aparece en el catálogo (criterio 1).
           context.pop();
-          mostrarToast(context, 'Reto creado y activo');
+          mostrarToast(
+            context,
+            original == null ? 'Reto creado y activo' : 'Cambios guardados',
+          );
         case RetoConErrores(:final errores):
           setState(() => _errores = errores);
           mostrarToast(context, 'Revisa los campos marcados');
@@ -106,7 +145,10 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
         child: AnchoContenido(
           child: Column(
             children: [
-              TrazaTopBar(titulo: 'Nuevo reto', onAtras: context.pop),
+              TrazaTopBar(
+                titulo: widget.editando ? 'Editar reto' : 'Nuevo reto',
+                onAtras: context.pop,
+              ),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(
@@ -139,6 +181,10 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
                     _Periodicidad(
                       elegida: _periodicidad,
                       error: _errores[CampoReto.periodicidad],
+                      // Al editar se ve, pero no se toca: cambiarla
+                      // recalcularía la vigencia de un reto que la gente ya
+                      // puede estar cumpliendo.
+                      fijo: widget.editando,
                       onElegir: (periodicidad) => setState(() {
                         _periodicidad = periodicidad;
                         _errores = {..._errores}
@@ -149,6 +195,10 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
                     _TipoActividad(
                       elegido: _tipoActividad,
                       error: _errores[CampoReto.tipoActividad],
+                      // Igual: el tipo y la periodicidad deciden en qué hueco
+                      // cae el reto, y moverlo dejaría a quien lo tenga
+                      // activo con dos del mismo.
+                      fijo: widget.editando,
                       onElegir: (tipo) => setState(() {
                         _tipoActividad = tipo;
                         _errores = {..._errores}
@@ -156,7 +206,14 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
                       }),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    _Vigencia(periodicidad: _periodicidad),
+                    if (widget.original case final original?)
+                      _VigenciaEditable(
+                        original: original,
+                        fin: _fin ?? original.vigencia.fin,
+                        onExtender: (fecha) => setState(() => _fin = fecha),
+                      )
+                    else
+                      _Vigencia(periodicidad: _periodicidad),
                     const SizedBox(height: AppSpacing.md),
                     _MetaYXp(
                       meta: _Campo(
@@ -187,12 +244,13 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    const _AvisoActivo(),
+                    if (!widget.editando) const _AvisoActivo(),
                   ],
                 ),
               ),
               _PieConBoton(
                 guardando: _guardando,
+                texto: widget.editando ? 'Guardar cambios' : 'Crear reto',
                 onGuardar: _guardando ? null : _guardar,
               ),
             ],
@@ -332,11 +390,16 @@ class _Periodicidad extends StatelessWidget {
     required this.elegida,
     required this.onElegir,
     this.error,
+    this.fijo = false,
   });
 
   final PeriodicidadReto? elegida;
   final ValueChanged<PeriodicidadReto> onElegir;
   final String? error;
+
+  /// Se ve, pero no se toca. Al editar, lo que ya está elegido explica el
+  /// reto; esconderlo dejaría al administrador sin saber qué está editando.
+  final bool fijo;
 
   static Key claveDe(PeriodicidadReto periodicidad) =>
       Key('periodicidad-${periodicidad.valorDb}');
@@ -346,14 +409,7 @@ class _Periodicidad extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Periodicidad',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-          ),
-        ),
+        _EtiquetaCampo(texto: 'Periodicidad', fijo: fijo),
         const SizedBox(height: 7),
         Container(
           padding: const EdgeInsets.all(4),
@@ -367,14 +423,17 @@ class _Periodicidad extends StatelessWidget {
           child: Row(
             children: [
               for (final periodicidad in PeriodicidadReto.values)
-                Expanded(
-                  child: _BotonPeriodicidad(
-                    key: claveDe(periodicidad),
-                    periodicidad: periodicidad,
-                    activa: periodicidad == elegida,
-                    onTap: () => onElegir(periodicidad),
+                // Fijo: solo queda el elegido. Tres botones de los que dos no
+                // responden se leen como una pantalla rota.
+                if (!fijo || periodicidad == elegida)
+                  Expanded(
+                    child: _BotonPeriodicidad(
+                      key: claveDe(periodicidad),
+                      periodicidad: periodicidad,
+                      activa: periodicidad == elegida,
+                      onTap: fijo ? null : () => onElegir(periodicidad),
+                    ),
                   ),
-                ),
             ],
           ),
         ),
@@ -400,11 +459,15 @@ class _TipoActividad extends ConsumerWidget {
     required this.elegido,
     required this.onElegir,
     this.error,
+    this.fijo = false,
   });
 
   final TipoActividad? elegido;
   final ValueChanged<TipoActividad> onElegir;
   final String? error;
+
+  /// Se ve, pero no se toca. Ver [_Periodicidad.fijo].
+  final bool fijo;
 
   static Key claveDe(String nombre) => Key('tipo-actividad-$nombre');
 
@@ -415,14 +478,7 @@ class _TipoActividad extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Tipo de actividad',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-          ),
-        ),
+        _EtiquetaCampo(texto: 'Tipo de actividad', fijo: fijo),
         const SizedBox(height: 7),
         switch (catalogo) {
           AsyncData(value: final tipos) => Container(
@@ -437,14 +493,15 @@ class _TipoActividad extends ConsumerWidget {
             child: Row(
               children: [
                 for (final tipo in ordenarTiposActividad(tipos))
-                  Expanded(
-                    child: _BotonTipo(
-                      key: claveDe(tipo.nombre),
-                      tipo: tipo,
-                      activo: tipo == elegido,
-                      onTap: () => onElegir(tipo),
+                  if (!fijo || tipo == elegido)
+                    Expanded(
+                      child: _BotonTipo(
+                        key: claveDe(tipo.nombre),
+                        tipo: tipo,
+                        activo: tipo == elegido,
+                        onTap: fijo ? null : () => onElegir(tipo),
+                      ),
                     ),
-                  ),
               ],
             ),
           ),
@@ -486,7 +543,7 @@ class _BotonTipo extends StatelessWidget {
 
   final TipoActividad tipo;
   final bool activo;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -514,6 +571,159 @@ class _BotonTipo extends StatelessWidget {
   }
 }
 
+/// La etiqueta de un campo, que dice "No se cambia" cuando no se puede
+/// editar.
+///
+/// El motivo va en la pantalla y no solo en el código: un campo que no
+/// responde sin explicar por qué parece averiado.
+class _EtiquetaCampo extends StatelessWidget {
+  const _EtiquetaCampo({required this.texto, required this.fijo});
+
+  final String texto;
+  final bool fijo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // Flexible: con el texto del sistema agrandado, en 320 px la etiqueta
+        // y su aclaración no caben de lado a lado.
+        Flexible(
+          child: Text(
+            texto,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+        ),
+        if (fijo) ...[
+          const SizedBox(width: 6),
+          const Flexible(
+            child: Text(
+              '· No se cambia',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: AppColors.ink3),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// La vigencia al editar: fija salvo el final, que solo se puede alargar.
+class _VigenciaEditable extends ConsumerWidget {
+  const _VigenciaEditable({
+    required this.original,
+    required this.fin,
+    required this.onExtender,
+  });
+
+  final Reto original;
+
+  /// El final elegido, que de partida es el que ya tenía.
+  final DateTime fin;
+
+  final ValueChanged<DateTime> onExtender;
+
+  bool get _extendido => fin.isAfter(original.vigencia.fin);
+
+  Future<void> _elegirFecha(BuildContext context) async {
+    // Desde el día siguiente al final actual: acortar el plazo dejaría sin
+    // tiempo a quien va cumpliendo el reto, así que no es que esté prohibido,
+    // es que el calendario no lo ofrece.
+    final primera = original.vigencia.fin.add(const Duration(days: 1));
+
+    final elegida = await showDatePicker(
+      context: context,
+      // Nunca antes de `primera`: showDatePicker exige que el día en el que
+      // abre esté dentro del rango, y el final actual queda justo fuera.
+      initialDate: fin.isBefore(primera) ? primera : fin,
+      firstDate: primera,
+      lastDate: DateTime(original.vigencia.fin.year + 2),
+      helpText: 'Hasta cuándo dura el reto',
+    );
+    if (elegida != null) onExtender(elegida);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      key: FormularioRetoScreen.claveVigencia,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgAlt,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryTint,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.calendar_today_outlined,
+                  size: 17,
+                  color: AppColors.secondaryDark,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Del ${_Vigencia.fechaCorta(original.vigencia.inicio)} '
+                      'al ${_Vigencia.fechaCorta(fin)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _extendido
+                          ? 'Se guardará con el plazo alargado.'
+                          : 'El plazo solo se puede alargar.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.ink2,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            key: FormularioRetoScreen.claveExtender,
+            onPressed: () => _elegirFecha(context),
+            icon: const Icon(Icons.more_time, size: 18),
+            label: Text(_extendido ? 'Cambiar el plazo' : 'Extender el plazo'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(40),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BotonPeriodicidad extends StatelessWidget {
   const _BotonPeriodicidad({
     required this.periodicidad,
@@ -524,7 +734,7 @@ class _BotonPeriodicidad extends StatelessWidget {
 
   final PeriodicidadReto periodicidad;
   final bool activa;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -584,6 +794,11 @@ class _Vigencia extends ConsumerWidget {
 
   static String _fecha(DateTime dia) =>
       '${_dias[dia.weekday - 1]} ${dia.day} de ${_meses[dia.month - 1]}';
+
+  /// Sin el día de la semana: al editar se muestran dos fechas seguidas y el
+  /// nombre del día las haría ilegibles.
+  static String fechaCorta(DateTime dia) =>
+      '${dia.day} de ${_meses[dia.month - 1]}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -750,9 +965,14 @@ class _AvisoActivo extends StatelessWidget {
 }
 
 class _PieConBoton extends StatelessWidget {
-  const _PieConBoton({required this.guardando, required this.onGuardar});
+  const _PieConBoton({
+    required this.guardando,
+    required this.texto,
+    required this.onGuardar,
+  });
 
   final bool guardando;
+  final String texto;
   final VoidCallback? onGuardar;
 
   @override
@@ -781,7 +1001,7 @@ class _PieConBoton extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : const Text('Crear reto'),
+            : Text(texto),
       ),
     );
   }

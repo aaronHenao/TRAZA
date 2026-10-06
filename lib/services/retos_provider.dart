@@ -269,6 +269,63 @@ class ActivacionReto {
   }
 }
 
+/// Edición de retos ya publicados (SCRUM-147).
+final edicionRetoProvider = Provider<EdicionReto>(EdicionReto.new);
+
+/// Une la validación del borrador con el guardado de los cambios.
+///
+/// Reaprovecha [ResultadoCreacionReto]: los tres desenlaces son los mismos
+/// —quedó guardado, hay campos que corregir, o no se pudo— y darles nombres
+/// distintos obligaría a la pantalla a tratar dos veces lo mismo.
+class EdicionReto {
+  const EdicionReto(this._ref);
+
+  final Ref _ref;
+
+  static const sinSesion = 'Inicia sesión para editar retos.';
+  static const soloAdministrador = 'Solo el administrador puede editar retos.';
+  static const noSePudo =
+      'No se pudieron guardar los cambios. Inténtalo de '
+      'nuevo.';
+  static const datosRechazados =
+      'Revisa los datos del reto: la base no los aceptó.';
+
+  Future<ResultadoCreacionReto> guardar(
+    Reto original,
+    BorradorReto borrador,
+  ) async {
+    final cambios = borrador.aCambios(original);
+    if (cambios == null) return RetoConErrores(borrador.errores);
+
+    try {
+      final guardado = await _ref
+          .read(retosRepositoryProvider)
+          .editar(original, cambios);
+
+      // El catálogo del administrador y el del corredor muestran lo editado
+      // (SCRUM-152). También los retos del corredor, que llevan el reto
+      // embebido y enseñarían la meta vieja.
+      _ref.invalidate(catalogoRetosProvider);
+      _ref.invalidate(retosVigentesProvider);
+      _ref.invalidate(misRetosProvider);
+      return RetoCreado(guardado);
+    } on SesionRequeridaParaRetosException {
+      return const RetoNoGuardado(sinSesion);
+    } on SoloAdministradorException {
+      return const RetoNoGuardado(soloAdministrador);
+    } on DatosDeRetoInvalidosException catch (error) {
+      // Aquí sí puede llegar sin que nada esté roto: el trigger
+      // `retos_cambios_permitidos` rechaza mover de sitio un reto, y la
+      // pantalla no ofrece esos cambios pero la API sí los acepta.
+      debugPrint('La base rechazó los cambios del reto: $error');
+      return const RetoNoGuardado(datosRechazados);
+    } catch (error) {
+      debugPrint('No se pudieron guardar los cambios: $error');
+      return const RetoNoGuardado(noSePudo);
+    }
+  }
+}
+
 /// Creación de retos (SCRUM-143).
 final creacionRetoProvider = Provider<CreacionReto>(CreacionReto.new);
 

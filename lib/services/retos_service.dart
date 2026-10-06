@@ -158,6 +158,9 @@ class SupabaseRetosRepository implements RetosRepository {
   static const _filaDuplicada = '23505';
   static const _huecoOcupado = '23P01';
 
+  /// La consulta pidió una fila y no vino ninguna.
+  static const _sinFilas = 'PGRST116';
+
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
 
@@ -218,6 +221,11 @@ class SupabaseRetosRepository implements RetosRepository {
       return Reto.desdeSupabase(fila);
     } on PostgrestException catch (e) {
       if (e.code == _rlsDenegado) throw const SoloAdministradorException();
+      // Un update que no encuentra la fila es, casi siempre, la policy
+      // escondiéndosela a quien no es administrador: en un update RLS no
+      // responde "prohibido", simplemente deja la fila fuera de alcance. Y un
+      // reto no desaparece, porque la tabla no tiene policy de delete.
+      if (e.code == _sinFilas) throw const SoloAdministradorException();
       // Mismo código para las restricciones de la tabla y para el trigger
       // `retos_cambios_permitidos`: las dos dicen que el reto no puede quedar
       // así, y el mensaje de Postgres explica cuál fue.

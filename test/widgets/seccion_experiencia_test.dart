@@ -57,49 +57,59 @@ void main() {
   String total(WidgetTester tester) =>
       tester.widget<Text>(find.byKey(SeccionExperiencia.claveTotal)).data!;
 
-  testWidgets('muestra la XP obtenida por la actividad', (tester) async {
+  testWidgets('un entrenamiento libre no da XP', (tester) async {
     await montar(
       tester,
       xp: const ExperienciaDeEntrenamiento(
-        xpActividad: 25,
+        xpActividad: 0,
         ajuste: AjusteExperiencia.ninguno,
       ),
     );
 
     expect(find.text('XP obtenida'), findsOneWidget);
-    expect(total(tester), '+25 XP');
-    // Sin retos, el desglose sobraría.
+    expect(total(tester), '+0 XP');
+    // Sin retos no hay desglose.
     expect(find.text('Actividad'), findsNothing);
   });
 
-  testWidgets('siempre avisa cuánto da la actividad como máximo al día', (
-    tester,
-  ) async {
+  testWidgets('siempre explica que la XP sale de los retos', (tester) async {
     await montar(
       tester,
       xp: const ExperienciaDeEntrenamiento(
-        xpActividad: 25,
+        xpActividad: 0,
         ajuste: AjusteExperiencia.ninguno,
       ),
     );
 
     expect(
       find.text(
-        'La actividad da hasta 125 XP al día (25 km). '
-        'Los retos no tienen tope.',
+        'Los entrenamientos libres no dan XP: la ganas completando retos. '
+        'Tus km cuentan para los retos activos de esta actividad.',
       ),
       findsOneWidget,
     );
-    // El número sale de la regla, no está escrito aparte.
-    expect(
-      SeccionExperiencia.notaTope,
-      contains('${ReglaExperiencia.topeDiarioXp} XP'),
-    );
   });
 
-  testWidgets('con un reto completado, desglosa actividad y reto', (
+  testWidgets('con un reto completado, la XP es la del reto', (tester) async {
+    await montar(
+      tester,
+      xp: const ExperienciaDeEntrenamiento(
+        xpActividad: 0,
+        ajuste: AjusteExperiencia.ninguno,
+        retos: [RetoCompletado(nombre: 'Diez km', xp: 400)],
+      ),
+    );
+
+    expect(total(tester), '+400 XP');
+    expect(find.text('Reto «Diez km» completado'), findsOneWidget);
+    // La actividad no dio nada: una línea de +0 solo confundiría.
+    expect(find.text('Actividad'), findsNothing);
+  });
+
+  testWidgets('un entrenamiento anterior conserva su XP de actividad', (
     tester,
   ) async {
+    // Finalizado cuando la actividad todavía daba XP.
     await montar(
       tester,
       xp: const ExperienciaDeEntrenamiento(
@@ -112,39 +122,19 @@ void main() {
     expect(total(tester), '+430 XP');
     expect(find.text('Actividad'), findsOneWidget);
     expect(find.text('+30 XP'), findsOneWidget);
-    expect(find.text('Reto «Diez km» completado'), findsOneWidget);
     expect(find.text('+400 XP'), findsOneWidget);
   });
 
-  testWidgets('al llegar al tope explica que los km siguen contando', (
+  testWidgets('explica por qué los km no contaron para los retos', (
     tester,
   ) async {
-    await montar(
-      tester,
-      xp: const ExperienciaDeEntrenamiento(
-        xpActividad: 0,
-        ajuste: AjusteExperiencia.topeDiario,
-      ),
-    );
-
-    expect(total(tester), '+0 XP');
-    expect(
-      find.text(
-        'Llegaste al tope de XP del día. '
-        'Tus km siguen contando para tus retos.',
-      ),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('explica por qué una actividad no sumó XP', (tester) async {
     const esperados = {
-      AjusteExperiencia.menosDelMinimo:
-          'La actividad suma XP desde el primer kilómetro.',
       AjusteExperiencia.velocidadImposible:
-          'El promedio superó los 25 km/h, así que esta actividad no suma XP.',
+          'El promedio superó los 25 km/h, así que este entrenamiento no '
+          'cuenta para tus retos.',
       AjusteExperiencia.sinDatos:
-          'Sin distancia registrada, esta actividad no suma XP.',
+          'Sin distancia registrada, este entrenamiento no cuenta para tus '
+          'retos.',
     };
 
     for (final MapEntry(key: ajuste, value: texto) in esperados.entries) {
@@ -153,6 +143,26 @@ void main() {
         xp: ExperienciaDeEntrenamiento(xpActividad: 0, ajuste: ajuste),
       );
       expect(find.text(texto), findsOneWidget, reason: ajuste.name);
+    }
+  });
+
+  testWidgets('el mínimo y el tope de antes no se explican: los km contaron', (
+    tester,
+  ) async {
+    for (final ajuste in [
+      AjusteExperiencia.menosDelMinimo,
+      AjusteExperiencia.topeDiario,
+    ]) {
+      await montar(
+        tester,
+        xp: ExperienciaDeEntrenamiento(xpActividad: 0, ajuste: ajuste),
+      );
+      expect(
+        find.textContaining('no cuenta para tus retos'),
+        findsNothing,
+        reason: ajuste.name,
+      );
+      expect(find.textContaining('tope'), findsNothing, reason: ajuste.name);
     }
   });
 

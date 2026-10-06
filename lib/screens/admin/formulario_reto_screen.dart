@@ -167,24 +167,24 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     }
   }
 
-  /// Si la meta escrita deja por debajo a alguien que ya corrió más.
+  /// Si la meta escrita no queda por encima de lo que lleva alguien.
   ///
-  /// Bajarla ahí dejaría al corredor con 10 km de 9, en curso y sin cobrar:
-  /// nada reevalúa un reto cuando cambia su meta, solo lo hace el cierre de
-  /// un entrenamiento. Y si no vuelve a correr antes de que acabe el plazo,
-  /// pierde un reto que ya había cumplido.
+  /// Bajarla ahí dejaría al corredor con 10 km de 9 (o 10 de 10), en curso y
+  /// sin cobrar: nada reevalúa un reto cuando cambia su meta, solo lo hace el
+  /// cierre de un entrenamiento. Y si no vuelve a correr antes de que acabe
+  /// el plazo, pierde un reto que ya había cumplido.
   ///
   /// La regla está escrita dos veces a propósito: aquí, para explicarla antes
   /// de intentar guardar, y en el trigger `retos_cambios_permitidos`
-  /// (0017_meta_no_baja_del_progreso.sql), que es el que de verdad la
-  /// sostiene — con la publishable key, cualquiera puede llamar a la API sin
-  /// pasar por esta pantalla.
+  /// (0018_xp_solo_por_retos.sql), que es el que de verdad la sostiene — con
+  /// la publishable key, cualquiera puede llamar a la API sin pasar por esta
+  /// pantalla.
   bool _metaDejaAtrasAAlguien(Reto original) {
     final maximo = _kmDelMasAdelantado;
     final cambios = _borrador.aCambios(original);
     // Inválido o sin nadie en curso: no es esta regla la que tiene algo que
     // decir.
-    if (cambios == null || maximo <= 0 || cambios.metaKm >= maximo) {
+    if (cambios == null || maximo <= 0 || cambios.metaKm > maximo) {
       return false;
     }
 
@@ -210,15 +210,14 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     return 'El que va más adelantado lleva ${TarjetaReto.textoKm(maximo)} km.';
   }
 
-  /// Lo que lleva el corredor más adelantado, con los dos decimales con los
-  /// que se pintan los km.
+  /// Lo que lleva el corredor más adelantado, con todos sus decimales.
   ///
-  /// El progreso viene del GPS y trae más decimales de los que se ven.
-  /// Compararlo entero dejaría a la app rechazando el mismo número que acaba
-  /// de poner en pantalla: «ya lleva 10.3» y 10.3 no vale. El trigger redondea
-  /// igual, para que las dos reglas digan lo mismo.
-  double get _kmDelMasAdelantado =>
-      double.parse((_enCurso?.maximoKm ?? 0).toStringAsFixed(2));
+  /// Se compara sin redondear, igual que el trigger: con 9,994 km hechos una
+  /// meta de 9,99 deja el reto cumplido y sin cobrar, aunque en pantalla se
+  /// vea «9.99». Por eso el aviso pide que la meta quede «por encima» y no
+  /// «no menor»: que rechace el número que se ve es lo correcto. Para
+  /// pintarlo, `TarjetaReto.textoKm` ya lo redondea.
+  double get _kmDelMasAdelantado => _enCurso?.maximoKm ?? 0;
 
   /// Si se puede seguir adelante con el guardado.
   ///

@@ -68,3 +68,13 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 - **Unificar con Tu progresión.** El equipo decidió dejar el mapa como pantalla aparte por ahora. Hoy conviven `/progreso` (mapa, en la barra) y `/progresion` (Tu progresión, desde Inicio), con nombres muy parecidos. Si se unen, la sección de insignias y la barra de avance de `ProgresionScreen` pasarían debajo del mapa.
 - **Diseño.** El prototipo no tiene pantalla de mapa; se usó el estilo de las tarjetas existentes. Validarlo con el equipo.
+
+## SCRUM-192: la XP sale solo de los retos
+
+**Qué quedó hecho:** `0018_xp_solo_por_retos.sql`, aplicada en Supabase el 2026-10-06. El entrenamiento libre ya no da XP: sus km solo avanzan los retos activos del mismo tipo de actividad, y completar un reto es la única forma de ganar XP. La XP de actividad ya ganada se conservó.
+
+**Qué falta:**
+
+- **Recalibrar las insignias (SCRUM-193).** Los umbrales y textos de `0010_insignias.sql` se pensaron a 5 XP por km ("Primera huella: tu primer kilómetro", 5 XP). Ahora solo se llega con retos: el primer reto completado ya da varias de golpe y los textos de km dejan de ser ciertos. Cambiarlos es otra migración (`update insignias`), y las ya otorgadas se conservan.
+- **Revisar los 150 000 XP del rol de Runner Experto (SCRUM-227).** Están en `0012_rol_experto.sql` y en `RequisitosRunnerExperto.experiencia`. Solo con retos, el número depende de la `xp_otorgada` que pongan los admins: con retos de 100 a 500 XP harían falta cientos de retos.
+- **Guía para el admin al crear retos.** La de SCRUM-192 ("un reto paga de 3 a 5 veces lo que dan sus km") ya no aplica. Hace falta una nueva, pensada junto con los umbrales de niveles e insignias.

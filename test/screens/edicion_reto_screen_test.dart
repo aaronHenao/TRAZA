@@ -462,8 +462,8 @@ void main() {
 
       expect(
         find.text(
-          'Un corredor ya lleva 10 km. La meta no puede bajar de ahí: lo '
-          'dejaría sin poder completarlo.',
+          'Un corredor ya lleva 10 km. La meta tiene que quedar por encima: '
+          'si no, lo dejaría sin poder completarlo.',
         ),
         findsOneWidget,
       );
@@ -473,17 +473,47 @@ void main() {
       expect(repositorio.recibido, isNull);
     });
 
-    testWidgets('puede quedar justo en lo que lleva el mas adelantado', (
-      tester,
-    ) async {
-      await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+    testWidgets(
+      'tampoco puede quedar justo en lo que lleva el mas adelantado',
+      (tester) async {
+        await abrir(tester, reto(), enCurso: 1, llevaMax: 10);
+
+        await cambiarMeta(tester, '10');
+
+        // Con 10 de 10 el reto ya esta cumplido, pero solo se cierra en la
+        // proxima carrera: si no vuelve a correr antes del plazo, lo pierde.
+        expect(
+          find.textContaining('tiene que quedar por encima'),
+          findsOneWidget,
+        );
+        expect(repositorio.recibido, isNull);
+      },
+    );
+
+    testWidgets('compara con los decimales que no se ven', (tester) async {
+      // En pantalla se ve 9.99, pero lleva 9.994: una meta de 9.99 lo
+      // dejaria con el reto cumplido y sin cobrar.
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 9.994);
+
+      await cambiarMeta(tester, '9.99');
+
+      expect(
+        find.text(
+          'Un corredor ya lleva 9.99 km. La meta tiene que quedar por encima: '
+          'si no, lo dejaría sin poder completarlo.',
+        ),
+        findsOneWidget,
+      );
+      expect(repositorio.recibido, isNull);
+    });
+
+    testWidgets('lo minimo por encima de lo corrido se guarda', (tester) async {
+      await abrir(tester, reto(), enCurso: 1, llevaMax: 9.994);
 
       await cambiarMeta(tester, '10');
       await tester.tap(find.byKey(FormularioRetoScreen.claveConfirmar));
       await tester.pumpAndSettle();
 
-      // Con 10 de 10 el reto se cierra en su proxima carrera, que es el
-      // comportamiento normal de cualquier reto cumplido.
       expect(repositorio.recibido?.metaKm, 10);
     });
 
@@ -518,7 +548,7 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, '9'), '11');
       await tester.pump();
 
-      expect(find.textContaining('no puede bajar de ahí'), findsNothing);
+      expect(find.textContaining('tiene que quedar por encima'), findsNothing);
     });
   });
 }

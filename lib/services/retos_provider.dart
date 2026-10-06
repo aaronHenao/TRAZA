@@ -290,14 +290,14 @@ class EdicionReto {
   static const datosRechazados =
       'Revisa los datos del reto: la base no los aceptó.';
 
-  /// Lo que se le dice al administrador cuando la meta que escribió deja
-  /// atrás a quien ya corrió más que eso.
+  /// Lo que se le dice al administrador cuando la meta que escribió no queda
+  /// por encima de lo que ya corrió alguien.
   ///
   /// [km] llega ya escrito: quien llama lo formatea con el mismo
   /// `TarjetaReto.textoKm` con el que se pintan los km en toda la app.
   static String metaPorDebajoDeLoCorrido(String km) =>
-      'Un corredor ya lleva $km km. La meta no puede bajar de ahí: lo '
-      'dejaría sin poder completarlo.';
+      'Un corredor ya lleva $km km. La meta tiene que quedar por encima: si '
+      'no, lo dejaría sin poder completarlo.';
 
   /// Cómo van los corredores que están haciendo [reto] (SCRUM-151).
   ///

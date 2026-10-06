@@ -23,8 +23,8 @@ class RetoCompletado {
 
 /// La XP que dejó un entrenamiento finalizado (SCRUM-203, SCRUM-205).
 ///
-/// La calcula el trigger de `0009_experiencia.sql` al finalizar; esto es lo
-/// que quedó registrado en `experiencia_ganada`.
+/// La calcula el trigger de `0018_xp_solo_por_retos.sql` al finalizar; esto
+/// es lo que quedó registrado en `experiencia_ganada`.
 @immutable
 class ExperienciaDeEntrenamiento {
   const ExperienciaDeEntrenamiento({
@@ -33,11 +33,12 @@ class ExperienciaDeEntrenamiento {
     this.retos = const [],
   });
 
-  /// XP por la actividad en sí: la distancia, con el mínimo, la velocidad y
-  /// el tope del día aplicados.
+  /// XP por la actividad en sí. El entrenamiento libre ya no da XP, así que
+  /// es 0 salvo en entrenamientos anteriores a `0018_xp_solo_por_retos.sql`,
+  /// cuya XP se conservó.
   final int xpActividad;
 
-  /// Por qué la actividad dio menos de lo que daría su distancia completa.
+  /// Si los km contaron para los retos y, si no, por qué.
   final AjusteExperiencia ajuste;
 
   final List<RetoCompletado> retos;

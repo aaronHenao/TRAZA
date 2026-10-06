@@ -11,11 +11,14 @@ import '../theme/app_dimens.dart';
 
 /// La XP que dejó el entrenamiento, en su resumen (SCRUM-207).
 ///
-/// Muestra lo ganado por la actividad y por cada reto completado, por qué la
-/// actividad dio menos si fue el caso, el nivel con su progreso (SCRUM-198) y
-/// siempre el tope del día: quien quiera sumar mucho en un solo día lo sabe
-/// antes de chocar con él. Si el entrenamiento lo hizo subir de nivel, lo
-/// anuncia arriba (SCRUM-199).
+/// Muestra la XP de cada reto que el entrenamiento completó, por qué sus km
+/// no contaron para los retos si fue el caso, el nivel con su progreso
+/// (SCRUM-198) y siempre de dónde sale la XP: el entrenamiento libre no da,
+/// solo los retos. Si el entrenamiento lo hizo subir de nivel, lo anuncia
+/// arriba (SCRUM-199).
+///
+/// Un entrenamiento anterior a `0018_xp_solo_por_retos.sql` puede traer XP de
+/// actividad, que se conservó: entonces aparece en el desglose.
 ///
 /// Trae su propio margen superior, como `SeccionSalud`.
 class SeccionExperiencia extends ConsumerWidget {
@@ -36,12 +39,11 @@ class SeccionExperiencia extends ConsumerWidget {
   static const claveNivel = Key('seccion-experiencia-nivel');
   static const claveAvanceNivel = Key('seccion-experiencia-avance-nivel');
 
-  /// La nota del tope, armada con las constantes de la regla.
-  static String get notaTope {
-    final km = ReglaExperiencia.topeDiarioMetros ~/ 1000;
-    return 'La actividad da hasta ${ReglaExperiencia.topeDiarioXp} XP al día '
-        '($km km). Los retos no tienen tope.';
-  }
+  /// De dónde sale la XP. Va siempre: quien espera XP por correr lo sabe
+  /// aunque este entrenamiento no haya completado nada.
+  static const notaXpPorRetos =
+      'Los entrenamientos libres no dan XP: la ganas completando retos. Tus '
+      'km cuentan para los retos activos de esta actividad.';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -94,7 +96,7 @@ class SeccionExperiencia extends ConsumerWidget {
                 ],
                 const SizedBox(height: 10),
                 Text(
-                  notaTope,
+                  notaXpPorRetos,
                   style: const TextStyle(fontSize: 11, color: AppColors.ink2),
                 ),
               ],
@@ -262,10 +264,11 @@ class _Detalle extends StatelessWidget {
             ),
           ],
         ),
-        // El desglose solo aporta si hay algo más que la actividad.
+        // El desglose solo aporta si hay retos. La actividad solo trae XP en
+        // entrenamientos anteriores a que el libre dejara de darla.
         if (xp.retos.isNotEmpty) ...[
           const SizedBox(height: 8),
-          _Linea('Actividad', xp.xpActividad),
+          if (xp.xpActividad > 0) _Linea('Actividad', xp.xpActividad),
           for (final reto in xp.retos)
             _Linea('Reto «${reto.nombre}» completado', reto.xp),
         ],
@@ -280,18 +283,19 @@ class _Detalle extends StatelessWidget {
     );
   }
 
-  /// Por qué la actividad dio menos de lo que daría su distancia.
+  /// Por qué los km no contaron para los retos.
+  ///
+  /// Con menos del mínimo o con el tope lleno los km sí contaban: esos dos
+  /// solo recortaban la XP de actividad, que ya no existe.
   static String? _motivo(AjusteExperiencia ajuste) => switch (ajuste) {
-    AjusteExperiencia.ninguno => null,
-    AjusteExperiencia.topeDiario =>
-      'Llegaste al tope de XP del día. Tus km siguen contando para tus retos.',
-    AjusteExperiencia.menosDelMinimo =>
-      'La actividad suma XP desde el primer kilómetro.',
+    AjusteExperiencia.ninguno ||
+    AjusteExperiencia.menosDelMinimo ||
+    AjusteExperiencia.topeDiario => null,
     AjusteExperiencia.velocidadImposible =>
       'El promedio superó los ${ReglaExperiencia.velocidadMaximaKmH.round()} '
-          'km/h, así que esta actividad no suma XP.',
+          'km/h, así que este entrenamiento no cuenta para tus retos.',
     AjusteExperiencia.sinDatos =>
-      'Sin distancia registrada, esta actividad no suma XP.',
+      'Sin distancia registrada, este entrenamiento no cuenta para tus retos.',
   };
 }
 

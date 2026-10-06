@@ -96,10 +96,13 @@ void main() {
       // El id del entrenamiento viaja en la ruta (SCRUM-122).
       expect(entorno.ubicacion, '/resumen/e-123');
       // Y con él se lee la XP que dejó el cierre (SCRUM-207). Sin puntos GPS
-      // no hubo distancia, así que no sumó.
+      // no hubo distancia, así que no contó para los retos.
       expect(find.byType(SeccionExperiencia), findsOneWidget);
       expect(
-        find.text('Sin distancia registrada, esta actividad no suma XP.'),
+        find.text(
+          'Sin distancia registrada, este entrenamiento no cuenta para tus '
+          'retos.',
+        ),
         findsOneWidget,
       );
     });

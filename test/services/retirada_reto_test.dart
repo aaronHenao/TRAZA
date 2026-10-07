@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/reto.dart';
+import 'package:traza/models/reto_del_usuario.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/services/reloj_provider.dart';
@@ -25,6 +26,20 @@ class _RetosFalso extends RetosRepositorioFalso {
   @override
   Future<List<Reto>> vigentes({required DateTime hoy}) async =>
       catalogo.where((reto) => reto.estado == EstadoReto.activo).toList();
+
+  /// Los retos del corredor llevan el reto embebido, así que reflejan el
+  /// estado en que esté el catálogo en ese momento.
+  @override
+  Future<List<RetoDelUsuario>> misRetos() async => [
+    for (final reto in catalogo)
+      RetoDelUsuario(
+        reto: reto,
+        estado: EstadoRetoUsuario.completado,
+        progresoKm: reto.metaKm,
+        fechaActivacion: DateTime(2026, 10, 6),
+        fechaCompletado: DateTime(2026, 10, 7),
+      ),
+  ];
 
   @override
   Future<Reto> retirar(Reto reto) async {
@@ -112,6 +127,23 @@ void main() {
       await container.read(retiradaRetoProvider).retirar(publicado);
 
       expect(await container.read(catalogoRetosProvider.future), isEmpty);
+    });
+  });
+
+  group('lo del corredor sobrevive (criterio 3)', () {
+    test('sus retos siguen ahí, con el reto ya retirado', () async {
+      final container = contenedor();
+      container.listen(misRetosProvider, (_, _) {});
+      final antes = await container.read(misRetosProvider.future);
+      expect(antes.single.reto.estaActivo, isTrue);
+
+      await container.read(retiradaRetoProvider).retirar(publicado);
+      final despues = await container.read(misRetosProvider.future);
+
+      // Ni desaparece ni pierde lo conseguido: solo deja de estar publicado.
+      expect(despues.single.reto.estado, EstadoReto.retirado);
+      expect(despues.single.completado, isTrue);
+      expect(despues.single.progresoKm, 15);
     });
   });
 

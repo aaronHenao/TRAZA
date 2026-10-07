@@ -6,6 +6,7 @@ import '../../models/periodicidad_reto.dart';
 import '../../models/reto.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
+import '../../services/retos_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
@@ -13,13 +14,15 @@ import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_reto.dart';
 import '../../widgets/traza_card.dart';
+import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
 /// Catálogo de retos del administrador (SCRUM-139).
 ///
 /// Se abre desde el panel del administrador (SCRUM-194): desde aquí ve lo que
 /// los corredores tienen disponible y crea retos nuevos con el botón "+".
-/// Editar y retirar llegan con SCRUM-133 y SCRUM-134.
+/// Desde aquí también se edita un reto (SCRUM-148) y se retira del catálogo
+/// (SCRUM-161).
 class GestionRetosScreen extends ConsumerWidget {
   const GestionRetosScreen({super.key});
 
@@ -27,6 +30,10 @@ class GestionRetosScreen extends ConsumerWidget {
   static const rutaNuevo = '$ruta/nuevo';
 
   static const claveBotonNuevo = Key('admin-nuevo-reto');
+
+  /// El botón de retirar de una tarjeta, y el de confirmar en su diálogo.
+  static Key claveRetirar(Reto reto) => Key('retirar-${reto.id}');
+  static const claveConfirmarRetirada = Key('retirar-confirmar');
 
   static Key claveVista(VistaGestionRetos vista) => Key('vista-${vista.name}');
 
@@ -263,9 +270,43 @@ class _Lista extends ConsumerWidget {
           // (SCRUM-152).
           onTap: () =>
               context.push('${GestionRetosScreen.ruta}/editar', extra: reto),
+          // Un reto ya retirado no se retira otra vez. Es lo que separa la
+          // pestaña de retirados: ahí solo se consulta.
+          onRetirar: reto.estaActivo
+              ? () => _retirar(context, ref, reto)
+              : null,
         );
       },
     );
+  }
+}
+
+/// Pregunta y, si el administrador confirma, retira el reto (SCRUM-156).
+///
+/// La confirmación es explícita y dice a quién afecta: retirar no se deshace
+/// desde la app, y el administrador no tiene por qué saber de memoria cuánta
+/// gente estaba contando con ese reto.
+Future<void> _retirar(BuildContext context, WidgetRef ref, Reto reto) async {
+  final confirmado = await showDialog<bool>(
+    context: context,
+    builder: (_) => _ConfirmarRetirada(
+      reto: reto,
+      // Se pide al abrir el diálogo y no al pintar la lista: son los
+      // corredores de un reto, no de los veinte que se ven en pantalla.
+      corredores: ref.read(retiradaRetoProvider).comoVanLosCorredores(reto),
+    ),
+  );
+  if (confirmado != true || !context.mounted) return;
+
+  final resultado = await ref.read(retiradaRetoProvider).retirar(reto);
+  if (!context.mounted) return;
+
+  switch (resultado) {
+    case RetoRetirado():
+      // La lista se rehace sola: `retirar` invalida el catálogo.
+      mostrarToast(context, 'Reto retirado del catálogo');
+    case RetoNoRetirado(:final mensaje):
+      mostrarToast(context, mensaje);
   }
 }
 
@@ -275,6 +316,7 @@ class TarjetaRetoAdmin extends StatelessWidget {
     required this.reto,
     required this.hoy,
     this.onTap,
+    this.onRetirar,
     super.key,
   });
 
@@ -282,6 +324,9 @@ class TarjetaRetoAdmin extends StatelessWidget {
 
   /// Abre el reto para editarlo (SCRUM-148).
   final VoidCallback? onTap;
+
+  /// Lo saca del catálogo. Nulo en los que ya están retirados.
+  final VoidCallback? onRetirar;
 
   /// Desde cuándo se mira la vigencia, para decir si ya caducó.
   final DateTime hoy;
@@ -335,21 +380,48 @@ class TarjetaRetoAdmin extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          Row(
             children: [
-              InsigniaReto(texto: reto.periodicidad.etiqueta),
-              InsigniaReto(texto: reto.tipoActividad.nombre),
-              InsigniaReto(
-                texto: 'Meta ${TarjetaReto.textoKm(reto.metaKm)} km',
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    InsigniaReto(texto: reto.periodicidad.etiqueta),
+                    InsigniaReto(texto: reto.tipoActividad.nombre),
+                    InsigniaReto(
+                      texto: 'Meta ${TarjetaReto.textoKm(reto.metaKm)} km',
+                    ),
+                    InsigniaReto(
+                      texto:
+                          '${_fecha(reto.vigencia.inicio)} – '
+                          '${_fecha(reto.vigencia.fin)}',
+                    ),
+                    _Situacion(reto: reto, hoy: hoy),
+                  ],
+                ),
               ),
-              InsigniaReto(
-                texto:
-                    '${_fecha(reto.vigencia.inicio)} – '
-                    '${_fecha(reto.vigencia.fin)}',
-              ),
-              _Situacion(reto: reto, hoy: hoy),
+              // Aquí y no arriba junto a la XP: arriba le robaba ancho al
+              // nombre, que es como el administrador reconoce el reto. Y no
+              // en un pie propio, que haría cada tarjeta una cuarta parte
+              // más alta por una acción que casi nunca se usa. Las
+              // insignias dejan sitio libre a su derecha.
+              if (onRetirar case final onRetirar?) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  key: GestionRetosScreen.claveRetirar(reto),
+                  onPressed: onRetirar,
+                  icon: const Icon(Icons.delete_outline, size: 19),
+                  color: AppColors.danger,
+                  tooltip: 'Retirar del catálogo',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -373,6 +445,135 @@ class TarjetaRetoAdmin extends StatelessWidget {
   ];
 
   static String _fecha(DateTime dia) => '${dia.day} ${_meses[dia.month - 1]}';
+}
+
+/// Lo que hay que leer antes de retirar un reto.
+class _ConfirmarRetirada extends StatelessWidget {
+  const _ConfirmarRetirada({required this.reto, required this.corredores});
+
+  final Reto reto;
+  final Future<CorredoresDelReto> corredores;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('¿Retirar este reto?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '«${reto.nombre}» dejará de aparecer en el catálogo de los '
+            'corredores. Desde la app no se puede volver a publicar.',
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.ink2,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // El diálogo abre al instante y las cuentas llegan después: lo que
+          // el administrador tiene que leer no debe esperar a la red.
+          FutureBuilder(
+            future: corredores,
+            builder: (context, estado) => switch (estado.data) {
+              final datos? => _AQuienAfecta(corredores: datos),
+              null => const Text(
+                'Viendo a quién afecta…',
+                style: TextStyle(fontSize: 13, color: AppColors.ink3),
+              ),
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          key: GestionRetosScreen.claveConfirmarRetirada,
+          onPressed: () => Navigator.of(context).pop(true),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+          child: const Text('Retirar del catálogo'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Qué le pasa a cada grupo de corredores al retirar el reto (SCRUM-160).
+class _AQuienAfecta extends StatelessWidget {
+  const _AQuienAfecta({required this.corredores});
+
+  final CorredoresDelReto corredores;
+
+  @override
+  Widget build(BuildContext context) {
+    final (:enProgreso, :completados, maximoKm: _) = corredores;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (completados > 0)
+          _Linea(
+            icono: Icons.check_circle_outline,
+            color: AppColors.accentInk,
+            texto: completados == 1
+                ? '1 lo completó: conserva su historial y la XP que ganó.'
+                : '$completados lo completaron: conservan su historial y la '
+                      'XP que ganaron.',
+          ),
+        if (enProgreso > 0)
+          _Linea(
+            icono: Icons.block_outlined,
+            color: AppColors.danger,
+            texto: enProgreso == 1
+                ? '1 lo tiene en progreso: no podrá seguir sumándolo.'
+                : '$enProgreso lo tienen en progreso: no podrán seguir '
+                      'sumándolo.',
+          ),
+        if (completados == 0 && enProgreso == 0)
+          const _Linea(
+            icono: Icons.check_circle_outline,
+            color: AppColors.accentInk,
+            texto: 'Nadie lo ha activado: no afecta a ningún corredor.',
+          ),
+      ],
+    );
+  }
+}
+
+class _Linea extends StatelessWidget {
+  const _Linea({required this.icono, required this.color, required this.texto});
+
+  final IconData icono;
+  final Color color;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icono, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              texto,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.ink,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// En qué situación está el reto de verdad.

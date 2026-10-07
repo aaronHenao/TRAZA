@@ -307,4 +307,52 @@ void main() {
       expect(repositorio.consultas, antes);
     });
   });
+
+  group('retos que el administrador retiró (SCRUM-160)', () {
+    /// Lo mismo que `completadoAyer`, pero el reto ya no está publicado.
+    final deUnoRetirado = RetoDelUsuario(
+      reto: Reto(
+        id: 'c',
+        nombre: 'Trote de 8 km',
+        descripcion: 'Qué hay que hacer.',
+        periodicidad: PeriodicidadReto.semanal,
+        metaKm: 8,
+        xpOtorgada: 200,
+        vigencia: VigenciaReto(
+          inicio: DateTime(2026, 9, 21),
+          fin: DateTime(2026, 9, 27),
+        ),
+        estado: EstadoReto.retirado,
+        tipoActividad: const TipoActividad(id: 'tipo-correr', nombre: 'Correr'),
+      ),
+      estado: EstadoRetoUsuario.completado,
+      progresoKm: 8,
+      fechaActivacion: DateTime(2026, 9, 21, 8),
+      fechaCompletado: DateTime(2026, 9, 27, 18),
+    );
+
+    testWidgets('lo completado se conserva aunque el reto ya no exista', (
+      tester,
+    ) async {
+      // Criterio 3: retirar saca el reto del catálogo, no del historial de
+      // quien lo cumplió. Que la fila llegue entera depende de la policy de
+      // 0018; esta prueba cubre que la pantalla no lo esconda después.
+      await abrirHistorial(tester, respuesta: () async => [deUnoRetirado]);
+
+      await tocarChip(tester, SeccionHistorialRetos.completados);
+
+      expect(find.text('Trote de 8 km'), findsOneWidget);
+      expect(find.text('+200 XP'), findsOneWidget);
+    });
+
+    testWidgets('con su progreso y su meta, como cualquier otro', (
+      tester,
+    ) async {
+      await abrirHistorial(tester, respuesta: () async => [deUnoRetirado]);
+
+      await tocarChip(tester, SeccionHistorialRetos.completados);
+
+      expect(find.text('8 de 8 km'), findsOneWidget);
+    });
+  });
 }

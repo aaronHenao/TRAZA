@@ -300,19 +300,8 @@ class EdicionReto {
       'no, lo dejaría sin poder completarlo.';
 
   /// Cómo van los corredores que están haciendo [reto] (SCRUM-151).
-  ///
-  /// Si la consulta falla se devuelve que no hay nadie: ni el aviso ni el
-  /// bloqueo de la meta son la barrera de verdad —esa es el trigger
-  /// `retos_cambios_permitidos`—, y no poder contarlos no es motivo para
-  /// impedirle al administrador guardar.
-  Future<ProgresoEnCurso> comoVanLosCorredores(Reto reto) async {
-    try {
-      return await _ref.read(retosRepositoryProvider).progresoEnCurso(reto);
-    } catch (error) {
-      debugPrint('No se pudo ver cómo van los corredores del reto: $error');
-      return (corredores: 0, maximoKm: 0.0);
-    }
-  }
+  Future<CorredoresDelReto> comoVanLosCorredores(Reto reto) =>
+      _corredoresDe(_ref, reto);
 
   Future<ResultadoCreacionReto> guardar(
     Reto original,
@@ -346,6 +335,86 @@ class EdicionReto {
     } catch (error) {
       debugPrint('No se pudieron guardar los cambios: $error');
       return const RetoNoGuardado(noSePudo);
+    }
+  }
+}
+
+/// Cómo le va a la gente con [reto], o nadie si no se puede saber.
+///
+/// Lo usan la edición y la retirada para explicarle al administrador a quién
+/// afecta lo que va a hacer. Si la consulta falla se responde que no hay
+/// nadie: ninguna de las dos reglas se sostiene aquí —las sostienen los
+/// triggers—, y no poder contar a los corredores no es motivo para dejar al
+/// administrador sin poder guardar.
+Future<CorredoresDelReto> _corredoresDe(Ref ref, Reto reto) async {
+  try {
+    return await ref.read(retosRepositoryProvider).corredoresDe(reto);
+  } catch (error) {
+    debugPrint('No se pudo ver cómo van los corredores del reto: $error');
+    return (enProgreso: 0, completados: 0, maximoKm: 0.0);
+  }
+}
+
+/// Cómo terminó un intento de retirar un reto.
+sealed class ResultadoRetirada {
+  const ResultadoRetirada();
+}
+
+/// El reto salió del catálogo. La fila sigue ahí, con otro estado.
+class RetoRetirado extends ResultadoRetirada {
+  const RetoRetirado(this.reto);
+
+  final Reto reto;
+}
+
+/// No se pudo retirar, y hay algo que explicarle al administrador.
+class RetoNoRetirado extends ResultadoRetirada {
+  const RetoNoRetirado(this.mensaje);
+
+  final String mensaje;
+}
+
+/// Retirada de retos (SCRUM-155).
+final retiradaRetoProvider = Provider<RetiradaReto>(RetiradaReto.new);
+
+/// Saca un reto del catálogo sin borrarlo (SCRUM-134).
+class RetiradaReto {
+  const RetiradaReto(this._ref);
+
+  final Ref _ref;
+
+  static const sinSesion = 'Inicia sesión para retirar retos.';
+  static const soloAdministrador = 'Solo el administrador puede retirar retos.';
+  static const corredoresEnJuego =
+      'Hay corredores que todavía pueden completarlo. Podrás retirarlo '
+      'cuando se acabe su plazo.';
+  static const noSePudo = 'No se pudo retirar el reto. Inténtalo de nuevo.';
+
+  /// A quién afecta retirar [reto], para decirlo antes de preguntar
+  /// (SCRUM-156).
+  Future<CorredoresDelReto> comoVanLosCorredores(Reto reto) =>
+      _corredoresDe(_ref, reto);
+
+  Future<ResultadoRetirada> retirar(Reto reto) async {
+    try {
+      final retirado = await _ref.read(retosRepositoryProvider).retirar(reto);
+
+      // Desaparece de la gestión y del catálogo del corredor. También de sus
+      // retos activados, que llevan el reto embebido y lo seguirían dando
+      // por publicado (SCRUM-158).
+      _ref.invalidate(catalogoRetosProvider);
+      _ref.invalidate(retosVigentesProvider);
+      _ref.invalidate(misRetosProvider);
+      return RetoRetirado(retirado);
+    } on SesionRequeridaParaRetosException {
+      return const RetoNoRetirado(sinSesion);
+    } on SoloAdministradorException {
+      return const RetoNoRetirado(soloAdministrador);
+    } on RetoConCorredoresEnJuegoException {
+      return const RetoNoRetirado(corredoresEnJuego);
+    } catch (error) {
+      debugPrint('No se pudo retirar el reto: $error');
+      return const RetoNoRetirado(noSePudo);
     }
   }
 }

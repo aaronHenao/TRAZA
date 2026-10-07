@@ -26,8 +26,8 @@ class _RetosFalso extends RetosRepositorioFalso {
   CambiosReto? recibido;
 
   @override
-  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async =>
-      (corredores: enCurso, maximoKm: llevaMax);
+  Future<CorredoresDelReto> corredoresDe(Reto reto) async =>
+      (enProgreso: enCurso, completados: 0, maximoKm: llevaMax);
 
   @override
   Future<Reto> editar(Reto original, CambiosReto cambios) async {

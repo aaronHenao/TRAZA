@@ -19,7 +19,7 @@ class _RetosFalso extends RetosRepositorioFalso {
 
   /// Lo que responde al preguntar cómo van los corredores. Nulo para fallar,
   /// como una consulta que no llega.
-  final ProgresoEnCurso? enCurso;
+  final CorredoresDelReto? enCurso;
 
   CambiosReto? recibido;
   Reto? original;
@@ -33,7 +33,7 @@ class _RetosFalso extends RetosRepositorioFalso {
       List.of(catalogo);
 
   @override
-  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async =>
+  Future<CorredoresDelReto> corredoresDe(Reto reto) async =>
       enCurso ?? (throw Exception('sin red'));
 
   @override
@@ -265,7 +265,7 @@ void main() {
   });
 
   group('cómo van los corredores (SCRUM-151)', () {
-    Future<ProgresoEnCurso> comoVan({ProgresoEnCurso? responde}) async {
+    Future<CorredoresDelReto> comoVan({CorredoresDelReto? responde}) async {
       final container = ProviderContainer(
         overrides: [
           retosRepositoryProvider.overrideWithValue(
@@ -281,9 +281,12 @@ void main() {
     }
 
     test('devuelve cuántos son y lo que lleva el más adelantado', () async {
-      final enCurso = await comoVan(responde: (corredores: 3, maximoKm: 10.4));
+      final enCurso = await comoVan(
+        responde: (enProgreso: 3, completados: 1, maximoKm: 10.4),
+      );
 
-      expect(enCurso.corredores, 3);
+      expect(enCurso.enProgreso, 3);
+      expect(enCurso.completados, 1);
       expect(enCurso.maximoKm, 10.4);
     });
 
@@ -292,7 +295,7 @@ void main() {
       // el trigger. No poder contarlos no deja al administrador sin guardar.
       final enCurso = await comoVan();
 
-      expect(enCurso.corredores, 0);
+      expect(enCurso.enProgreso, 0);
       expect(enCurso.maximoKm, 0);
     });
   });

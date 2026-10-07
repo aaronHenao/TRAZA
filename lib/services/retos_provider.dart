@@ -300,19 +300,8 @@ class EdicionReto {
       'dejaría sin poder completarlo.';
 
   /// Cómo van los corredores que están haciendo [reto] (SCRUM-151).
-  ///
-  /// Si la consulta falla se devuelve que no hay nadie: ni el aviso ni el
-  /// bloqueo de la meta son la barrera de verdad —esa es el trigger
-  /// `retos_cambios_permitidos`—, y no poder contarlos no es motivo para
-  /// impedirle al administrador guardar.
-  Future<ProgresoEnCurso> comoVanLosCorredores(Reto reto) async {
-    try {
-      return await _ref.read(retosRepositoryProvider).progresoEnCurso(reto);
-    } catch (error) {
-      debugPrint('No se pudo ver cómo van los corredores del reto: $error');
-      return (corredores: 0, maximoKm: 0.0);
-    }
-  }
+  Future<CorredoresDelReto> comoVanLosCorredores(Reto reto) =>
+      _corredoresDe(_ref, reto);
 
   Future<ResultadoCreacionReto> guardar(
     Reto original,
@@ -350,6 +339,22 @@ class EdicionReto {
   }
 }
 
+/// Cómo le va a la gente con [reto], o nadie si no se puede saber.
+///
+/// Lo usan la edición y la retirada para explicarle al administrador a quién
+/// afecta lo que va a hacer. Si la consulta falla se responde que no hay
+/// nadie: ninguna de las dos reglas se sostiene aquí —las sostienen los
+/// triggers—, y no poder contar a los corredores no es motivo para dejar al
+/// administrador sin poder guardar.
+Future<CorredoresDelReto> _corredoresDe(Ref ref, Reto reto) async {
+  try {
+    return await ref.read(retosRepositoryProvider).corredoresDe(reto);
+  } catch (error) {
+    debugPrint('No se pudo ver cómo van los corredores del reto: $error');
+    return (enProgreso: 0, completados: 0, maximoKm: 0.0);
+  }
+}
+
 /// Cómo terminó un intento de retirar un reto.
 sealed class ResultadoRetirada {
   const ResultadoRetirada();
@@ -384,6 +389,11 @@ class RetiradaReto {
       'Hay corredores que todavía pueden completarlo. Podrás retirarlo '
       'cuando se acabe su plazo.';
   static const noSePudo = 'No se pudo retirar el reto. Inténtalo de nuevo.';
+
+  /// A quién afecta retirar [reto], para decirlo antes de preguntar
+  /// (SCRUM-156).
+  Future<CorredoresDelReto> comoVanLosCorredores(Reto reto) =>
+      _corredoresDe(_ref, reto);
 
   Future<ResultadoRetirada> retirar(Reto reto) async {
     try {

@@ -68,7 +68,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
 
   /// Cómo van los que ya tienen el reto. Nulo mientras no se sepa: al crear
   /// no hay a quién mirar, y al editar tarda lo que tarde la consulta.
-  ProgresoEnCurso? _enCurso;
+  CorredoresDelReto? _enCurso;
 
   @override
   void initState() {
@@ -240,7 +240,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
         _enCurso ??
         await ref.read(edicionRetoProvider).comoVanLosCorredores(original);
     // Nadie lo está haciendo: no hay a quién avisar.
-    if (enCurso.corredores == 0) return true;
+    if (enCurso.enProgreso == 0) return true;
     if (!mounted) return false;
 
     // El botón deja de girar mientras está el diálogo: la espera ya no es de
@@ -249,7 +249,7 @@ class _FormularioRetoScreenState extends ConsumerState<FormularioRetoScreen> {
     final seguir = await showDialog<bool>(
       context: context,
       builder: (context) => _ConfirmarCambios(
-        corredores: enCurso.corredores,
+        corredores: enCurso.enProgreso,
         consecuencias: consecuencias,
       ),
     );

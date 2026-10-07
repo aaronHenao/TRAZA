@@ -8,6 +8,7 @@ import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/retos_provider.dart';
 import 'package:traza/services/retos_service.dart';
 
 import '../utiles/retos_repository_falso.dart';
@@ -20,6 +21,14 @@ class _RetosFalso extends RetosRepositorioFalso {
   List<Reto> retos;
   Object? error;
   var consultas = 0;
+
+  /// Lo que responde al preguntar a quién afecta retirar un reto.
+  CorredoresDelReto corredores = (enProgreso: 0, completados: 0, maximoKm: 0.0);
+
+  /// Con qué falla la retirada, si tiene que fallar.
+  Object? errorAlRetirar;
+
+  Reto? retirado;
 
   List<Reto> _responder(bool Function(Reto) filtro) {
     consultas++;
@@ -41,6 +50,35 @@ class _RetosFalso extends RetosRepositorioFalso {
   Future<List<Reto>> caducados({required DateTime hoy}) async => _responder(
     (reto) => reto.estaActivo && reto.vigencia.diasRestantesDesde(hoy) == 0,
   );
+
+  @override
+  Future<CorredoresDelReto> corredoresDe(Reto reto) async => corredores;
+
+  @override
+  Future<Reto> retirar(Reto reto) async {
+    final error = errorAlRetirar;
+    if (error != null) throw error;
+    retirado = reto;
+
+    // Como la base: la fila se queda, con otro estado.
+    final baja = Reto(
+      id: reto.id,
+      nombre: reto.nombre,
+      descripcion: reto.descripcion,
+      periodicidad: reto.periodicidad,
+      metaKm: reto.metaKm,
+      xpOtorgada: reto.xpOtorgada,
+      vigencia: reto.vigencia,
+      estado: EstadoReto.retirado,
+      tipoActividad: reto.tipoActividad,
+    );
+    retos = [
+      for (final otro in retos)
+        if (otro.id == reto.id) baja else otro,
+    ];
+
+    return baja;
+  }
 }
 
 /// Pruebas de la gestión de retos del administrador (SCRUM-139): el catálogo
@@ -378,6 +416,145 @@ void main() {
     });
   });
 
+  group('retirar un reto (SCRUM-161 y SCRUM-156)', () {
+    /// El botón de la primera tarjeta, "Corre 5 km hoy".
+    final clave = GestionRetosScreen.claveRetirar(catalogo.first);
+
+    Future<void> tocarRetirar(WidgetTester tester) async {
+      await tester.tap(find.byKey(clave));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('cada reto activo tiene por dónde retirarlo', (tester) async {
+      await abrirGestion(tester);
+
+      expect(find.byKey(clave), findsOneWidget);
+    });
+
+    testWidgets('los ya retirados no se retiran otra vez', (tester) async {
+      await abrirGestion(tester);
+      await tocarFiltro(
+        tester,
+        GestionRetosScreen.claveVista(VistaGestionRetos.retirados),
+      );
+
+      expect(find.text('Trote de 8 km'), findsOneWidget);
+      expect(
+        find.byKey(GestionRetosScreen.claveRetirar(catalogo[3])),
+        findsNothing,
+      );
+    });
+
+    testWidgets('no retira nada sin preguntar antes (criterio 1)', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+
+      await tocarRetirar(tester);
+
+      expect(find.text('¿Retirar este reto?'), findsOneWidget);
+      expect(repositorio.retirado, isNull);
+      // Sigue en la gestión: el botón no abre el formulario de edición.
+      expect(find.text('Gestión de retos'), findsOneWidget);
+    });
+
+    testWidgets('dice de qué reto se trata y que no se deshace', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+
+      await tocarRetirar(tester);
+
+      expect(
+        find.textContaining('«Corre 5 km hoy» dejará de aparecer'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('cancelar deja el reto donde estaba', (tester) async {
+      await abrirGestion(tester);
+      await tocarRetirar(tester);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.retirado, isNull);
+      expect(find.text('Corre 5 km hoy'), findsOneWidget);
+    });
+
+    testWidgets('confirmar lo retira y lo dice (criterio 2)', (tester) async {
+      await abrirGestion(tester);
+      await tocarRetirar(tester);
+
+      await tester.tap(find.byKey(GestionRetosScreen.claveConfirmarRetirada));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.retirado?.id, '1');
+      expect(find.text('Reto retirado del catálogo'), findsOneWidget);
+      // Y desaparece de la pestaña de vigentes, sin recargar a mano.
+      expect(find.text('Corre 5 km hoy'), findsNothing);
+    });
+
+    testWidgets('a quien lo completó se le conserva lo ganado (criterio 3)', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+      repositorio.corredores = (enProgreso: 0, completados: 2, maximoKm: 0.0);
+
+      await tocarRetirar(tester);
+
+      expect(
+        find.text(
+          '2 lo completaron: conservan su historial y la XP que ganaron.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a quien va en progreso se le advierte que se corta', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+      repositorio.corredores = (enProgreso: 3, completados: 1, maximoKm: 4.0);
+
+      await tocarRetirar(tester);
+
+      expect(
+        find.text('3 lo tienen en progreso: no podrán seguir sumándolo.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('1 lo completó: conserva su historial y la XP que ganó.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('si no lo tiene nadie, también se dice', (tester) async {
+      await abrirGestion(tester);
+
+      await tocarRetirar(tester);
+
+      expect(
+        find.text('Nadie lo ha activado: no afecta a ningún corredor.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('si la base se niega, se explica por qué', (tester) async {
+      // El trigger de SCRUM-159: el reto sigue vigente y hay quien puede
+      // cerrarlo hoy.
+      await abrirGestion(tester);
+      repositorio.errorAlRetirar = const RetoConCorredoresEnJuegoException();
+
+      await tocarRetirar(tester);
+      await tester.tap(find.byKey(GestionRetosScreen.claveConfirmarRetirada));
+      await tester.pumpAndSettle();
+
+      expect(find.text(RetiradaReto.corredoresEnJuego), findsOneWidget);
+      expect(find.text('Corre 5 km hoy'), findsOneWidget);
+    });
+  });
+
   group('crear un reto', () {
     testWidgets('el botón + abre el formulario', (tester) async {
       await abrirGestion(tester);
@@ -409,6 +586,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repositorio.consultas, greaterThan(antes));
+      // Es el cuarto de la lista y no tiene por qué caber en pantalla.
+      await tester.scrollUntilVisible(find.text('Reto nuevo'), 200);
       expect(find.text('Reto nuevo'), findsOneWidget);
     });
   });

@@ -95,12 +95,18 @@ class RetoConCorredoresEnJuegoException implements Exception {
       'lo tiene en curso';
 }
 
-/// Cómo van los corredores que tienen un reto en curso (SCRUM-151).
+/// Cómo le va a la gente con un reto.
 ///
-/// `maximoKm` es lo que lleva el que va más adelantado, cero si no hay
-/// nadie. Van juntos porque salen de la misma consulta y se usan para lo
-/// mismo: decidir qué se le puede cambiar a un reto que la gente ya empezó.
-typedef ProgresoEnCurso = ({int corredores, double maximoKm});
+/// `maximoKm` es lo que lleva el que va más adelantado de los que siguen en
+/// progreso, cero si no hay nadie. Los tres datos salen de la misma consulta
+/// y se usan para lo mismo: decidir qué se le puede hacer a un reto que la
+/// gente ya empezó, y explicárselo al administrador antes (SCRUM-151 y
+/// SCRUM-156).
+typedef CorredoresDelReto = ({
+  int enProgreso,
+  int completados,
+  double maximoKm,
+});
 
 /// Acceso a la tabla `retos`.
 abstract interface class RetosRepository {
@@ -110,12 +116,13 @@ abstract interface class RetosRepository {
   /// el cliente.
   Future<Reto> crear(NuevoReto reto);
 
-  /// Cómo van los corredores que tienen [reto] en curso (SCRUM-151).
+  /// Cómo le va a la gente con [reto] (SCRUM-151 y SCRUM-156).
   ///
   /// Para avisar al administrador antes de cambiarle la meta o la XP a un
-  /// reto que la gente ya está intentando, y para no dejarle bajar la meta
-  /// por debajo de lo que alguien ya corrió.
-  Future<ProgresoEnCurso> progresoEnCurso(Reto reto);
+  /// reto que la gente ya está intentando, para no dejarle bajar la meta por
+  /// debajo de lo que alguien ya corrió, y para decirle a quién afecta
+  /// retirarlo.
+  Future<CorredoresDelReto> corredoresDe(Reto reto);
 
   /// Retira [reto] del catálogo y devuelve cómo quedó (SCRUM-155).
   ///
@@ -240,7 +247,7 @@ class SupabaseRetosRepository implements RetosRepository {
   }
 
   @override
-  Future<ProgresoEnCurso> progresoEnCurso(Reto reto) async {
+  Future<CorredoresDelReto> corredoresDe(Reto reto) async {
     _usuarioId();
 
     // `retos_usuario` solo deja ver al administrador las filas de todos
@@ -248,22 +255,38 @@ class SupabaseRetosRepository implements RetosRepository {
     // esto únicamente se usa desde la pantalla del administrador, no hace
     // falta distinguirlo aquí.
     //
-    // El máximo se saca en Dart y no con una agregación de Postgres: son los
-    // corredores de un reto, no una tabla entera, y así la misma consulta
-    // sirve para contarlos.
+    // Se traen las filas y se cuentan en Dart en vez de pedirle a Postgres
+    // tres agregaciones: son los corredores de un reto, no una tabla entera,
+    // y así un solo viaje sirve para todo lo que hay que decirle al
+    // administrador.
     final filas = await _cliente
         .from(_tablaRetosUsuario)
-        .select('progreso_km')
-        .eq('reto_id', reto.id)
-        .eq('estado', EstadoRetoUsuario.enProgreso.valorDb);
+        .select('estado, progreso_km')
+        .eq('reto_id', reto.id);
 
+    var enProgreso = 0;
+    var completados = 0;
     var maximo = 0.0;
+
     for (final fila in filas) {
-      final progreso = fila['progreso_km'];
-      if (progreso is num && progreso > maximo) maximo = progreso.toDouble();
+      switch (EstadoRetoUsuario.desdeDb(fila['estado'] as String?)) {
+        case EstadoRetoUsuario.enProgreso:
+          enProgreso++;
+          final progreso = fila['progreso_km'];
+          if (progreso is num && progreso > maximo) {
+            maximo = progreso.toDouble();
+          }
+        case EstadoRetoUsuario.completado:
+          completados++;
+        // Vencido no entra en ninguna de las dos cuentas: ya no puede
+        // avanzar y no ganó nada que haya que conservar.
+        case EstadoRetoUsuario.vencido:
+        case null:
+          break;
+      }
     }
 
-    return (corredores: filas.length, maximoKm: maximo);
+    return (enProgreso: enProgreso, completados: completados, maximoKm: maximo);
   }
 
   @override

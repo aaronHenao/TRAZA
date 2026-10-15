@@ -20,6 +20,8 @@ import '../../widgets/traza_top_bar.dart';
 class ConocerTrazaScreen extends StatelessWidget {
   const ConocerTrazaScreen({super.key});
 
+  static const ruta = '/conocer';
+
   static const titulo = 'Conoce TRAZA';
 
   @override

@@ -9,6 +9,7 @@ import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/services/perfil_provider.dart';
+import 'package:traza/screens/auth/conocer_traza_screen.dart';
 import 'package:traza/screens/home/runner_experto_screen.dart';
 import 'package:traza/screens/onboarding/perfil_screen.dart';
 import 'package:traza/models/perfil_state.dart';
@@ -619,6 +620,53 @@ void main() {
       expect(find.text('Pantalla Runner Experto'), findsOneWidget);
     });
   });
+
+  group('acceso a la presentación de la app (SCRUM-281)', () {
+    Future<void> tocarConocerTraza(WidgetTester tester) async {
+      final fila = find.byKey(PerfilScreen.claveConocerTraza);
+      await tester.scrollUntilVisible(fila, 200);
+      await tester.tap(fila);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('ofrece repasar qué es TRAZA', (tester) async {
+      await _montarPerfil(tester, enOnboarding: false);
+
+      expect(
+        find.byKey(PerfilScreen.claveConocerTraza, skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('también durante el onboarding', (tester) async {
+      // Es cuando más sentido tiene: acaba de registrarse.
+      await _montarPerfil(tester);
+
+      expect(
+        find.byKey(PerfilScreen.claveConocerTraza, skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al tocarla abre la presentación', (tester) async {
+      await _montarPerfil(tester, enOnboarding: false);
+
+      await tocarConocerTraza(tester);
+
+      expect(find.byType(ConocerTrazaScreen), findsOneWidget);
+    });
+
+    testWidgets('al cerrarla se vuelve al perfil', (tester) async {
+      await _montarPerfil(tester, enOnboarding: false);
+      await tocarConocerTraza(tester);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ConocerTrazaScreen), findsNothing);
+      expect(find.byType(PerfilScreen), findsOneWidget);
+    });
+  });
 }
 
 /// Repositorio de mentira: devuelve los objetivos que se le configuren,
@@ -702,6 +750,11 @@ Future<void> _montarPerfil(
         path: RunnerExpertoScreen.ruta,
         builder: (_, _) =>
             const Scaffold(body: Text('Pantalla Runner Experto')),
+      ),
+      // La de verdad: la prueba comprueba que se abre y que se vuelve.
+      GoRoute(
+        path: ConocerTrazaScreen.ruta,
+        builder: (_, _) => const ConocerTrazaScreen(),
       ),
     ],
   );

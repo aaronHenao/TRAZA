@@ -7,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
+import '../auth/conocer_traza_screen.dart';
 import '../home/runner_experto_screen.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
@@ -31,6 +32,9 @@ class PerfilScreen extends StatelessWidget {
   final bool enOnboarding;
 
   static const claveRunnerExperto = Key('perfil-runner-experto');
+
+  /// El acceso a la presentación de la app (SCRUM-281).
+  static const claveConocerTraza = Key('perfil-conocer-traza');
 
   @override
   Widget build(BuildContext context) {
@@ -71,10 +75,16 @@ class _Cuerpo extends ConsumerWidget {
               ),
               children: [
                 const _CabeceraPerfil(),
+                // Repasar qué ofrece la app (criterio 4 de SCRUM-277).
+                // Arriba y también en el onboarding: quien acaba de
+                // registrarse es justo quien no sabe todavía qué puede hacer
+                // aquí.
+                const SizedBox(height: AppSpacing.lg),
+                const _AccesoConocerTraza(),
                 // Recién registrado todavía no hay nada que alcanzar: primero
                 // termina el onboarding.
                 if (!enOnboarding) ...[
-                  const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.md),
                   const _InvitacionRunnerExperto(),
                 ],
                 const SizedBox(height: AppSpacing.xl),
@@ -299,6 +309,60 @@ class _InvitacionRunnerExperto extends StatelessWidget {
                 SizedBox(height: 2),
                 Text(
                   'Mira qué necesitas y qué ganas.',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: AppColors.ink3),
+        ],
+      ),
+    );
+  }
+}
+
+/// Acceso a la presentación de la app desde el perfil (SCRUM-281).
+///
+/// Mismo formato que [_InvitacionRunnerExperto]: círculo con icono, título,
+/// una línea de detalle y la flecha. Las opciones del perfil se leen como una
+/// sola lista, así que una fila distinta se vería fuera de sitio.
+class _AccesoConocerTraza extends StatelessWidget {
+  const _AccesoConocerTraza();
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      key: PerfilScreen.claveConocerTraza,
+      // `push`: al cerrarla se vuelve al perfil, con lo que estuviera
+      // configurando intacto.
+      onTap: () => context.push(ConocerTrazaScreen.ruta),
+      child: const Row(
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: AppColors.secondaryTint,
+            child: Icon(
+              Icons.info_outline_rounded,
+              size: 22,
+              color: AppColors.secondaryDark,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '¿Qué es TRAZA?',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Repasa todo lo que puedes hacer aquí.',
                   style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
                 ),
               ],

@@ -78,3 +78,16 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Recalibrar las insignias (SCRUM-193).** Los umbrales y textos de `0010_insignias.sql` se pensaron a 5 XP por km ("Primera huella: tu primer kilómetro", 5 XP). Ahora solo se llega con retos: el primer reto completado ya da varias de golpe y los textos de km dejan de ser ciertos. Cambiarlos es otra migración (`update insignias`), y las ya otorgadas se conservan.
 - **Revisar los 150 000 XP del rol de Runner Experto (SCRUM-227).** Están en `0012_rol_experto.sql` y en `RequisitosRunnerExperto.experiencia`. Solo con retos, el número depende de la `xp_otorgada` que pongan los admins: con retos de 100 a 500 XP harían falta cientos de retos.
 - **Guía para el admin al crear retos.** La de SCRUM-192 ("un reto paga de 3 a 5 veces lo que dan sus km") ya no aplica. Hace falta una nueva, pensada junto con los umbrales de niveles e insignias.
+
+## SCRUM-323 / SCRUM-347: moderación de la IA antes de difundir una publicación
+
+**Qué quedó hecho (SCRUM-323):**
+
+- `publicaciones_foro` (`0020_foro_publicaciones.sql`) tiene `estado` (`publicada`, `retenida`, `eliminada`) y `motivo_moderacion`. La policy de select solo deja ver lo `publicada`; lo retenido lo ven su autor y el administrador.
+- El trigger `publicaciones_foro_preparar` hace nacer toda publicación `publicada`: el cliente no puede elegir el estado.
+- La app ya contempla el estado retenido: `CreacionPublicacion` devuelve `PublicacionRetenida` si la base responde `retenida`, y el formulario avisa "Tu publicación quedó retenida para revisión" (criterio 3). La moderación del administrador (`/admin/foro`) tiene la pestaña "Retenidas" con el motivo.
+
+**Qué falta:**
+
+- **La IA no existe todavía** (criterio 3 de SCRUM-323, subtarea SCRUM-347; se sigue en SCRUM-322). Hay que decidir dónde corre (Edge Function de Supabase, o una función llamada desde el trigger) y que sea ella quien deje la fila en `retenida` con su `motivo_moderacion` **antes** de devolverla al insertar. Para que la app se entere sin más cambios, el estado tiene que venir ya puesto en la fila que devuelve el `insert ... select`.
+- **El administrador solo consulta.** Aprobar una retenida o eliminar una publicación necesita policies de update que hoy no hay, a propósito: llegan con SCRUM-322 y SCRUM-242.

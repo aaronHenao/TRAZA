@@ -82,7 +82,7 @@ void main() {
   });
 
   group('sección Progreso (SCRUM-226, criterio 4)', () {
-    testWidgets('las cinco secciones caben en la pantalla más estrecha', (
+    testWidgets('las seis secciones caben en la pantalla más estrecha', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(320 * 3, 568 * 3);
@@ -94,6 +94,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Progreso'), findsOneWidget);
+      expect(find.text('Foro'), findsOneWidget);
     });
 
     testWidgets('la barra muestra "Progreso" entre "Inicio" y "Retos"', (

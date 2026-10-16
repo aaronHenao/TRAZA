@@ -8,6 +8,7 @@ import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
 import 'gestion_niveles_screen.dart';
 import 'gestion_retos_screen.dart';
+import 'moderacion_foro_screen.dart';
 
 /// Panel del administrador (SCRUM-194): a donde llega al entrar.
 ///
@@ -19,6 +20,7 @@ class PanelAdminScreen extends StatelessWidget {
 
   static const claveRetos = Key('panel-admin-retos');
   static const claveNiveles = Key('panel-admin-niveles');
+  static const claveForo = Key('panel-admin-foro');
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +54,16 @@ class PanelAdminScreen extends StatelessWidget {
                     'Define la progresión y la experiencia que pide cada '
                     'nivel.',
                 onTap: () => context.push(GestionNivelesScreen.ruta),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _TarjetaAcceso(
+                clave: claveForo,
+                icono: Icons.forum_outlined,
+                titulo: 'Moderación del foro',
+                detalle:
+                    'Consulta lo que se publica y lo que retiene la '
+                    'moderación.',
+                onTap: () => context.push(ModeracionForoScreen.ruta),
               ),
             ],
           ),

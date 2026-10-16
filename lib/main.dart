@@ -7,7 +7,10 @@ import 'screens/admin/formulario_nivel_screen.dart';
 import 'screens/admin/formulario_reto_screen.dart';
 import 'screens/admin/gestion_niveles_screen.dart';
 import 'screens/admin/gestion_retos_screen.dart';
+import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
+import 'screens/foro/foro_screen.dart';
+import 'screens/foro/nueva_publicacion_screen.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
@@ -193,6 +196,28 @@ final _navegacion = GoRouter(
           ),
         ),
       ],
+    ),
+    // Foro de la comunidad (SCRUM-323). Publicar se abre con `push`, así al
+    // volver el foro se consulta de nuevo con lo recién publicado.
+    GoRoute(
+      path: ForoScreen.ruta,
+      builder: (context, state) => const NavegacionPrincipal(
+        seccion: SeccionPrincipal.foro,
+        child: ForoScreen(),
+      ),
+      routes: [
+        GoRoute(
+          path: 'nueva',
+          builder: (context, state) => const NuevaPublicacionScreen(),
+        ),
+      ],
+    ),
+    // Lo que el administrador ve del foro. Tras SoloAdministrador como los
+    // niveles; la barrera de verdad es la policy de select de la tabla.
+    GoRoute(
+      path: ModeracionForoScreen.ruta,
+      builder: (context, state) =>
+          const SoloAdministrador(hijo: ModeracionForoScreen()),
     ),
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(

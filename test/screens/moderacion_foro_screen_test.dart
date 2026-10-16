@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/screens/admin/moderacion_foro_screen.dart';
+import 'package:traza/services/foro_provider.dart';
+import 'package:traza/services/foro_service.dart';
+import 'package:traza/services/reloj_provider.dart';
+
+import '../utiles/foro_repository_falso.dart';
+
+/// Lo que el administrador ve del foro (SCRUM-323).
+///
+/// Que un corredor no entre lo cubre `SoloAdministrador`, con sus propias
+/// pruebas.
+void main() {
+  final ahora = DateTime(2026, 10, 16, 18);
+
+  Future<void> abrir(
+    WidgetTester tester,
+    List<PublicacionForo> publicaciones,
+  ) async {
+    tester.view.physicalSize = const Size(390 * 3, 900 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foroRepositoryProvider.overrideWithValue(
+            ForoRepositorioFalso(publicaciones: publicaciones),
+          ),
+          relojProvider.overrideWithValue(() => ahora),
+        ],
+        child: const MaterialApp(home: ModeracionForoScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  final publicaciones = [
+    publicacionDePrueba(id: 'a', titulo: 'Tenis para asfalto'),
+    publicacionDePrueba(
+      id: 'b',
+      titulo: 'Gana dinero fácil',
+      estado: EstadoPublicacion.retenida,
+      motivo: 'spam',
+    ),
+  ];
+
+  testWidgets('abre en lo publicado y cuenta cada estado', (tester) async {
+    await abrir(tester, publicaciones);
+
+    expect(find.text('Publicadas (1)'), findsOneWidget);
+    expect(find.text('Retenidas (1)'), findsOneWidget);
+    expect(find.text('Tenis para asfalto'), findsOneWidget);
+    expect(find.text('Gana dinero fácil'), findsNothing);
+  });
+
+  testWidgets('en retenidas muestra el estado y el motivo', (tester) async {
+    await abrir(tester, publicaciones);
+
+    await tester.tap(
+      find.byKey(
+        ModeracionForoScreen.claveVista(VistaModeracionForo.retenidas),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gana dinero fácil'), findsOneWidget);
+    expect(find.text('Retenida'), findsOneWidget);
+    expect(find.text('Motivo: spam'), findsOneWidget);
+    expect(find.text('Tenis para asfalto'), findsNothing);
+  });
+
+  testWidgets('sin retenidas aclara que la moderación aún no está activa', (
+    tester,
+  ) async {
+    await abrir(tester, [publicacionDePrueba()]);
+
+    await tester.tap(
+      find.byKey(
+        ModeracionForoScreen.claveVista(VistaModeracionForo.retenidas),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No hay publicaciones retenidas'), findsOneWidget);
+    expect(
+      find.textContaining('La moderación automática todavía no está activa'),
+      findsOneWidget,
+    );
+  });
+}

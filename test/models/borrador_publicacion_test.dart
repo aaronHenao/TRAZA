@@ -90,13 +90,13 @@ void main() {
         'autor_nombre': 'Ana',
         'titulo': 'Hola',
         'contenido': 'Primera vez aquí',
-        'estado': 'retenida',
+        'estado': 'en_revision',
         'motivo_moderacion': 'spam',
         'fecha_creacion': '2026-10-16T14:00:00+00:00',
       });
 
       expect(publicacion.autorNombre, 'Ana');
-      expect(publicacion.estado, EstadoPublicacion.retenida);
+      expect(publicacion.estado, EstadoPublicacion.enRevision);
       expect(publicacion.motivoModeracion, 'spam');
       expect(publicacion.fechaCreacion.toUtc(), DateTime.utc(2026, 10, 16, 14));
     });

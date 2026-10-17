@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/comentario_foro.dart';
+import 'package:traza/models/moderacion_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/models/version_publicacion.dart';
 import 'package:traza/screens/foro/detalle_publicacion_screen.dart';
@@ -156,11 +157,11 @@ void main() {
     expect(repositorio.comentarioRecibido, isNull);
   });
 
-  testWidgets('una publicación retenida no se puede comentar', (tester) async {
+  testWidgets('una publicación rechazada no se puede comentar', (tester) async {
     await abrir(
       tester,
       publicaciones: [
-        publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.retenida),
+        publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.rechazada),
       ],
     );
 
@@ -181,7 +182,7 @@ void main() {
   ) async {
     await abrir(tester);
     repositorio
-      ..retener('pub-1')
+      ..rechazar('pub-1')
       ..errorAlComentar = const PublicacionNoDisponibleException();
 
     await comentar(tester, 'Llego tarde');
@@ -191,7 +192,7 @@ void main() {
     expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
   });
 
-  testWidgets('el administrador la ve aunque esté retenida, sin caja', (
+  testWidgets('el administrador la ve aunque esté rechazada, sin caja', (
     tester,
   ) async {
     await abrir(
@@ -200,16 +201,139 @@ void main() {
       publicaciones: [
         publicacionDePrueba(
           id: 'pub-1',
-          estado: EstadoPublicacion.retenida,
+          estado: EstadoPublicacion.rechazada,
           motivo: 'spam',
         ),
       ],
     );
 
     expect(find.text('¿Qué tenis para asfalto?'), findsOneWidget);
-    expect(find.text('Retenida'), findsOneWidget);
+    expect(find.text('Rechazada'), findsOneWidget);
     expect(find.text('Motivo: spam'), findsOneWidget);
     expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
+  });
+
+  group('moderación para el autor (SCRUM-322)', () {
+    testWidgets('su publicación en revisión la ve con el aviso y sin caja', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        usuario: 'autor-pub-1',
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            estado: EstadoPublicacion.enRevision,
+          ),
+        ],
+      );
+
+      expect(find.text('¿Qué tenis para asfalto?'), findsOneWidget);
+      expect(
+        find.text(DetallePublicacionScreen.publicacionEnRevision),
+        findsOneWidget,
+      );
+      expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
+    });
+
+    testWidgets('lo pendiente del administrador también le dice en revisión', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        usuario: 'autor-pub-1',
+        publicaciones: [
+          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.pendiente),
+        ],
+      );
+
+      expect(
+        find.text(DetallePublicacionScreen.publicacionEnRevision),
+        findsOneWidget,
+      );
+      expect(find.text('Pendiente'), findsNothing);
+    });
+
+    testWidgets('si se la rechazaron ve el motivo', (tester) async {
+      await abrir(
+        tester,
+        usuario: 'autor-pub-1',
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            estado: EstadoPublicacion.rechazada,
+            motivo: 'Spam',
+          ),
+        ],
+      );
+
+      expect(
+        find.text(DetallePublicacionScreen.publicacionRechazada('Spam')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a los demás lo que está en revisión no les existe', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            estado: EstadoPublicacion.enRevision,
+          ),
+        ],
+      );
+
+      expect(find.text(DetallePublicacionScreen.noDisponible), findsOneWidget);
+    });
+
+    testWidgets('su comentario en revisión lo ve marcado; el rechazado no', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.comentariosDe['pub-1'] = [
+          comentarioDePrueba(
+            id: 'com-1',
+            autorId: 'usuario-1',
+            contenido: 'Esperando',
+            estado: EstadoPublicacion.enRevision,
+          ),
+          comentarioDePrueba(
+            id: 'com-2',
+            autorId: 'usuario-1',
+            contenido: 'Grosería',
+            estado: EstadoPublicacion.rechazada,
+          ),
+        ],
+      );
+
+      expect(find.text('Esperando'), findsOneWidget);
+      expect(find.text(EstadoPublicacionChip.enRevision), findsOneWidget);
+      expect(find.text('Grosería'), findsNothing);
+      // Lo que espera no se edita.
+      expect(
+        find.byKey(DetallePublicacionScreen.claveEditarComentario('com-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('comentar avisa que el comentario quedó en revisión', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.estadoAlComentar = EstadoPublicacion.enRevision,
+      );
+
+      await comentar(tester, 'Buen dato');
+
+      expect(find.text(ComentarioPublicacion.enRevision), findsOneWidget);
+      expect(find.text('Buen dato'), findsOneWidget);
+      expect(find.text(EstadoPublicacionChip.enRevision), findsOneWidget);
+    });
   });
 
   group('insignias', () {
@@ -350,8 +474,9 @@ void main() {
       expect(find.text('Guardar cambios'), findsOneWidget);
     });
 
-    testWidgets('antes de guardar pide confirmación; al confirmar vuelve al '
-        'detalle con el cambio', (tester) async {
+    testWidgets('antes de guardar pide confirmación; al confirmar los cambios '
+        'quedan en revisión y se sigue viendo la versión anterior '
+        '(SCRUM-322)', (tester) async {
       await abrir(tester, usuario: autor);
 
       await editar(tester, titulo: 'Tenis para asfalto y trail');
@@ -365,14 +490,29 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(DetallePublicacionScreen), findsOneWidget);
-      expect(find.text('Tenis para asfalto y trail'), findsOneWidget);
-      expect(find.text(NuevaPublicacionScreen.editada), findsOneWidget);
+      expect(repositorio.edicionRecibida?.titulo, 'Tenis para asfalto y trail');
+      expect(find.text('¿Qué tenis para asfalto?'), findsOneWidget);
+      expect(find.text('Tenis para asfalto y trail'), findsNothing);
+      expect(
+        find.text(NuevaPublicacionScreen.edicionEnRevision),
+        findsOneWidget,
+      );
+      expect(
+        find.text(DetallePublicacionScreen.edicionEnRevision),
+        findsOneWidget,
+      );
+      // Una edición a la vez.
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
     });
 
-    testWidgets('editada, todos ven que se editó pero no su historial', (
-      tester,
-    ) async {
-      await abrir(tester, usuario: autor);
+    testWidgets('lo que edita el administrador se ve de una vez y todos ven '
+        'que se editó, pero no su historial', (tester) async {
+      await abrir(
+        tester,
+        usuario: autor,
+        publicaciones: [publicacionDePrueba(id: 'pub-1', autorEsAdmin: true)],
+        preparar: (r) => r.comoAdmin = true,
+      );
       expect(find.text('Hoy • Editada'), findsNothing);
 
       await editar(tester, titulo: 'Tenis para asfalto y trail');
@@ -381,8 +521,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('Tenis para asfalto y trail'), findsOneWidget);
+      expect(find.text(NuevaPublicacionScreen.editada), findsOneWidget);
       expect(find.text('Hoy • Editada'), findsOneWidget);
       expect(find.byKey(DetallePublicacionScreen.claveEditada), findsNothing);
+    });
+
+    testWidgets('con una edición en revisión no deja abrir otra', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        usuario: autor,
+        preparar: (r) => r.moderacionesGuardadas.add(
+          moderacionDePrueba(
+            autorId: autor,
+            accion: AccionModeracion.edicion,
+            estado: EstadoModeracion.pendiente,
+          ),
+        ),
+      );
+
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
+      expect(
+        find.text(DetallePublicacionScreen.edicionEnRevision),
+        findsOneWidget,
+      );
     });
 
     testWidgets('el administrador abre el historial y ve cómo se leía', (
@@ -454,7 +618,7 @@ void main() {
       expect(find.text(NuevaPublicacionScreen.sinCambios), findsOneWidget);
     });
 
-    testWidgets('si la retienen mientras edita, lo avisa y no la cambia', (
+    testWidgets('si la rechazan mientras edita, lo avisa y no la cambia', (
       tester,
     ) async {
       await abrir(tester, usuario: autor);
@@ -470,7 +634,7 @@ void main() {
       expect(find.text('Llego tarde'), findsNothing);
     });
 
-    testWidgets('lo retenido no se ofrece para editar, ni a su autor', (
+    testWidgets('lo rechazado no se ofrece para editar, ni a su autor', (
       tester,
     ) async {
       await abrir(
@@ -478,7 +642,7 @@ void main() {
         usuario: autor,
         vistaModeracion: true,
         publicaciones: [
-          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.retenida),
+          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.rechazada),
         ],
       );
 
@@ -531,9 +695,8 @@ void main() {
       );
     });
 
-    testWidgets('pide confirmación y al guardar queda marcado como editado', (
-      tester,
-    ) async {
+    testWidgets('pide confirmación y al guardar el cambio queda en revisión '
+        'con el texto anterior a la vista (SCRUM-322)', (tester) async {
       await abrir(tester, preparar: (r) => r.comentariosDe['pub-1'] = [mio()]);
 
       await editarComentario(tester, 'Mejor unos Novablast.');
@@ -546,6 +709,50 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(
+        repositorio.edicionComentarioRecibida?.contenido,
+        'Mejor unos Novablast.',
+      );
+      expect(find.text('Prueba con unos Pegasus.'), findsOneWidget);
+      expect(find.text('Mejor unos Novablast.'), findsNothing);
+      expect(
+        find.text(DetallePublicacionScreen.comentarioEnRevision),
+        findsOneWidget,
+      );
+      expect(
+        find.text(DetallePublicacionScreen.edicionComentarioEnRevision),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(DetallePublicacionScreen.claveEditarComentario('com-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('lo que edita el administrador queda de una vez marcado como '
+        'editado', (tester) async {
+      await abrir(
+        tester,
+        preparar: (r) {
+          r.comoAdmin = true;
+          r.comentariosDe['pub-1'] = [
+            comentarioDePrueba(
+              id: 'com-1',
+              autorId: 'usuario-1',
+              autorNombre: 'Ana Runner',
+              contenido: 'Prueba con unos Pegasus.',
+              autorEsAdmin: true,
+            ),
+          ];
+        },
+      );
+
+      await editarComentario(tester, 'Mejor unos Novablast.');
+      await tester.tap(
+        find.byKey(DetallePublicacionScreen.claveConfirmarEdicionComentario),
+      );
+      await tester.pumpAndSettle();
+
       expect(find.text('Mejor unos Novablast.'), findsOneWidget);
       expect(find.text('Prueba con unos Pegasus.'), findsNothing);
       expect(find.text('Hoy • Editado'), findsOneWidget);
@@ -553,7 +760,7 @@ void main() {
         find.text(DetallePublicacionScreen.comentarioEditado),
         findsOneWidget,
       );
-      // El corredor no abre el historial.
+      // Fuera de la moderación no se abre el historial.
       expect(
         find.byKey(DetallePublicacionScreen.claveComentarioEditado('com-1')),
         findsNothing,
@@ -582,14 +789,14 @@ void main() {
       expect(repositorio.edicionComentarioRecibida, isNull);
     });
 
-    testWidgets('en una publicación retenida no se ofrece editar', (
+    testWidgets('en una publicación rechazada no se ofrece editar', (
       tester,
     ) async {
       await abrir(
         tester,
         vistaModeracion: true,
         publicaciones: [
-          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.retenida),
+          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.rechazada),
         ],
         preparar: (r) => r.comentariosDe['pub-1'] = [mio()],
       );
@@ -667,12 +874,12 @@ void main() {
       expect(caja.controller!.text, 'Yo uso unos');
     });
 
-    testWidgets('si la retienen, el detalle se entera sin refrescar', (
+    testWidgets('si la rechazan, el detalle se entera sin refrescar', (
       tester,
     ) async {
       await abrir(tester);
 
-      repositorio.retener('pub-1');
+      repositorio.rechazar('pub-1');
       cambios.emitirPublicacion(
         'pub-1',
         const CambioForo(tipo: TipoCambioForo.reconectado),

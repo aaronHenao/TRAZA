@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
+import '../models/moderacion_foro.dart';
 import '../models/publicacion_foro.dart';
 import '../models/version_publicacion.dart';
 import 'cambios_foro.dart';
@@ -17,21 +18,18 @@ sealed class ResultadoPublicacion {
   const ResultadoPublicacion();
 }
 
-/// La publicación quedó registrada y ya se ve en el foro.
+/// La publicación quedó registrada y ya se ve en el foro. Pasa con lo que
+/// publica el administrador, que no pasa por la moderación.
 class PublicacionCreada extends ResultadoPublicacion {
   const PublicacionCreada(this.publicacion);
 
   final PublicacionForo publicacion;
 }
 
-/// La publicación quedó registrada pero la moderación la retuvo para
-/// revisión (criterio 3 de SCRUM-323).
-///
-/// Hoy no ocurre: la moderación de la IA todavía no existe y toda
-/// publicación nace publicada. Cuando llegue, la base devolverá el estado
-/// `retenida` y la pantalla ya sabe avisarlo.
-class PublicacionRetenida extends ResultadoPublicacion {
-  const PublicacionRetenida(this.publicacion);
+/// La publicación quedó registrada y la está revisando la moderación
+/// (SCRUM-322). Aparece en el foro cuando se aprueba.
+class PublicacionEnRevision extends ResultadoPublicacion {
+  const PublicacionEnRevision(this.publicacion);
 
   final PublicacionForo publicacion;
 }
@@ -53,7 +51,8 @@ class PublicacionNoGuardada extends ResultadoPublicacion {
   final String mensaje;
 }
 
-/// Lo publicado en el foro (SCRUM-346).
+/// Lo publicado en el foro (SCRUM-346), más lo propio que está en revisión
+/// (SCRUM-322).
 ///
 /// `autoDispose`: se vuelve a consultar cada vez que se entra, así lo que
 /// otros publicaron aparece sin reiniciar la app.
@@ -62,14 +61,20 @@ final publicacionesForoProvider =
       (ref) => ref.watch(foroRepositoryProvider).publicadas(),
     );
 
-/// Qué publicaciones mira el administrador en la moderación del foro.
+/// Qué mira el administrador en la moderación del foro (SCRUM-337).
+///
+/// "Publicadas" sale de las publicaciones; las demás, de `moderaciones_foro`,
+/// así incluyen comentarios y ediciones.
 enum VistaModeracionForo {
-  publicadas(EstadoPublicacion.publicada, 'Publicadas'),
-  retenidas(EstadoPublicacion.retenida, 'Retenidas');
+  publicadas(null, 'Publicadas'),
+  pendientes(EstadoModeracion.pendiente, 'Pendientes'),
+  enRevision(EstadoModeracion.enRevision, 'En revisión'),
+  rechazadas(EstadoModeracion.rechazada, 'Rechazadas');
 
   const VistaModeracionForo(this.estado, this.etiqueta);
 
-  final EstadoPublicacion estado;
+  /// El estado de la moderación que muestra, o null en "Publicadas".
+  final EstadoModeracion? estado;
   final String etiqueta;
 }
 
@@ -84,18 +89,95 @@ final moderacionForoProvider =
       (ref) => ref.watch(foroRepositoryProvider).todasParaModeracion(),
     );
 
-/// La moderación filtrada por la vista elegida.
-///
-/// Se filtra en memoria: cambiar de pestaña responde al instante y los
-/// contadores de las dos salen de la misma consulta.
+/// Lo publicado, para la pestaña "Publicadas" de la moderación.
 final moderacionForoFiltradaProvider =
     Provider.autoDispose<AsyncValue<List<PublicacionForo>>>((ref) {
-      final vista = ref.watch(vistaModeracionForoProvider);
       return ref
           .watch(moderacionForoProvider)
           .whenData(
-            (todas) => todas.where((p) => p.estado == vista.estado).toList(),
+            (todas) => todas
+                .where((p) => p.estado == EstadoPublicacion.publicada)
+                .toList(),
           );
+    });
+
+/// Toda la moderación del foro, para el administrador (SCRUM-337).
+final moderacionesAdminProvider =
+    FutureProvider.autoDispose<List<ModeracionForo>>(
+      (ref) => ref.watch(foroRepositoryProvider).moderaciones(),
+    );
+
+/// La moderación de la pestaña elegida.
+///
+/// Se filtra en memoria: cambiar de pestaña responde al instante y los
+/// contadores salen de la misma consulta.
+final moderacionesDeLaVistaProvider =
+    Provider.autoDispose<AsyncValue<List<ModeracionForo>>>((ref) {
+      final estado = ref.watch(vistaModeracionForoProvider).estado;
+      return ref
+          .watch(moderacionesAdminProvider)
+          .whenData((todas) => todas.where((m) => m.estado == estado).toList());
+    });
+
+/// La moderación de lo que escribió el usuario de la sesión (SCRUM-322).
+final misModeracionesProvider =
+    FutureProvider.autoDispose<List<ModeracionForo>>(
+      (ref) => ref.watch(foroRepositoryProvider).misModeraciones(),
+    );
+
+/// Lo propio que la moderación rechazó, de lo más reciente a lo más antiguo
+/// ("Mis rechazados", SCRUM-339).
+final misRechazadosProvider =
+    Provider.autoDispose<AsyncValue<List<ModeracionForo>>>(
+      (ref) => ref
+          .watch(misModeracionesProvider)
+          .whenData((todas) => todas.where((m) => m.rechazada).toList()),
+    );
+
+/// Cuántos rechazos no ha visto el autor: el contador del foro (criterio 5
+/// de SCRUM-322). Cero mientras carga.
+final rechazosSinVerProvider = Provider.autoDispose<int>(
+  (ref) => switch (ref.watch(misRechazadosProvider)) {
+    AsyncData(value: final lista) =>
+      lista.where((m) => !m.vistaPorAutor).length,
+    _ => 0,
+  },
+);
+
+/// La edición propia de la publicación [publicacionId] que espera la
+/// moderación, o null (SCRUM-322). Mientras exista, los demás ven la versión
+/// anterior y no se ofrece editar otra vez.
+final edicionAbiertaDePublicacionProvider = Provider.autoDispose
+    .family<ModeracionForo?, String>((ref, publicacionId) {
+      final usuario = ref.read(usuarioActualProvider)();
+      final mias = ref.watch(misModeracionesProvider).valueOrNull ?? const [];
+      return mias
+          .where(
+            (m) =>
+                m.autorId == usuario &&
+                m.tipo == TipoModeracion.publicacion &&
+                m.esEdicion &&
+                m.abierta &&
+                m.publicacionId == publicacionId,
+          )
+          .firstOrNull;
+    });
+
+/// Los comentarios propios de [publicacionId] con una edición esperando la
+/// moderación (SCRUM-322).
+final comentariosConEdicionAbiertaProvider = Provider.autoDispose
+    .family<Set<String>, String>((ref, publicacionId) {
+      final usuario = ref.read(usuarioActualProvider)();
+      final mias = ref.watch(misModeracionesProvider).valueOrNull ?? const [];
+      return {
+        for (final m in mias)
+          if (m.autorId == usuario &&
+              m.tipo == TipoModeracion.comentario &&
+              m.esEdicion &&
+              m.abierta &&
+              m.publicacionId == publicacionId)
+            m.comentarioId!,
+      };
     });
 
 final creacionPublicacionProvider = Provider<CreacionPublicacion>(
@@ -123,14 +205,18 @@ class CreacionPublicacion {
       final creada = await _ref.read(foroRepositoryProvider).crear(nueva);
       _ref
         ..invalidate(publicacionesForoProvider)
+        ..invalidate(misModeracionesProvider)
         // El administrador también publica, desde la moderación.
-        ..invalidate(moderacionForoProvider);
+        ..invalidate(moderacionForoProvider)
+        ..invalidate(moderacionesAdminProvider);
       return switch (creada.estado) {
         EstadoPublicacion.publicada => PublicacionCreada(creada),
-        // Eliminada recién creada no tiene sentido; si la moderación llegara
-        // a hacerlo, para el autor es lo mismo: no se difundió.
-        EstadoPublicacion.retenida ||
-        EstadoPublicacion.eliminada => PublicacionRetenida(creada),
+        // Recién creada solo puede estar en revisión; si la base llegara a
+        // devolver otra cosa, para el autor es lo mismo: no se difundió.
+        EstadoPublicacion.enRevision ||
+        EstadoPublicacion.pendiente ||
+        EstadoPublicacion.rechazada ||
+        EstadoPublicacion.eliminada => PublicacionEnRevision(creada),
       };
     } on SesionRequeridaParaForoException {
       return const PublicacionNoGuardada(sinSesion);
@@ -147,7 +233,7 @@ class CreacionPublicacion {
 /// Una publicación por su id, para el detalle (SCRUM-351).
 ///
 /// Se consulta siempre y no se toma la del listado: lo que importa al abrirla
-/// es cómo está ahora, porque pudo ser retenida o eliminada después de que
+/// es cómo está ahora, porque pudo ser rechazada o eliminada después de que
 /// se cargó el foro (criterio 3 de SCRUM-324).
 final publicacionForoProvider = FutureProvider.autoDispose
     .family<PublicacionForo?, String>(
@@ -166,11 +252,14 @@ sealed class ResultadoComentario {
   const ResultadoComentario();
 }
 
-/// El comentario quedó registrado y ya se ve bajo la publicación.
+/// El comentario quedó registrado. Si su [ComentarioForo.estado] no es
+/// publicado, lo está revisando la moderación (SCRUM-322).
 class ComentarioRegistrado extends ResultadoComentario {
   const ComentarioRegistrado(this.comentario);
 
   final ComentarioForo comentario;
+
+  bool get enRevision => comentario.estado != EstadoPublicacion.publicada;
 }
 
 /// El texto no pasó las reglas: no se llegó a tocar la base (criterio 2).
@@ -180,7 +269,7 @@ class ComentarioInvalido extends ResultadoComentario {
   final String error;
 }
 
-/// La publicación fue eliminada o retenida y ya no admite comentarios
+/// La publicación fue eliminada o rechazada y ya no admite comentarios
 /// (criterio 3).
 class PublicacionNoDisponible extends ResultadoComentario {
   const PublicacionNoDisponible();
@@ -207,6 +296,8 @@ class ComentarioPublicacion {
   static const sinSesion = 'Inicia sesión para comentar.';
   static const noSePudo =
       'No se pudo enviar el comentario. Inténtalo de nuevo.';
+  static const enRevision =
+      'Tu comentario está en revisión. Los demás lo verán cuando se apruebe.';
 
   Future<ResultadoComentario> comentar(
     String publicacionId,
@@ -221,6 +312,7 @@ class ComentarioPublicacion {
           .comentar(nuevo);
       _ref
         ..invalidate(comentariosForoProvider(publicacionId))
+        ..invalidate(misModeracionesProvider)
         // Los listados muestran cuántos comentarios tiene cada publicación.
         ..invalidate(publicacionesForoProvider)
         ..invalidate(moderacionForoProvider);
@@ -254,11 +346,18 @@ sealed class ResultadoEdicion {
   const ResultadoEdicion();
 }
 
-/// Los cambios quedaron guardados.
+/// Los cambios ya se ven: los hizo el administrador, que no pasa por la
+/// moderación, o no había nada que cambiar.
 class PublicacionEditada extends ResultadoEdicion {
-  const PublicacionEditada(this.publicacion);
+  const PublicacionEditada();
+}
 
-  final PublicacionForo publicacion;
+/// Los cambios esperan la moderación (SCRUM-322). Mientras tanto, los demás
+/// ven la versión anterior.
+class EdicionEnRevision extends ResultadoEdicion {
+  const EdicionEnRevision(this.moderacion);
+
+  final ModeracionForo moderacion;
 }
 
 /// El borrador no pasó las reglas: no se llegó a tocar la base.
@@ -268,7 +367,7 @@ class EdicionConErrores extends ResultadoEdicion {
   final Map<CampoPublicacion, String> errores;
 }
 
-/// La publicación fue retenida o eliminada mientras se editaba.
+/// La publicación fue rechazada o eliminada mientras se editaba.
 class EdicionNoDisponible extends ResultadoEdicion {
   const EdicionNoDisponible();
 }
@@ -297,6 +396,8 @@ class EdicionPublicacion {
       'No se pudieron guardar los cambios. Inténtalo de '
       'nuevo.';
   static const datosRechazados = CreacionPublicacion.datosRechazados;
+  static const yaEnRevision =
+      'Ya tienes una edición en revisión. Espera a que se resuelva.';
 
   Future<ResultadoEdicion> editar(
     String publicacionId,
@@ -306,14 +407,20 @@ class EdicionPublicacion {
     if (cambios == null) return EdicionConErrores(borrador.errores);
 
     try {
-      final editada = await _ref
+      final moderacion = await _ref
           .read(foroRepositoryProvider)
           .editar(publicacionId, cambios);
       _refrescar(publicacionId);
-      return PublicacionEditada(editada);
+      if (moderacion != null && moderacion.abierta) {
+        return EdicionEnRevision(moderacion);
+      }
+      return const PublicacionEditada();
     } on PublicacionNoDisponibleException {
       _refrescar(publicacionId);
       return const EdicionNoDisponible();
+    } on EdicionYaEnRevisionException {
+      _refrescar(publicacionId);
+      return const EdicionNoGuardada(yaEnRevision);
     } on SesionRequeridaParaForoException {
       return const EdicionNoGuardada(sinSesion);
     } on DatosDePublicacionInvalidosException catch (error) {
@@ -325,12 +432,14 @@ class EdicionPublicacion {
     }
   }
 
-  /// El detalle y los dos listados muestran el título y el contenido, y el
-  /// historial ganó una versión.
+  /// El detalle y los dos listados muestran el título y el contenido, el
+  /// historial pudo ganar una versión y la edición en revisión cambia lo que
+  /// ofrece el detalle.
   void _refrescar(String publicacionId) {
     _ref
       ..invalidate(publicacionForoProvider(publicacionId))
       ..invalidate(versionesPublicacionProvider(publicacionId))
+      ..invalidate(misModeracionesProvider)
       ..invalidate(publicacionesForoProvider)
       ..invalidate(moderacionForoProvider);
   }
@@ -348,11 +457,18 @@ sealed class ResultadoEdicionComentario {
   const ResultadoEdicionComentario();
 }
 
-/// El cambio quedó guardado.
+/// El cambio ya se ve: lo hizo el administrador, o no había nada que
+/// cambiar.
 class ComentarioEditado extends ResultadoEdicionComentario {
-  const ComentarioEditado(this.comentario);
+  const ComentarioEditado();
+}
 
-  final ComentarioForo comentario;
+/// El cambio espera la moderación (SCRUM-322). Mientras tanto, los demás
+/// leen el texto anterior.
+class EdicionComentarioEnRevision extends ResultadoEdicionComentario {
+  const EdicionComentarioEnRevision(this.moderacion);
+
+  final ModeracionForo moderacion;
 }
 
 /// El texto no pasó las reglas: no se llegó a tocar la base.
@@ -362,7 +478,7 @@ class EdicionComentarioInvalida extends ResultadoEdicionComentario {
   final String error;
 }
 
-/// La publicación fue retenida o eliminada mientras se editaba.
+/// La publicación fue rechazada o eliminada mientras se editaba.
 class EdicionComentarioNoDisponible extends ResultadoEdicionComentario {
   const EdicionComentarioNoDisponible();
 }
@@ -388,6 +504,8 @@ class EdicionComentario {
   static const noDisponible = ComentarioPublicacion.noDisponible;
   static const noSePudo =
       'No se pudieron guardar los cambios. Inténtalo de nuevo.';
+  static const yaEnRevision =
+      'Ya tienes una edición de este comentario en revisión.';
 
   Future<ResultadoEdicionComentario> editar(
     ComentarioForo comentario,
@@ -397,25 +515,126 @@ class EdicionComentario {
     if (cambios == null) return EdicionComentarioInvalida(borrador.error!);
 
     try {
-      final editado = await _ref
+      final moderacion = await _ref
           .read(foroRepositoryProvider)
           .editarComentario(comentario.id, cambios);
       _ref
         ..invalidate(comentariosForoProvider(comentario.publicacionId))
-        ..invalidate(versionesComentarioProvider(comentario.id));
-      return ComentarioEditado(editado);
+        ..invalidate(versionesComentarioProvider(comentario.id))
+        ..invalidate(misModeracionesProvider);
+      if (moderacion != null && moderacion.abierta) {
+        return EdicionComentarioEnRevision(moderacion);
+      }
+      return const ComentarioEditado();
     } on PublicacionNoDisponibleException {
       // Como al comentar: el detalle pasa a decir que ya no está disponible.
       _ref
         ..invalidate(publicacionForoProvider(comentario.publicacionId))
         ..invalidate(publicacionesForoProvider);
       return const EdicionComentarioNoDisponible();
+    } on EdicionYaEnRevisionException {
+      _ref.invalidate(misModeracionesProvider);
+      return const EdicionComentarioNoGuardada(yaEnRevision);
     } on SesionRequeridaParaForoException {
       return const EdicionComentarioNoGuardada(ComentarioPublicacion.sinSesion);
     } catch (error) {
       debugPrint('No se pudo editar el comentario: $error');
       return const EdicionComentarioNoGuardada(noSePudo);
     }
+  }
+}
+
+/// Cómo terminó una decisión del administrador (SCRUM-337).
+sealed class ResultadoDecision {
+  const ResultadoDecision();
+}
+
+/// Quedó aprobada o rechazada.
+class ModeracionDecidida extends ResultadoDecision {
+  const ModeracionDecidida(this.moderacion);
+
+  final ModeracionForo moderacion;
+}
+
+/// Rechazar sin motivo: el autor no sabría por qué.
+class DecisionSinMotivo extends ResultadoDecision {
+  const DecisionSinMotivo();
+}
+
+/// Otro (la IA u otro administrador) la resolvió primero.
+class DecisionYaResuelta extends ResultadoDecision {
+  const DecisionYaResuelta();
+}
+
+/// No se pudo guardar.
+class DecisionNoGuardada extends ResultadoDecision {
+  const DecisionNoGuardada(this.mensaje);
+
+  final String mensaje;
+}
+
+final decisionModeracionProvider = Provider<DecisionModeracion>(
+  DecisionModeracion.new,
+);
+
+/// El administrador aprueba o rechaza lo que la IA dejó pendiente
+/// (SCRUM-337).
+class DecisionModeracion {
+  const DecisionModeracion(this._ref);
+
+  final Ref _ref;
+
+  static const sinMotivo = 'Escribe el motivo: es lo que leerá el autor.';
+  static const yaResuelta = 'Esta moderación ya fue resuelta.';
+  static const noSePudo = 'No se pudo guardar la decisión. Inténtalo de nuevo.';
+
+  Future<ResultadoDecision> decidir(
+    ModeracionForo moderacion, {
+    required bool aprobar,
+    String? motivo,
+  }) async {
+    final limpio = motivo?.trim();
+    if (!aprobar && (limpio == null || limpio.isEmpty)) {
+      return const DecisionSinMotivo();
+    }
+
+    try {
+      final decidida = await _ref
+          .read(foroRepositoryProvider)
+          .decidir(
+            moderacion.id,
+            aprobar: aprobar,
+            motivo: aprobar ? null : limpio,
+          );
+      return ModeracionDecidida(decidida);
+    } on ModeracionYaResueltaException {
+      return const DecisionYaResuelta();
+    } on DatosDePublicacionInvalidosException {
+      return const DecisionSinMotivo();
+    } catch (error) {
+      debugPrint('No se pudo decidir la moderación: $error');
+      return const DecisionNoGuardada(noSePudo);
+    } finally {
+      // Lo que se publique o rechace cambia todas las pestañas.
+      _ref
+        ..invalidate(moderacionesAdminProvider)
+        ..invalidate(moderacionForoProvider)
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(publicacionForoProvider(moderacion.publicacionId))
+        ..invalidate(comentariosForoProvider(moderacion.publicacionId));
+    }
+  }
+}
+
+/// El autor abre "Mis rechazados": el contador del foro vuelve a cero
+/// (criterio 5 de SCRUM-322). Si no se puede marcar, el contador sigue y se
+/// intentará la próxima vez.
+Future<void> marcarRechazosVistos(WidgetRef ref) async {
+  try {
+    await ref.read(foroRepositoryProvider).marcarRechazosVistos();
+    ref.invalidate(misModeracionesProvider);
+  } catch (error) {
+    debugPrint('No se pudieron marcar los rechazos como vistos: $error');
   }
 }
 
@@ -430,6 +649,12 @@ const esperaCambiosForo = Duration(milliseconds: 500);
 /// "N publicaciones nuevas" y las muestra cuando el usuario lo pide.
 final publicacionesNuevasProvider = StateProvider.autoDispose<Set<String>>(
   (ref) => const {},
+);
+
+/// El último rechazo de algo propio que llegó en vivo, para avisarlo
+/// (criterio 5 de SCRUM-322). Lo consume el foro y lo vuelve a null.
+final rechazoRecienteProvider = StateProvider.autoDispose<CambioForo?>(
+  (ref) => null,
 );
 
 /// Escucha los cambios de todo el foro mientras el foro o la moderación están
@@ -450,7 +675,9 @@ final foroEnVivoProvider = Provider.autoDispose<void>((ref) {
     espera = Timer(esperaCambiosForo, () {
       ref.container
         ..invalidate(publicacionesForoProvider)
-        ..invalidate(moderacionForoProvider);
+        ..invalidate(moderacionForoProvider)
+        ..invalidate(moderacionesAdminProvider)
+        ..invalidate(misModeracionesProvider);
     });
   }
 
@@ -462,6 +689,10 @@ final foroEnVivoProvider = Provider.autoDispose<void>((ref) {
     if (cambio.esPublicacionNueva && id != null && cambio.autorId != usuario) {
       final nuevas = ref.read(publicacionesNuevasProvider.notifier);
       nuevas.state = {...nuevas.state, id};
+    }
+    // SCRUM-322: la moderación rechazó algo propio.
+    if (cambio.esRechazo && cambio.autorId == usuario) {
+      ref.read(rechazoRecienteProvider.notifier).state = cambio;
     }
     recargar();
   });
@@ -482,6 +713,7 @@ final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
 ) {
   Timer? esperaComentarios;
   Timer? esperaPublicacion;
+  Timer? esperaModeracion;
 
   void recargarComentarios() {
     esperaComentarios?.cancel();
@@ -499,9 +731,19 @@ final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
     );
   }
 
+  // SCRUM-322: una edición propia pasó la moderación (o no).
+  void recargarModeracion() {
+    esperaModeracion?.cancel();
+    esperaModeracion = Timer(
+      esperaCambiosForo,
+      () => ref.invalidate(misModeracionesProvider),
+    );
+  }
+
   void recargarTodo() {
     recargarComentarios();
     recargarPublicacion();
+    recargarModeracion();
   }
 
   final suscripcion = ref
@@ -511,6 +753,7 @@ final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
         (cambio) => switch (cambio.tabla) {
           TablaForo.comentarios => recargarComentarios(),
           TablaForo.publicaciones => recargarPublicacion(),
+          TablaForo.moderaciones => recargarModeracion(),
           null => recargarTodo(),
         },
       );
@@ -519,6 +762,7 @@ final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
   ref.onDispose(() {
     esperaComentarios?.cancel();
     esperaPublicacion?.cancel();
+    esperaModeracion?.cancel();
     suscripcion.cancel();
     ciclo.dispose();
   });

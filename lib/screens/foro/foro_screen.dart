@@ -9,12 +9,16 @@ import '../../services/rutas_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/boton_publicar.dart';
 import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_publicacion.dart';
 import '../../widgets/tarjeta_ruta.dart';
+import '../../widgets/traza_toast.dart';
+import '../../widgets/traza_top_bar.dart';
 import '../rutas/detalle_ruta_screen.dart';
 import 'detalle_publicacion_screen.dart';
+import 'mis_rechazados_screen.dart';
 import 'nueva_publicacion_screen.dart';
 
 /// Las dos caras del foro.
@@ -38,6 +42,9 @@ enum SeccionForo {
 /// Se actualiza en vivo (SCRUM-357). Lo editado y los comentarios cambian en
 /// su sitio; las publicaciones nuevas de otros esperan detrás de un aviso
 /// para no mover la lista mientras se lee.
+///
+/// Lo propio en revisión aparece marcado, y si la moderación rechaza algo se
+/// avisa y se cuenta en el acceso a "Mis rechazados" (SCRUM-322).
 class ForoScreen extends ConsumerStatefulWidget {
   const ForoScreen({super.key});
 
@@ -45,12 +52,18 @@ class ForoScreen extends ConsumerStatefulWidget {
 
   static const claveNueva = Key('foro-nueva-publicacion');
   static const claveNuevas = Key('foro-publicaciones-nuevas');
+  static const claveRechazados = Key('foro-mis-rechazados');
 
   static Key claveSeccion(SeccionForo seccion) =>
       Key('foro-seccion-${seccion.name}');
 
   static String textoNuevas(int cuantas) =>
       cuantas == 1 ? '1 publicación nueva' : '$cuantas publicaciones nuevas';
+
+  /// El aviso de un rechazo que llegó en vivo (criterio 5 de SCRUM-322).
+  static String textoRechazo(String? motivo) =>
+      'La moderación rechazó tu contenido'
+      '${motivo == null ? '' : ': $motivo'}';
 
   @override
   ConsumerState<ForoScreen> createState() => _ForoScreenState();
@@ -84,6 +97,14 @@ class _ForoScreenState extends ConsumerState<ForoScreen> {
     ref.watch(foroEnVivoProvider);
     final publicaciones = ref.watch(publicacionesForoProvider);
     final nuevas = ref.watch(publicacionesNuevasProvider);
+    final rechazosSinVer = ref.watch(rechazosSinVerProvider);
+
+    // SCRUM-322: se avisa una vez y se deja de nuevo en null.
+    ref.listen(rechazoRecienteProvider, (_, rechazo) {
+      if (rechazo == null) return;
+      mostrarToast(context, ForoScreen.textoRechazo(rechazo.motivo));
+      ref.read(rechazoRecienteProvider.notifier).state = null;
+    });
 
     // Refrescar a mano también muestra lo que estaba esperando.
     void recargar() {
@@ -99,15 +120,22 @@ class _ForoScreenState extends ConsumerState<ForoScreen> {
     }
 
     return Scaffold(
+      // Abajo a la derecha, donde el pulgar llega. La lista deja
+      // `espacioBotonPublicar` al final para que no tape la última tarjeta.
+      // Solo en los temas: una ruta no se escribe aquí, se publica desde el
+      // resumen del entrenamiento que la grabó.
+      floatingActionButton: _seccion == SeccionForo.temas
+          ? BotonPublicar(key: ForoScreen.claveNueva, onPressed: nueva)
+          : null,
       body: SafeArea(
         child: AnchoContenido(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Publicar un tema solo se ofrece en los temas: una ruta no
-              // se escribe aquí, se publica desde el resumen del
-              // entrenamiento que la grabó.
-              _Cabecera(onNueva: _seccion == SeccionForo.temas ? nueva : null),
+              _Cabecera(
+                rechazosSinVer: rechazosSinVer,
+                onRechazados: () => context.push(MisRechazadosScreen.ruta),
+              ),
               _Secciones(
                 actual: _seccion,
                 onCambiar: (seccion) => setState(() => _seccion = seccion),
@@ -248,10 +276,11 @@ class _AvisoNuevas extends StatelessWidget {
 }
 
 class _Cabecera extends StatelessWidget {
-  const _Cabecera({required this.onNueva});
+  const _Cabecera({required this.rechazosSinVer, required this.onRechazados});
 
-  /// Null en el apartado de rutas, donde no hay nada que redactar.
-  final VoidCallback? onNueva;
+  /// Cuántos rechazos no ha visto el usuario (criterio 5 de SCRUM-322).
+  final int rechazosSinVer;
+  final VoidCallback onRechazados;
 
   @override
   Widget build(BuildContext context) {
@@ -285,23 +314,18 @@ class _Cabecera extends StatelessWidget {
               ],
             ),
           ),
-          if (onNueva case final publicar?) ...[
-            const SizedBox(width: AppSpacing.sm),
-            FilledButton.icon(
-              key: ForoScreen.claveNueva,
-              onPressed: publicar,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 38),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                textStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              icon: const Icon(Icons.edit_outlined, size: 17),
-              label: const Text('Publicar'),
+          const SizedBox(width: AppSpacing.sm),
+          Badge.count(
+            count: rechazosSinVer,
+            isLabelVisible: rechazosSinVer > 0,
+            backgroundColor: AppColors.danger,
+            child: TrazaIconButton(
+              key: ForoScreen.claveRechazados,
+              icon: Icons.gpp_maybe_outlined,
+              tooltip: 'Mis rechazados',
+              onPressed: onRechazados,
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -414,7 +438,7 @@ class _Lista extends ConsumerWidget {
         AppSpacing.lg,
         0,
         AppSpacing.lg,
-        AppSpacing.xl,
+        espacioBotonPublicar,
       ),
       itemCount: publicaciones.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),

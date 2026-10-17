@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
+import '../models/moderacion_foro.dart';
 import '../models/publicacion_foro.dart';
 import '../models/version_publicacion.dart';
 
@@ -43,18 +44,39 @@ class DatosDePublicacionInvalidosException implements Exception {
   String toString() => 'DatosDePublicacionInvalidosException: $detalle';
 }
 
-/// Se lanza al comentar o editar una publicación que fue eliminada o retenida
-/// por la moderación (criterio 3 de SCRUM-324, SCRUM-355).
+/// Se lanza al comentar o editar una publicación que fue eliminada o
+/// rechazada por la moderación, o que todavía está en revisión (criterio 3
+/// de SCRUM-324, SCRUM-355).
 ///
-/// Quienes lo impiden son las policies de `comentarios_foro` y
-/// `publicaciones_foro`, que exigen que la publicación esté publicada en ese
-/// momento: la app puede tener en pantalla una versión vieja.
+/// Quienes lo impiden son la policy de insert de `comentarios_foro` y las
+/// funciones `editar_*`, que exigen que esté publicada en ese momento: la app
+/// puede tener en pantalla una versión vieja.
 class PublicacionNoDisponibleException implements Exception {
   const PublicacionNoDisponibleException();
 
   @override
   String toString() =>
       'PublicacionNoDisponibleException: la publicación ya no está publicada';
+}
+
+/// Se lanza al editar algo que ya tiene una edición en revisión (SCRUM-322):
+/// hay que esperar el veredicto de la primera.
+class EdicionYaEnRevisionException implements Exception {
+  const EdicionYaEnRevisionException();
+
+  @override
+  String toString() =>
+      'EdicionYaEnRevisionException: ya hay una edición en revisión';
+}
+
+/// Se lanza cuando el administrador decide sobre una moderación que ya se
+/// resolvió: la IA respondió primero u otro administrador se adelantó.
+class ModeracionYaResueltaException implements Exception {
+  const ModeracionYaResueltaException();
+
+  @override
+  String toString() =>
+      'ModeracionYaResueltaException: la moderación ya fue resuelta';
 }
 
 /// Acceso a las tablas del foro: `publicaciones_foro` (SCRUM-323) y
@@ -64,11 +86,13 @@ abstract interface class ForoRepository {
   /// fila creada (SCRUM-343).
   ///
   /// Lo que vuelve trae el nombre del autor, el estado y la fecha que puso la
-  /// base. El estado es lo que dice si se difundió o quedó retenida.
+  /// base. El estado es lo que dice si se difundió o quedó en revisión
+  /// (SCRUM-322).
   Future<PublicacionForo> crear(NuevaPublicacion publicacion);
 
   /// Lo publicado en el foro, de lo más reciente a lo más antiguo
-  /// (SCRUM-346).
+  /// (SCRUM-346), más lo del propio usuario que todavía espera la moderación
+  /// (SCRUM-322): así ve que su publicación está "en revisión".
   Future<List<PublicacionForo>> publicadas();
 
   /// Todas las publicaciones, en cualquier estado, para el administrador.
@@ -80,28 +104,37 @@ abstract interface class ForoRepository {
   /// La publicación con [id], o null si no existe o el usuario no puede
   /// verla (SCRUM-350).
   ///
-  /// Puede volver en cualquier estado: el autor ve lo suyo retenido y el
-  /// administrador todo. Si se puede comentar lo decide
+  /// Puede volver en cualquier estado: el autor ve lo suyo en revisión o
+  /// rechazado, y el administrador todo. Si se puede comentar lo decide
   /// [PublicacionForo.admiteComentarios].
   Future<PublicacionForo?> publicacion(String id);
 
   /// Los comentarios de una publicación, del más antiguo al más reciente,
   /// como se lee una conversación (SCRUM-350).
+  ///
+  /// A cada uno le llegan los publicados y los suyos en cualquier estado; al
+  /// administrador, todos (SCRUM-322).
   Future<List<ComentarioForo>> comentarios(String publicacionId);
 
   /// Registra [comentario] a nombre del usuario de la sesión y devuelve la
-  /// fila creada (SCRUM-350).
+  /// fila creada (SCRUM-350). Lo de un corredor vuelve en revisión
+  /// (SCRUM-322).
   ///
   /// Lanza [PublicacionNoDisponibleException] si la publicación ya no está
   /// publicada.
   Future<ComentarioForo> comentar(NuevoComentario comentario);
 
-  /// Cambia el título y el contenido de la publicación [id] y devuelve cómo
-  /// quedó (SCRUM-355).
+  /// Propone otro título y contenido para la publicación [id] (SCRUM-355).
+  ///
+  /// La edición pasa por la moderación (SCRUM-322): lo publicado no cambia
+  /// hasta que se apruebe, y lo que vuelve es la moderación abierta. Si quien
+  /// edita es el administrador, se aplica de una vez y vuelve aprobada.
+  /// Vuelve null si el texto no cambió.
   ///
   /// Lanza [PublicacionNoDisponibleException] si no es del usuario o ya no
-  /// está publicada.
-  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios);
+  /// está publicada, y [EdicionYaEnRevisionException] si ya tiene otra
+  /// edición esperando.
+  Future<ModeracionForo?> editar(String id, NuevaPublicacion cambios);
 
   /// Las versiones anteriores de una publicación editada, de la más reciente
   /// a la original (SCRUM-355). La actual no está: es la publicación misma.
@@ -110,15 +143,42 @@ abstract interface class ForoRepository {
   /// una lista vacía.
   Future<List<VersionPublicacion>> versiones(String publicacionId);
 
-  /// Cambia el texto del comentario [id] y devuelve cómo quedó (SCRUM-356).
+  /// Propone otro texto para el comentario [id] (SCRUM-356). Como
+  /// [editar]: pasa por la moderación y vuelve la moderación abierta, o null
+  /// si el texto no cambió (SCRUM-322).
   ///
   /// Lanza [PublicacionNoDisponibleException] si no es del usuario o la
-  /// publicación ya no está publicada.
-  Future<ComentarioForo> editarComentario(String id, NuevoComentario cambios);
+  /// publicación ya no está publicada, y [EdicionYaEnRevisionException] si ya
+  /// tiene otra edición esperando.
+  Future<ModeracionForo?> editarComentario(String id, NuevoComentario cambios);
 
   /// Las versiones anteriores de un comentario editado, de la más reciente a
   /// la original (SCRUM-356). Solo el administrador las lee.
   Future<List<VersionComentario>> versionesComentario(String comentarioId);
+
+  /// La moderación de lo que escribió el usuario de la sesión, de lo más
+  /// reciente a lo más antiguo (SCRUM-322): lo que espera, lo rechazado
+  /// ("Mis rechazados") y sus faltas (SCRUM-338).
+  Future<List<ModeracionForo>> misModeraciones();
+
+  /// Toda la moderación del foro, de lo más reciente a lo más antiguo, para
+  /// el administrador (SCRUM-337). A un corredor la policy le devuelve solo
+  /// lo suyo.
+  Future<List<ModeracionForo>> moderaciones();
+
+  /// El administrador aprueba o rechaza lo que la IA dejó pendiente
+  /// (SCRUM-337). Rechazar exige [motivo]: es lo que lee el autor.
+  ///
+  /// Lanza [ModeracionYaResueltaException] si alguien la resolvió antes.
+  Future<ModeracionForo> decidir(
+    String moderacionId, {
+    required bool aprobar,
+    String? motivo,
+  });
+
+  /// El autor abrió "Mis rechazados": sus rechazos dejan de contarse como
+  /// nuevos (criterio 5 de SCRUM-322).
+  Future<void> marcarRechazosVistos();
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -134,14 +194,21 @@ class SupabaseForoRepository implements ForoRepository {
   static const _tablaComentarios = 'comentarios_foro';
   static const _tablaVersiones = 'versiones_publicacion_foro';
   static const _tablaVersionesComentario = 'versiones_comentario_foro';
+  static const _tablaModeraciones = 'moderaciones_foro';
 
   /// Las columnas de la publicación más cuántos comentarios tiene, contados
-  /// por PostgREST sin traerlos.
+  /// por PostgREST sin traerlos. Se cuentan solo los publicados
+  /// ([_soloComentariosPublicados]): los que esperan la moderación no son
+  /// parte de la conversación (SCRUM-322).
   static const _columnas = '*, comentarios_foro(count)';
+  static const _estadoDeLosComentarios = 'comentarios_foro.estado';
 
   /// Suficiente para el foro de un proyecto de curso sin traer la tabla
   /// entera.
   static const limite = 100;
+
+  /// La moderación guarda más filas que el foro: cada edición es una.
+  static const limiteModeracion = 200;
 
   static const _restriccionIncumplida = '23514';
   static const _rlsDenegado = '42501';
@@ -153,6 +220,10 @@ class SupabaseForoRepository implements ForoRepository {
   /// La publicación ya no existe: la clave foránea no encuentra a quién
   /// apuntar.
   static const _sinReferencia = '23503';
+
+  /// Ya hay una edición en revisión, o la moderación ya se resolvió
+  /// (`0035_foro_moderacion_ia.sql`).
+  static const _yaEnCurso = 'TZ409';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -190,14 +261,22 @@ class SupabaseForoRepository implements ForoRepository {
 
   @override
   Future<List<PublicacionForo>> publicadas() async {
-    _usuarioId();
+    final usuarioId = _usuarioId();
+    final esperando = [
+      EstadoPublicacion.enRevision,
+      EstadoPublicacion.pendiente,
+    ].map((e) => e.valorDb).join(',');
 
     // El filtro va aunque RLS ya oculte lo ajeno: el autor también ve lo suyo
-    // retenido, y eso no pertenece al foro.
+    // rechazado, y eso no pertenece al foro sino a "Mis rechazados".
     final filas = await _cliente
         .from(_tabla)
         .select(_columnas)
-        .eq('estado', EstadoPublicacion.publicada.valorDb)
+        .eq(_estadoDeLosComentarios, EstadoPublicacion.publicada.valorDb)
+        .or(
+          'estado.eq.${EstadoPublicacion.publicada.valorDb},'
+          'and(autor_id.eq.$usuarioId,estado.in.($esperando))',
+        )
         .order('fecha_creacion', ascending: false)
         .limit(limite);
 
@@ -211,6 +290,7 @@ class SupabaseForoRepository implements ForoRepository {
     final filas = await _cliente
         .from(_tabla)
         .select(_columnas)
+        .eq(_estadoDeLosComentarios, EstadoPublicacion.publicada.valorDb)
         .order('fecha_creacion', ascending: false)
         .limit(limite);
 
@@ -225,6 +305,7 @@ class SupabaseForoRepository implements ForoRepository {
         .from(_tabla)
         .select(_columnas)
         .eq('id', id)
+        .eq(_estadoDeLosComentarios, EstadoPublicacion.publicada.valorDb)
         .maybeSingle();
 
     return fila == null ? null : PublicacionForo.desdeSupabase(fila);
@@ -251,7 +332,7 @@ class SupabaseForoRepository implements ForoRepository {
     try {
       final fila = await _cliente
           .from(_tablaComentarios)
-          // El nombre del autor no va: lo pone el trigger.
+          // Ni el nombre del autor ni el estado van: los pone el trigger.
           .insert({...comentario.aSupabase(), 'autor_id': usuarioId})
           .select()
           .single();
@@ -259,7 +340,7 @@ class SupabaseForoRepository implements ForoRepository {
       return ComentarioForo.desdeSupabase(fila);
     } on PostgrestException catch (e) {
       // La policy de insert exige que la publicación siga publicada; si fue
-      // retenida o eliminada, la fila viola la seguridad a nivel de fila.
+      // rechazada o eliminada, la fila viola la seguridad a nivel de fila.
       if (e.code == _rlsDenegado || e.code == _sinReferencia) {
         throw const PublicacionNoDisponibleException();
       }
@@ -285,27 +366,41 @@ class SupabaseForoRepository implements ForoRepository {
   }
 
   @override
-  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios) async {
+  Future<ModeracionForo?> editar(String id, NuevaPublicacion cambios) {
     _usuarioId();
 
-    try {
-      final fila = await _cliente
-          .from(_tabla)
-          // Solo el texto. Lo demás, aunque se mandara, lo deja igual el
-          // trigger `publicaciones_foro_proteger`, que además guarda la
-          // versión anterior y marca la fecha de edición.
-          .update(cambios.aSupabase())
-          .eq('id', id)
-          .select(_columnas)
-          .single();
+    // Por la función y no con un update: la fila visible no cambia hasta
+    // que se apruebe, y lo propuesto espera en `moderaciones_foro`.
+    return _proponerEdicion('editar_publicacion_foro', {
+      'p_id': id,
+      'p_titulo': cambios.titulo,
+      'p_contenido': cambios.contenido,
+    });
+  }
 
-      return PublicacionForo.desdeSupabase(fila);
+  @override
+  Future<ModeracionForo?> editarComentario(String id, NuevoComentario cambios) {
+    _usuarioId();
+
+    return _proponerEdicion('editar_comentario_foro', {
+      'p_id': id,
+      'p_contenido': cambios.contenido,
+    });
+  }
+
+  Future<ModeracionForo?> _proponerEdicion(
+    String funcion,
+    Map<String, dynamic> parametros,
+  ) async {
+    try {
+      final respuesta = await _cliente.rpc(funcion, params: parametros);
+      return _moderacionDe(respuesta);
     } on PostgrestException catch (e) {
-      // Si no es suya o ya no está publicada, la policy de update no deja ver
-      // la fila: el update no toca nada y no vuelve ninguna.
-      if (e.code == _sinFilas || e.code == _rlsDenegado) {
+      // No es suyo o ya no está publicado.
+      if (e.code == _rlsDenegado || e.code == _sinFilas) {
         throw const PublicacionNoDisponibleException();
       }
+      if (e.code == _yaEnCurso) throw const EdicionYaEnRevisionException();
       if (e.code == _restriccionIncumplida) {
         throw DatosDePublicacionInvalidosException(e.message);
       }
@@ -313,35 +408,19 @@ class SupabaseForoRepository implements ForoRepository {
     }
   }
 
-  @override
-  Future<ComentarioForo> editarComentario(
-    String id,
-    NuevoComentario cambios,
-  ) async {
-    _usuarioId();
-
-    try {
-      final fila = await _cliente
-          .from(_tablaComentarios)
-          // Solo el texto. El trigger `comentarios_foro_proteger` deja lo
-          // demás como estaba, guarda la versión anterior y marca la edición.
-          .update({'contenido': cambios.contenido})
-          .eq('id', id)
-          .select()
-          .single();
-
-      return ComentarioForo.desdeSupabase(fila);
-    } on PostgrestException catch (e) {
-      // Si no es suyo o la publicación ya no está publicada, la policy de
-      // update no deja tocar la fila y no vuelve ninguna.
-      if (e.code == _sinFilas || e.code == _rlsDenegado) {
-        throw const PublicacionNoDisponibleException();
-      }
-      if (e.code == _restriccionIncumplida) {
-        throw DatosDePublicacionInvalidosException(e.message);
-      }
-      rethrow;
-    }
+  /// La fila que devuelve una función de la moderación, o null.
+  ///
+  /// Las funciones devuelven una fila de `moderaciones_foro`; cuando la
+  /// función devuelve null, PostgREST manda null o la fila con todo en null,
+  /// según la versión.
+  static ModeracionForo? _moderacionDe(Object? respuesta) {
+    final fila = switch (respuesta) {
+      [final Map<String, dynamic> primera, ...] => primera,
+      final Map<String, dynamic> unica => unica,
+      _ => null,
+    };
+    if (fila == null || fila['id'] == null) return null;
+    return ModeracionForo.desdeSupabase(fila);
   }
 
   @override
@@ -358,5 +437,68 @@ class SupabaseForoRepository implements ForoRepository {
         .limit(limite);
 
     return filas.map(VersionComentario.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<ModeracionForo>> misModeraciones() async {
+    final usuarioId = _usuarioId();
+
+    // El filtro va aunque RLS ya lo limite: el administrador ve la de todos.
+    final filas = await _cliente
+        .from(_tablaModeraciones)
+        .select()
+        .eq('autor_id', usuarioId)
+        .order('fecha_solicitud', ascending: false)
+        .limit(limiteModeracion);
+
+    return filas.map(ModeracionForo.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<ModeracionForo>> moderaciones() async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaModeraciones)
+        .select()
+        .order('fecha_solicitud', ascending: false)
+        .limit(limiteModeracion);
+
+    return filas.map(ModeracionForo.desdeSupabase).toList();
+  }
+
+  @override
+  Future<ModeracionForo> decidir(
+    String moderacionId, {
+    required bool aprobar,
+    String? motivo,
+  }) async {
+    _usuarioId();
+
+    try {
+      final respuesta = await _cliente.rpc(
+        'decidir_moderacion',
+        params: {
+          'p_moderacion_id': moderacionId,
+          'p_aprobar': aprobar,
+          'p_motivo': motivo,
+        },
+      );
+      final decidida = _moderacionDe(respuesta);
+      if (decidida == null) throw const ModeracionYaResueltaException();
+      return decidida;
+    } on PostgrestException catch (e) {
+      if (e.code == _yaEnCurso) throw const ModeracionYaResueltaException();
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDePublicacionInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> marcarRechazosVistos() async {
+    _usuarioId();
+    await _cliente.rpc('marcar_rechazos_vistos');
   }
 }

@@ -3,15 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/borrador_publicacion.dart';
+import 'package:traza/models/moderacion_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
+import 'package:traza/screens/foro/mis_rechazados_screen.dart';
 import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/cambios_foro.dart';
 import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/rutas_service.dart';
+import 'package:traza/widgets/tarjeta_publicacion.dart';
 import 'package:traza/widgets/tarjeta_ruta.dart';
 
 import '../utiles/foro_repository_falso.dart';
@@ -31,6 +34,7 @@ void main() {
   Future<void> abrirForo(
     WidgetTester tester, {
     List<PublicacionForo> publicaciones = const [],
+    List<ModeracionForo> moderaciones = const [],
     List<Ruta> rutasPublicadas = const [],
     Object? errorDeRutas,
   }) async {
@@ -41,6 +45,7 @@ void main() {
 
     repositorio = ForoRepositorioFalso(
       publicaciones: publicaciones,
+      moderaciones: moderaciones,
       ahora: ahora,
     );
     cambios = FuenteCambiosForoFalsa();
@@ -60,6 +65,10 @@ void main() {
             GoRoute(
               path: 'nueva',
               builder: (_, _) => const NuevaPublicacionScreen(),
+            ),
+            GoRoute(
+              path: 'rechazados',
+              builder: (_, _) => const MisRechazadosScreen(),
             ),
           ],
         ),
@@ -248,19 +257,21 @@ void main() {
       );
     });
 
-    testWidgets('si queda retenida avisa y no aparece en el foro', (
+    testWidgets('si queda en revisión lo avisa y su autor la ve marcada', (
       tester,
     ) async {
       await abrirForo(tester);
-      repositorio.estadoAlCrear = EstadoPublicacion.retenida;
+      repositorio.estadoAlCrear = EstadoPublicacion.enRevision;
       await tester.tap(find.byKey(ForoScreen.claveNueva));
       await tester.pumpAndSettle();
 
       await escribir(tester, titulo: 'Oferta', contenido: 'Compra ya');
       await publicar(tester);
 
-      expect(find.text(NuevaPublicacionScreen.retenida), findsOneWidget);
-      expect(find.text('Oferta'), findsNothing);
+      expect(find.text(NuevaPublicacionScreen.enRevision), findsOneWidget);
+      // SCRUM-322: su autor la ve arriba, marcada "En revisión".
+      expect(find.text('Oferta'), findsOneWidget);
+      expect(find.text(EstadoPublicacionChip.enRevision), findsOneWidget);
     });
 
     testWidgets('si falla el guardado conserva lo escrito', (tester) async {
@@ -515,6 +526,125 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(cambios.escuchandoForo, isFalse);
+    });
+  });
+
+  group('botón de publicar', () {
+    testWidgets('es un "+" flotante abajo a la derecha, no un botón arriba', (
+      tester,
+    ) async {
+      await abrirForo(tester);
+
+      final boton = find.byKey(ForoScreen.claveNueva);
+      expect(
+        find.descendant(of: boton, matching: find.byIcon(Icons.add)),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+
+      final pantalla = tester.view.physicalSize / tester.view.devicePixelRatio;
+      final centro = tester.getCenter(boton);
+      expect(centro.dx, greaterThan(pantalla.width / 2));
+      expect(centro.dy, greaterThan(pantalla.height / 2));
+    });
+
+    testWidgets('al llegar al final, la última tarjeta queda por encima del '
+        'botón', (tester) async {
+      await abrirForo(
+        tester,
+        publicaciones: [
+          for (var i = 0; i < 12; i++)
+            publicacionDePrueba(id: 'p$i', titulo: 'Publicación $i'),
+        ],
+      );
+
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+
+      final ultima = tester.getRect(
+        find.byKey(TarjetaPublicacion.claveDe('p11')),
+      );
+      final boton = tester.getRect(find.byKey(ForoScreen.claveNueva));
+      expect(ultima.bottom, lessThanOrEqualTo(boton.top));
+    });
+  });
+
+  group('rechazos (SCRUM-322)', () {
+    final tenis = publicacionDePrueba(id: 'a', titulo: 'Tenis para asfalto');
+
+    Finder contador(int n) =>
+        find.descendant(of: find.byType(Badge), matching: find.text('$n'));
+
+    testWidgets('cuenta los rechazos que el autor no ha visto', (tester) async {
+      await abrirForo(
+        tester,
+        moderaciones: [
+          moderacionDePrueba(id: 'm1'),
+          moderacionDePrueba(id: 'm2'),
+          moderacionDePrueba(id: 'm3', vistaPorAutor: true),
+          moderacionDePrueba(id: 'm4', estado: EstadoModeracion.aprobada),
+        ],
+      );
+
+      expect(contador(2), findsOneWidget);
+    });
+
+    testWidgets('al abrir "Mis rechazados" los marca como vistos y el '
+        'contador desaparece', (tester) async {
+      await abrirForo(tester, moderaciones: [moderacionDePrueba()]);
+
+      await tester.tap(find.byKey(ForoScreen.claveRechazados));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MisRechazadosScreen), findsOneWidget);
+      expect(repositorio.rechazosMarcados, 1);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+      expect(contador(1), findsNothing);
+    });
+
+    testWidgets('si la moderación rechaza algo propio, lo avisa en vivo con '
+        'el motivo', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      repositorio.moderacionesGuardadas.add(moderacionDePrueba());
+      cambios.emitirForo(
+        const CambioForo(
+          tipo: TipoCambioForo.editado,
+          tabla: TablaForo.moderaciones,
+          id: 'mod-1',
+          autorId: 'usuario-1',
+          estado: 'rechazada',
+          motivo: 'Spam',
+        ),
+      );
+      await tester.pump();
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(find.text(ForoScreen.textoRechazo('Spam')), findsOneWidget);
+      expect(contador(1), findsOneWidget);
+    });
+
+    testWidgets('lo que la moderación le rechaza a otro no se le avisa', (
+      tester,
+    ) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      cambios.emitirForo(
+        const CambioForo(
+          tipo: TipoCambioForo.editado,
+          tabla: TablaForo.moderaciones,
+          autorId: 'otro-usuario',
+          estado: 'rechazada',
+          motivo: 'Spam',
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text(ForoScreen.textoRechazo('Spam')), findsNothing);
     });
   });
 }

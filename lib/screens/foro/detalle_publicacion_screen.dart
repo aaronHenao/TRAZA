@@ -58,23 +58,43 @@ class DetallePublicacionScreen extends ConsumerWidget {
     'comentario-confirmar-edicion',
   );
   static const comentarioEditado = 'Comentario actualizado';
+  static const comentarioEnRevision =
+      'Tu cambio está en revisión. Mientras tanto se ve el texto anterior.';
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
+
+  // Avisos de la moderación al autor (SCRUM-322).
+  static const claveAvisoModeracion = Key('publicacion-aviso-moderacion');
+  static const publicacionEnRevision =
+      'Tu publicación está en revisión. Aparecerá en el foro cuando se '
+      'apruebe.';
+  static const edicionEnRevision =
+      'Tu edición está en revisión. Mientras tanto, los demás ven esta '
+      'versión.';
+  static String publicacionRechazada(String? motivo) =>
+      'Tu publicación fue rechazada por la moderación'
+      '${motivo == null ? '' : ': $motivo'}.';
+  static const edicionComentarioEnRevision = 'Edición en revisión';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // SCRUM-357: comentarios y ediciones aparecen sin refrescar.
     ref.watch(publicacionEnVivoProvider(publicacionId));
     final publicacion = ref.watch(publicacionForoProvider(publicacionId));
-    // Ni el administrador comenta lo retenido o eliminado: la policy de
+    final usuario = ref.read(usuarioActualProvider)();
+    // SCRUM-322: mientras una edición espera, no se ofrece otra.
+    final edicionAbierta = ref.watch(
+      edicionAbiertaDePublicacionProvider(publicacionId),
+    );
+    // Ni el administrador comenta lo que no está publicado: la policy de
     // insert de `comentarios_foro` lo rechazaría igual.
     final comentable =
         publicacion is AsyncData<PublicacionForo?> &&
         (publicacion.value?.admiteComentarios ?? false);
     final editable =
         publicacion is AsyncData<PublicacionForo?> &&
-        (publicacion.value?.editablePor(ref.read(usuarioActualProvider)()) ??
-            false);
+        edicionAbierta == null &&
+        (publicacion.value?.editablePor(usuario) ?? false);
 
     void recargar() {
       ref
@@ -103,12 +123,15 @@ class DetallePublicacionScreen extends ConsumerWidget {
                 child: RefreshIndicator(
                   onRefresh: () async => recargar(),
                   child: switch (publicacion) {
-                    // Al corredor, lo que no está publicado no le existe:
-                    // retenida o eliminada se ven igual que borrada
-                    // (criterio 3 de SCRUM-324).
+                    // Al corredor, lo ajeno que no está publicado no le
+                    // existe: rechazado o eliminado se ve igual que borrado
+                    // (criterio 3 de SCRUM-324). Lo suyo sí lo ve, con el
+                    // aviso de la moderación (SCRUM-322).
                     AsyncData(value: final p)
                         when p == null ||
-                            (!vistaModeracion && !p.admiteComentarios) =>
+                            (!vistaModeracion &&
+                                !p.admiteComentarios &&
+                                p.autorId != usuario) =>
                       EstadoVacio(
                         icono: Icons.visibility_off_outlined,
                         titulo: noDisponible,
@@ -123,6 +146,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
                     AsyncData(value: final p?) => _Conversacion(
                       publicacion: p,
                       vistaModeracion: vistaModeracion,
+                      edicionEnRevision: edicionAbierta != null,
                     ),
                     AsyncError() => EstadoVacio(
                       icono: Icons.cloud_off_outlined,
@@ -151,16 +175,37 @@ class _Conversacion extends ConsumerWidget {
   const _Conversacion({
     required this.publicacion,
     required this.vistaModeracion,
+    required this.edicionEnRevision,
   });
 
   final PublicacionForo publicacion;
   final bool vistaModeracion;
+
+  /// El autor tiene una edición de la publicación esperando la moderación.
+  final bool edicionEnRevision;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final comentarios = ref.watch(comentariosForoProvider(publicacion.id));
     final ahora = ref.read(relojProvider)();
     final usuario = ref.read(usuarioActualProvider)();
+    final comentariosEnEdicion = ref.watch(
+      comentariosConEdicionAbiertaProvider(publicacion.id),
+    );
+    final aviso = vistaModeracion
+        ? null
+        : switch (publicacion.estado) {
+            EstadoPublicacion.enRevision || EstadoPublicacion.pendiente =>
+              DetallePublicacionScreen.publicacionEnRevision,
+            EstadoPublicacion.rechazada || EstadoPublicacion.eliminada =>
+              DetallePublicacionScreen.publicacionRechazada(
+                publicacion.motivoModeracion,
+              ),
+            EstadoPublicacion.publicada =>
+              edicionEnRevision
+                  ? DetallePublicacionScreen.edicionEnRevision
+                  : null,
+          };
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -171,6 +216,15 @@ class _Conversacion extends ConsumerWidget {
         AppSpacing.xl,
       ),
       children: [
+        if (aviso != null) ...[
+          _AvisoModeracion(
+            texto: aviso,
+            rechazo:
+                publicacion.estado == EstadoPublicacion.rechazada ||
+                publicacion.estado == EstadoPublicacion.eliminada,
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
         _Publicacion(
           publicacion: publicacion,
           ahora: ahora,
@@ -179,12 +233,23 @@ class _Conversacion extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
         switch (comentarios) {
           AsyncData(value: final lista) => _Comentarios(
-            comentarios: lista,
+            // Lo propio rechazado vive en "Mis rechazados", no en la
+            // conversación (SCRUM-322). El administrador lo ve todo.
+            comentarios: vistaModeracion
+                ? lista
+                : lista
+                      .where(
+                        (c) =>
+                            c.estado == EstadoPublicacion.publicada ||
+                            c.estado.esperaModeracion,
+                      )
+                      .toList(),
             autorPublicacionId: publicacion.autorId,
             ahora: ahora,
             // Se edita lo propio y solo mientras la publicación se pueda
-            // comentar: la misma regla de la policy de update.
+            // comentar: la misma regla de `editar_comentario_foro`.
             editablesPor: publicacion.admiteComentarios ? usuario : null,
+            enEdicion: comentariosEnEdicion,
             vistaModeracion: vistaModeracion,
           ),
           AsyncError() => MensajeVacio(
@@ -291,6 +356,7 @@ class _Comentarios extends StatelessWidget {
     required this.autorPublicacionId,
     required this.ahora,
     required this.editablesPor,
+    required this.enEdicion,
     required this.vistaModeracion,
   });
 
@@ -302,6 +368,10 @@ class _Comentarios extends StatelessWidget {
 
   /// Quién puede editar sus comentarios ahora, o null si nadie.
   final String? editablesPor;
+
+  /// Los comentarios propios con una edición esperando la moderación
+  /// (SCRUM-322): no se ofrece editarlos otra vez.
+  final Set<String> enEdicion;
 
   /// El administrador abre el historial de lo editado.
   final bool vistaModeracion;
@@ -344,7 +414,10 @@ class _Comentarios extends StatelessWidget {
               comentario: comentario,
               esDelAutor: comentario.autorId == autorPublicacionId,
               ahora: ahora,
-              editable: comentario.editablePor(editablesPor),
+              editable:
+                  comentario.editablePor(editablesPor) &&
+                  !enEdicion.contains(comentario.id),
+              edicionEnRevision: enEdicion.contains(comentario.id),
               vistaModeracion: vistaModeracion,
             ),
       ],
@@ -358,6 +431,7 @@ class _Comentario extends StatelessWidget {
     required this.esDelAutor,
     required this.ahora,
     required this.editable,
+    required this.edicionEnRevision,
     required this.vistaModeracion,
   });
 
@@ -365,6 +439,7 @@ class _Comentario extends StatelessWidget {
   final bool esDelAutor;
   final DateTime ahora;
   final bool editable;
+  final bool edicionEnRevision;
   final bool vistaModeracion;
 
   @override
@@ -445,7 +520,89 @@ class _Comentario extends StatelessWidget {
                       height: 1.45,
                     ),
                   ),
+                  // SCRUM-322: lo que todavía no ven los demás.
+                  if (comentario.estado != EstadoPublicacion.publicada) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        EstadoPublicacionChip(
+                          estado: comentario.estado,
+                          paraElAutor: !vistaModeracion,
+                        ),
+                        if (vistaModeracion &&
+                            comentario.motivoModeracion != null) ...[
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              comentario.motivoModeracion!,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.danger,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ] else if (edicionEnRevision) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      DetallePublicacionScreen.edicionComentarioEnRevision,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondaryDark,
+                      ),
+                    ),
+                  ],
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lo que la moderación le dice al autor sobre lo suyo (SCRUM-322): que está
+/// en revisión o que se rechazó, y por qué.
+class _AvisoModeracion extends StatelessWidget {
+  const _AvisoModeracion({required this.texto, required this.rechazo});
+
+  final String texto;
+  final bool rechazo;
+
+  @override
+  Widget build(BuildContext context) {
+    final tinta = rechazo ? AppColors.danger : AppColors.secondaryDark;
+
+    return Container(
+      key: DetallePublicacionScreen.claveAvisoModeracion,
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: rechazo ? AppColors.dangerTint : AppColors.secondaryTint,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            rechazo ? Icons.block_rounded : Icons.hourglass_top_rounded,
+            size: 18,
+            color: tinta,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: tinta,
+                height: 1.4,
               ),
             ),
           ),
@@ -623,9 +780,13 @@ class _EditarComentarioState extends ConsumerState<_EditarComentario> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('¿Guardar los cambios?'),
-        content: const Text(
-          'El comentario quedará marcado como editado y la versión anterior '
-          'quedará guardada.',
+        content: Text(
+          widget.comentario.autorEsAdmin
+              ? 'El comentario quedará marcado como editado y la versión '
+                    'anterior quedará guardada.'
+              // SCRUM-322: lo del corredor pasa por la moderación.
+              : 'El cambio pasará por revisión antes de verse. Mientras '
+                    'tanto, todos verán el texto actual.',
         ),
         actions: [
           TextButton(
@@ -653,6 +814,9 @@ class _EditarComentarioState extends ConsumerState<_EditarComentario> {
         case ComentarioEditado():
           Navigator.of(context).pop();
           mostrarToast(context, DetallePublicacionScreen.comentarioEditado);
+        case EdicionComentarioEnRevision():
+          Navigator.of(context).pop();
+          mostrarToast(context, DetallePublicacionScreen.comentarioEnRevision);
         case EdicionComentarioInvalida(:final error):
           setState(() => _error = error);
         case EdicionComentarioNoDisponible():
@@ -794,9 +958,13 @@ class _CajaComentarioState extends ConsumerState<_CajaComentario> {
       if (!mounted) return;
 
       switch (resultado) {
-        case ComentarioRegistrado():
+        case ComentarioRegistrado(:final enRevision):
           _texto.clear();
           setState(() => _error = null);
+          // SCRUM-322: que no parezca que se perdió.
+          if (enRevision) {
+            mostrarToast(context, ComentarioPublicacion.enRevision);
+          }
         case ComentarioInvalido(:final error):
           setState(() => _error = error);
         case PublicacionNoDisponible():

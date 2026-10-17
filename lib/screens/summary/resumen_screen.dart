@@ -11,6 +11,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/mapa_trayecto.dart';
+import '../../widgets/seccion_experiencia.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/trazado_recorrido.dart';
@@ -74,7 +75,14 @@ class ResumenScreen extends ConsumerWidget {
                 tooltip: 'Cerrar',
               ),
             ),
-            Expanded(child: _cuerpo(ref, volverAlInicio)),
+            Expanded(
+              child: _cuerpo(
+                ref,
+                volverAlInicio,
+                // El ascenso solo se anuncia recién finalizado (SCRUM-199).
+                anunciarAscenso: !desdeHistorial,
+              ),
+            ),
           ],
         ),
       ),
@@ -83,12 +91,21 @@ class ResumenScreen extends ConsumerWidget {
 
   /// Qué mostrar: solo el resumen del entrenamiento que indica la ruta
   /// (SCRUM-122), nunca "el último" de una lista.
-  Widget _cuerpo(WidgetRef ref, VoidCallback volverAlInicio) {
+  Widget _cuerpo(
+    WidgetRef ref,
+    VoidCallback volverAlInicio, {
+    required bool anunciarAscenso,
+  }) {
     // Recién terminada la actividad, los datos llegan con la navegación y no
     // hace falta consultar nada.
     final datos = resumen;
     if (datos != null && datos.correspondeA(entrenamientoId)) {
-      return _ContenidoResumen(resumen: datos, onVolver: volverAlInicio);
+      return _ContenidoResumen(
+        resumen: datos,
+        entrenamientoId: entrenamientoId,
+        anunciarAscenso: anunciarAscenso,
+        onVolver: volverAlInicio,
+      );
     }
 
     // Sin esos datos (se recargó la página, se abrió la ruta a mano o son de
@@ -109,16 +126,30 @@ class ResumenScreen extends ConsumerWidget {
           ),
           data: (guardado) => guardado == null
               ? _SinResumen(onVolver: volverAlInicio)
-              : _ContenidoResumen(resumen: guardado, onVolver: volverAlInicio),
+              : _ContenidoResumen(
+                  resumen: guardado,
+                  entrenamientoId: id,
+                  anunciarAscenso: anunciarAscenso,
+                  onVolver: volverAlInicio,
+                ),
         );
   }
 }
 
 /// El resumen de la sesión, como en `screen-summary`.
 class _ContenidoResumen extends ConsumerWidget {
-  const _ContenidoResumen({required this.resumen, required this.onVolver});
+  const _ContenidoResumen({
+    required this.resumen,
+    required this.entrenamientoId,
+    required this.anunciarAscenso,
+    required this.onVolver,
+  });
 
   final ResumenEntrenamiento resumen;
+
+  /// Sin sesión no hay id, y sin entrenamiento guardado no hay XP.
+  final String? entrenamientoId;
+  final bool anunciarAscenso;
   final VoidCallback onVolver;
 
   @override
@@ -151,8 +182,14 @@ class _ContenidoResumen extends ConsumerWidget {
               _Ritmo(valor: resumen.ritmo),
               // Solo aparece si hay permiso y datos (SCRUM-79).
               SeccionSalud.deResumen(resumen),
+              // La XP que asignó la base al cerrar (SCRUM-207).
+              if (entrenamientoId case final id?)
+                SeccionExperiencia(
+                  entrenamientoId: id,
+                  anunciarAscenso: anunciarAscenso,
+                ),
               const SizedBox(height: 18),
-              _Recorrido(puntos: resumen.puntos),
+              _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),
               const SizedBox(height: 18),
               // El entrenamiento ya quedó guardado al tocar "Finalizar"
               // (SCRUM-121), así que este botón solo cierra el resumen.
@@ -293,13 +330,14 @@ class _Ritmo extends StatelessWidget {
 /// puntos guardados (SCRUM-119). Al tocarlo, el recorrido se abre sobre el
 /// mapa (SCRUM-120).
 class _Recorrido extends StatelessWidget {
-  const _Recorrido({required this.puntos});
+  const _Recorrido({required this.puntos, required this.cortes});
 
   final List<PuntoGps> puntos;
+  final List<int> cortes;
 
   @override
   Widget build(BuildContext context) {
-    final trazado = Trazado.desdePuntos(puntos);
+    final trazado = Trazado.desdePuntos(puntos, cortes: cortes);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -308,7 +346,7 @@ class _Recorrido extends StatelessWidget {
         decoration: const BoxDecoration(gradient: trazaTrackingGradient),
         child: trazado.estaVacio
             ? const _SinTrazado()
-            : _TrazadoConMapa(trazado: trazado, puntos: puntos),
+            : _TrazadoConMapa(trazado: trazado, puntos: puntos, cortes: cortes),
       ),
     );
   }
@@ -316,10 +354,15 @@ class _Recorrido extends StatelessWidget {
 
 /// El trazado del recorrido, que se puede tocar para verlo sobre el mapa.
 class _TrazadoConMapa extends StatelessWidget {
-  const _TrazadoConMapa({required this.trazado, required this.puntos});
+  const _TrazadoConMapa({
+    required this.trazado,
+    required this.puntos,
+    required this.cortes,
+  });
 
   final Trazado trazado;
   final List<PuntoGps> puntos;
+  final List<int> cortes;
 
   /// El mapa se abre a pantalla completa sobre el resumen: dentro del
   /// recuadro no hay espacio para revisar la ruta, y un mapa que se arrastra
@@ -330,7 +373,7 @@ class _TrazadoConMapa extends StatelessWidget {
       useSafeArea: false,
       builder: (context) => Dialog.fullscreen(
         backgroundColor: TrazaColors.trackingTop,
-        child: _RecorridoEnMapa(puntos: puntos),
+        child: _RecorridoEnMapa(puntos: puntos, cortes: cortes),
       ),
     );
   }
@@ -392,9 +435,10 @@ class _VerEnMapa extends StatelessWidget {
 
 /// El recorrido sobre el mapa, a pantalla completa (SCRUM-120).
 class _RecorridoEnMapa extends StatelessWidget {
-  const _RecorridoEnMapa({required this.puntos});
+  const _RecorridoEnMapa({required this.puntos, required this.cortes});
 
   final List<PuntoGps> puntos;
+  final List<int> cortes;
 
   @override
   Widget build(BuildContext context) {
@@ -403,7 +447,9 @@ class _RecorridoEnMapa extends StatelessWidget {
 
     return Stack(
       children: [
-        Positioned.fill(child: MapaTrayecto(puntos: puntos)),
+        Positioned.fill(
+          child: MapaTrayecto(puntos: puntos, cortes: cortes),
+        ),
         Positioned(
           top: 0,
           left: 0,

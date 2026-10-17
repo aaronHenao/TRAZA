@@ -62,7 +62,10 @@ class _EstadoVacio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 24),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: 24,
+      ),
       decoration: BoxDecoration(
         color: AppColors.bgAlt,
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -95,7 +98,11 @@ class _EstadoVacio extends StatelessWidget {
           const Text(
             'Selecciona al menos uno para personalizar tu experiencia.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12.5, color: AppColors.ink2, height: 1.5),
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.ink2,
+              height: 1.5,
+            ),
           ),
         ],
       ),

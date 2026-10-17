@@ -4,14 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/models/experiencia_ganada.dart';
+import 'package:traza/models/nivel.dart';
+import 'package:traza/models/regla_experiencia.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/services/entrenamiento_service.dart';
+import 'package:traza/services/experiencia_service.dart';
+import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
+import 'package:traza/widgets/seccion_experiencia.dart';
 import 'package:traza/widgets/trazado_recorrido.dart';
 
+import '../utiles/experiencia_falsa.dart';
+import '../utiles/niveles_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
@@ -146,6 +154,40 @@ void main() {
       expect(find.text('Ver en el mapa'), findsNothing);
     });
 
+    testWidgets('dibuja el recorrido cortado donde se pausó (BUG-005)', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: 'e-123',
+          nombreActividad: 'Trote',
+          fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+          duracion: const Duration(minutes: 32, seconds: 17),
+          distanciaMetros: 5230.5,
+          puntos: [
+            puntoDePrueba(latitud: 6.2311, longitud: -75.6105),
+            puntoDePrueba(latitud: 6.2320, longitud: -75.6100),
+            puntoDePrueba(latitud: 6.2400, longitud: -75.6200),
+            puntoDePrueba(latitud: 6.2410, longitud: -75.6190),
+          ],
+          cortes: const [2],
+        ),
+      );
+
+      final dibujo = tester.widget<TrazadoRecorrido>(
+        find.byType(TrazadoRecorrido),
+      );
+      expect(dibujo.trazado.tramos.map((tramo) => tramo.length), [2, 2]);
+
+      // Sobre el mapa, también cortado.
+      await tester.tap(find.text('Ver en el mapa'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<MapaTrayecto>(find.byType(MapaTrayecto)).cortes, [
+        2,
+      ]);
+    });
+
     testWidgets('la X de la barra superior vuelve al inicio', (tester) async {
       await _montar(tester, resumen: resumen);
 
@@ -173,7 +215,11 @@ void main() {
     testWidgets('el botón principal vuelve al inicio', (tester) async {
       await _montar(tester, resumen: resumen);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Volver al inicio'));
+      // Con la XP y el nivel (SCRUM-198), el botón queda debajo del borde.
+      final boton = find.widgetWithText(FilledButton, 'Volver al inicio');
+      await tester.ensureVisible(boton);
+      await tester.pumpAndSettle();
+      await tester.tap(boton);
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla de inicio'), findsOneWidget);
@@ -321,6 +367,75 @@ void main() {
     });
   });
 
+  group('subida de nivel (SCRUM-199)', () {
+    // Tenía 80 XP; este entrenamiento dejó 26 y cruzó Bronce (100).
+    ExperienciaFalsa conAscenso() => ExperienciaFalsa(
+      acumulada: 106,
+      porEntrenamiento: {
+        'e-123': const ExperienciaDeEntrenamiento(
+          xpActividad: 26,
+          ajuste: AjusteExperiencia.ninguno,
+        ),
+      },
+    );
+
+    testWidgets('recién finalizado anuncia el nivel alcanzado', (tester) async {
+      await _montar(tester, resumen: resumen, experiencia: conAscenso());
+
+      expect(find.text('¡Subiste a Bronce!'), findsOneWidget);
+    });
+
+    testWidgets('abierto desde el historial no lo anuncia', (tester) async {
+      await _montar(
+        tester,
+        ruta: '/resumen/e-123?desde=historial',
+        resumen: resumen,
+        experiencia: conAscenso(),
+      );
+
+      expect(find.text('¡Subiste a Bronce!'), findsNothing);
+      // El nivel se sigue mostrando.
+      expect(find.text('Nivel: Bronce'), findsOneWidget);
+    });
+  });
+
+  group('XP obtenida (SCRUM-207)', () {
+    testWidgets('muestra la XP que dejó el entrenamiento de la ruta', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resumen: resumen,
+        experiencia: ExperienciaFalsa(
+          porEntrenamiento: {
+            'e-123': const ExperienciaDeEntrenamiento(
+              xpActividad: 26,
+              ajuste: AjusteExperiencia.ninguno,
+            ),
+          },
+        ),
+      );
+
+      expect(find.byType(SeccionExperiencia), findsOneWidget);
+      expect(find.text('+26 XP'), findsOneWidget);
+    });
+
+    testWidgets('sin sesión no hay XP que mostrar', (tester) async {
+      await _montar(
+        tester,
+        ruta: '/resumen',
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: null,
+          nombreActividad: 'Correr',
+          fechaFin: DateTime(2026, 1, 1, 8, 5),
+          duracion: const Duration(minutes: 5),
+        ),
+      );
+
+      expect(find.byType(SeccionExperiencia), findsNothing);
+    });
+  });
+
   group('ruta del resumen', () {
     test('lleva el id del entrenamiento', () {
       expect(ResumenScreen.rutaPara('e-123'), '/resumen/e-123');
@@ -391,6 +506,7 @@ Future<_EntrenamientosFalso> _montar(
   Map<String, ResumenEntrenamiento> guardados = const {},
   Object? error,
   Completer<void>? espera,
+  ExperienciaFalsa? experiencia,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -436,6 +552,16 @@ Future<_EntrenamientosFalso> _montar(
           RelojFalso(DateTime(2026, 1, 1, 9)).call,
         ),
         entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
+        experienciaRepositoryProvider.overrideWithValue(
+          experiencia ?? ExperienciaFalsa(),
+        ),
+        nivelesRepositoryProvider.overrideWithValue(
+          NivelesFalso(
+            catalogo: const [
+              Nivel(id: 'n-1', nombre: 'Bronce', umbralExperiencia: 100),
+            ],
+          ),
+        ),
         // El mapa del recorrido no descarga tiles reales.
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
       ],

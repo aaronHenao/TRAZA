@@ -58,9 +58,8 @@ class ResumenSemana {
   }) {
     final desdeElLunes = inicioDeSemana(ahora);
     final deEstaSemana = historial.where(
-      (entrenamiento) => !entrenamiento.fechaFin.toLocal().isBefore(
-        desdeElLunes,
-      ),
+      (entrenamiento) =>
+          !entrenamiento.fechaFin.toLocal().isBefore(desdeElLunes),
     );
 
     var metros = 0.0;
@@ -99,7 +98,8 @@ class ResumenSemana {
       other.metaKilometros == metaKilometros;
 
   @override
-  int get hashCode => Object.hash(entrenamientos, distanciaMetros, metaKilometros);
+  int get hashCode =>
+      Object.hash(entrenamientos, distanciaMetros, metaKilometros);
 
   @override
   String toString() =>

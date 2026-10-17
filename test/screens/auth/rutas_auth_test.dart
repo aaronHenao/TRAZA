@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/screens/auth/conocer_traza_screen.dart';
 import 'package:traza/screens/auth/rutas_auth.dart';
 
 void main() {
@@ -21,6 +22,25 @@ void main() {
           reason: ruta,
         );
       }
+    });
+
+    test('la presentación de la app se puede ver sin cuenta', () {
+      // Criterio 1 de SCRUM-277: su razón de ser es que alguien decida si se
+      // registra, así que no puede exigir estar registrado.
+      expect(rutasSinSesion, contains(ConocerTrazaScreen.ruta));
+      expect(
+        redireccionPorSesion(haySesion: false, ruta: ConocerTrazaScreen.ruta),
+        isNull,
+      );
+    });
+
+    test('con sesión también se puede abrir', () {
+      // Se entra igual desde el perfil: no se redirige a Inicio como pasa
+      // con el login y el registro.
+      expect(
+        redireccionPorSesion(haySesion: true, ruta: ConocerTrazaScreen.ruta),
+        isNull,
+      );
     });
   });
 

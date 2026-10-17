@@ -353,6 +353,12 @@ class AuthService {
   /// Lo mismo para el usuario con la sesión abierta.
   bool get requiereOnboarding => requiereOnboardingDe(_auth.currentUser);
 
+  /// Si hay una sesión guardada.
+  ///
+  /// La usa la presentación de la app (SCRUM-281) para ofrecer crear cuenta
+  /// solo a quien no la tiene.
+  bool get haySesion => _auth.currentSession != null;
+
   /// Nombre para saludar en la portada, o null si la cuenta no tiene ninguno.
   ///
   /// Sale de `full_name`, el mismo metadato del que el trigger
@@ -362,6 +368,17 @@ class AuthService {
     if (nombre is! String) return null;
     final limpio = nombre.trim();
     return limpio.isEmpty ? null : limpio;
+  }
+
+  /// Cuándo se creó la cuenta con la sesión abierta, o null sin sesión.
+  ///
+  /// Cuenta la antigüedad para Runner Experto (SCRUM-195). Sale de
+  /// `auth.users.created_at` y no de `perfiles.fecha_registro`: la policy de
+  /// `perfiles` deja al usuario cambiar cualquier columna de su fila, y esta
+  /// no la puede tocar.
+  DateTime? get fechaCreacionCuenta {
+    final creada = _auth.currentUser?.createdAt;
+    return creada == null ? null : DateTime.tryParse(creada)?.toLocal();
   }
 
   /// Marca que el usuario terminó Perfil y Permisos. Si falla la red no se

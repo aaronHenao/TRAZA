@@ -29,7 +29,6 @@ import 'package:traza/services/tipos_actividad_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
 import 'package:traza/widgets/cronometro_entrenamiento.dart';
-import 'package:traza/widgets/ofrece_permiso_salud.dart';
 import 'package:traza/widgets/requiere_permiso_ubicacion.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
@@ -94,10 +93,7 @@ void main() {
     router = GoRouter(
       initialLocation: '/actividad',
       routes: [
-        GoRoute(
-          path: '/actividad',
-          builder: (_, _) => const ActividadScreen(),
-        ),
+        GoRoute(path: '/actividad', builder: (_, _) => const ActividadScreen()),
         GoRoute(
           path: '/permisos',
           builder: (_, _) => const _Pantalla('Permisos'),
@@ -106,7 +102,7 @@ void main() {
         GoRoute(
           path: '/tracking',
           builder: (_, _) => const RequierePermisoUbicacion(
-            child: OfrecePermisoSalud(child: TrackingConActividadElegida()),
+            child: TrackingConActividadElegida(),
           ),
         ),
         GoRoute(

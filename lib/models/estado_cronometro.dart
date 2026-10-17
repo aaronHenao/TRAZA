@@ -16,15 +16,12 @@ enum MarchaCronometro {
 /// Instantánea inmutable del cronómetro que consumen los widgets.
 @immutable
 class EstadoCronometro {
-  const EstadoCronometro({
-    required this.transcurrido,
-    required this.marcha,
-  });
+  const EstadoCronometro({required this.transcurrido, required this.marcha});
 
   /// Estado inicial: el cronómetro arranca siempre desde cero.
   const EstadoCronometro.inicial()
-      : transcurrido = Duration.zero,
-        marcha = MarchaCronometro.detenido;
+    : transcurrido = Duration.zero,
+      marcha = MarchaCronometro.detenido;
 
   /// Tiempo acumulado de la actividad, sin contar las pausas.
   final Duration transcurrido;

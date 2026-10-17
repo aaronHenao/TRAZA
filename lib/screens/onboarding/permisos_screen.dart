@@ -241,17 +241,19 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
                     onAhoraNo: ahoraNo,
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  // SCRUM-131, criterio 1: para qué funciones se usa.
                   TarjetaPermiso(
                     icono: Icons.favorite_outline,
                     titulo: 'Datos de salud',
                     descripcion:
-                        'Con tu permiso, TRAZA registrará métricas de salud '
-                        'durante tus entrenamientos y las mostrará en tu '
-                        'resumen.',
+                        'Con tu permiso, TRAZA mostrará tu frecuencia '
+                        'cardiaca, calorías y pasos al terminar tus '
+                        'entrenamientos libres, retos y rutas, y los incluirá '
+                        'en la foto que compartas.',
                     estado: permisos.salud,
                     textoBoton: permisos.salud == EstadoPermiso.noDisponible
                         ? 'Instalar Health Connect'
-                        : 'Permitir acceso',
+                        : 'Aceptar',
                     // Sin Health Connect solo hay algo que hacer en Android:
                     // instalarlo. En web o escritorio no hay botón.
                     onPermitir:

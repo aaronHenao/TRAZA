@@ -119,31 +119,37 @@ void main() {
     expect(pendientes(), isEmpty);
   });
 
-  test('si el entrenamiento ya no está en curso, deja de reintentarlo',
-      () async {
-    await iniciar();
-    // Alguien lo cerró antes: no hay nada que cancelar.
-    repositorio.noEncontrado = true;
+  test(
+    'si el entrenamiento ya no está en curso, deja de reintentarlo',
+    () async {
+      await iniciar();
+      // Alguien lo cerró antes: no hay nada que cancelar.
+      repositorio.noEncontrado = true;
 
-    await descartar();
+      await descartar();
 
-    expect(repositorio.intentos, 1, reason: 'no tiene sentido insistir');
-    expect(pendientes(), isEmpty);
-  });
+      expect(repositorio.intentos, 1, reason: 'no tiene sentido insistir');
+      expect(pendientes(), isEmpty);
+    },
+  );
 
-  test('dos descartes fallidos no se duplican en la lista de pendientes',
-      () async {
-    await iniciar();
-    repositorio.fallosSeguidos = 99;
-    await descartar();
-    final id = pendientes().single.entrenamientoId;
+  test(
+    'dos descartes fallidos no se duplican en la lista de pendientes',
+    () async {
+      await iniciar();
+      repositorio.fallosSeguidos = 99;
+      await descartar();
+      final id = pendientes().single.entrenamientoId;
 
-    // Reintentar otra vez sin red lo deja igual, no lo duplica.
-    await container.read(descarteEntrenamientoProvider).reintentarPendientes();
+      // Reintentar otra vez sin red lo deja igual, no lo duplica.
+      await container
+          .read(descarteEntrenamientoProvider)
+          .reintentarPendientes();
 
-    expect(pendientes(), hasLength(1));
-    expect(pendientes().single.entrenamientoId, id);
-  });
+      expect(pendientes(), hasLength(1));
+      expect(pendientes().single.entrenamientoId, id);
+    },
+  );
 }
 
 /// Entrenamientos en memoria que puede fallar las veces que la prueba diga.

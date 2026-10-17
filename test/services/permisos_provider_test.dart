@@ -96,6 +96,19 @@ void main() {
     expect(container.read(permisosProvider).ubicacion, EstadoPermiso.concedido);
   });
 
+  test('un error al consultar no borra la ubicación concedida', () async {
+    when(
+      () => servicio.estadoUbicacion(),
+    ).thenAnswer((_) async => EstadoPermiso.concedido);
+    final notifier = container.read(permisosProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+
+    when(() => servicio.estadoUbicacion()).thenThrow(Exception('plugin'));
+    await notifier.actualizar();
+
+    expect(container.read(permisosProvider).ubicacion, EstadoPermiso.concedido);
+  });
+
   group('Datos de salud', () {
     test('al crearse consulta también el de salud', () async {
       when(
@@ -133,6 +146,63 @@ void main() {
           .solicitarSalud();
 
       expect(resultado, EstadoPermiso.noDisponible);
+    });
+
+    test('una consulta que no sabe no borra un permiso concedido', () async {
+      // iOS nunca dice si se concedió la lectura: tras aceptarlo, volver a la
+      // app no debe dejarlo en desconocido (SCRUM-131).
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      final notifier = container.read(permisosProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+      await notifier.solicitarSalud();
+
+      await notifier.actualizar();
+
+      expect(container.read(permisosProvider).salud, EstadoPermiso.concedido);
+    });
+
+    test('concederlo deshace el "Continuar sin datos de salud"', () async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      final notifier = container.read(permisosProvider.notifier);
+      notifier.omitirSalud();
+
+      await notifier.solicitarSalud();
+
+      expect(container.read(permisosProvider).saludOmitida, isFalse);
+    });
+
+    test('concederlo desde los ajustes también lo deshace', () async {
+      when(
+        () => servicio.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      final notifier = container.read(permisosProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+      notifier.omitirSalud();
+
+      when(
+        () => servicio.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await notifier.actualizar();
+
+      final estado = container.read(permisosProvider);
+      expect(estado.salud, EstadoPermiso.concedido);
+      expect(estado.saludOmitida, isFalse);
+    });
+
+    test('negarlo no deshace la omisión', () async {
+      when(
+        () => servicio.solicitarSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      final notifier = container.read(permisosProvider.notifier);
+      notifier.omitirSalud();
+
+      await notifier.solicitarSalud();
+
+      expect(container.read(permisosProvider).saludOmitida, isTrue);
     });
 
     test('un error al consultar no tumba el de ubicación', () async {

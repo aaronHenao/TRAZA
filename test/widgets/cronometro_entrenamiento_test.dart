@@ -44,8 +44,9 @@ void main() {
         .data!;
   }
 
-  testWidgets('muestra el cronómetro en cero antes de arrancar',
-      (tester) async {
+  testWidgets('muestra el cronómetro en cero antes de arrancar', (
+    tester,
+  ) async {
     await montar(tester);
 
     expect(find.text('00:00:00'), findsOneWidget);
@@ -63,8 +64,9 @@ void main() {
     container.read(cronometroProvider.notifier).detener();
   });
 
-  testWidgets('se actualiza continuamente mientras la actividad corre',
-      (tester) async {
+  testWidgets('se actualiza continuamente mientras la actividad corre', (
+    tester,
+  ) async {
     await montar(tester);
     container.read(cronometroProvider.notifier).iniciar();
     await tester.pump();
@@ -84,8 +86,9 @@ void main() {
     container.read(cronometroProvider.notifier).detener();
   });
 
-  testWidgets('en pausa congela el tiempo y lo avisa en la etiqueta',
-      (tester) async {
+  testWidgets('en pausa congela el tiempo y lo avisa en la etiqueta', (
+    tester,
+  ) async {
     await montar(tester);
     container.read(cronometroProvider.notifier).iniciar();
     await correr(tester, const Duration(seconds: 12));
@@ -109,8 +112,9 @@ void main() {
     container.read(cronometroProvider.notifier).detener();
   });
 
-  testWidgets('recupera el tiempo real tras volver de segundo plano',
-      (tester) async {
+  testWidgets('recupera el tiempo real tras volver de segundo plano', (
+    tester,
+  ) async {
     await montar(tester);
     container.read(cronometroProvider.notifier).iniciar();
     await tester.pump();

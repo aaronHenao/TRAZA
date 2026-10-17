@@ -13,6 +13,7 @@ import '../../services/permisos_provider.dart';
 import '../../widgets/requiere_permiso_ubicacion.dart';
 import '../../widgets/chips_tipo_actividad.dart';
 import '../../widgets/seccion_iniciar_entrenamiento.dart';
+import '../../widgets/ventana_permiso_salud.dart';
 
 /// Pantalla para elegir la actividad y arrancar el entrenamiento
 /// (`screen-home` del prototipo del sprint 1). Se llega desde el botón "+"
@@ -35,9 +36,9 @@ class _ActividadScreenState extends ConsumerState<ActividadScreen> {
   /// otro entrenamiento (SCRUM-96).
   bool _iniciando = false;
 
-  /// Un toque y la actividad arranca: se comprueban los permisos (SCRUM-97),
-  /// se crea el entrenamiento (SCRUM-99) y se abre la pantalla del
-  /// entrenamiento en curso, sin pasos intermedios.
+  /// Un toque y la actividad arranca: se comprueban los permisos (SCRUM-97 y
+  /// SCRUM-131), se crea el entrenamiento (SCRUM-99) y se abre la pantalla del
+  /// entrenamiento en curso.
   Future<void> _iniciar() async {
     if (_iniciando) return;
     setState(() => _iniciando = true);
@@ -45,6 +46,12 @@ class _ActividadScreenState extends ConsumerState<ActividadScreen> {
       // Antes de crear nada: sin ubicación no hay recorrido que registrar, y
       // un entrenamiento que nadie va a usar quedaría abierto en la base.
       if (!await _hayPermisoDeUbicacion()) return;
+      if (!mounted) return;
+
+      // La salud es opcional: si falta se ofrece cada vez, y lo conceda o no,
+      // la actividad arranca. Solo cerrar la ventana la deja sin empezar.
+      if (!await ofrecerPermisoSalud(context, ref)) return;
+      if (!mounted) return;
 
       final error = await ref.read(inicioEntrenamientoProvider).iniciar();
       if (!mounted) return;
@@ -70,9 +77,6 @@ class _ActividadScreenState extends ConsumerState<ActividadScreen> {
 
   /// El permiso de ubicación es obligatorio (SCRUM-97): si falta se pide en
   /// el momento, para que conceder no sea un paso más del flujo.
-  ///
-  /// El de datos de salud no se toca aquí: es opcional y lo ofrece la propia
-  /// pantalla de entrenamiento (SCRUM-83) antes de empezar.
   Future<bool> _hayPermisoDeUbicacion() async {
     final permisos = ref.read(permisosProvider.notifier);
     // Si todavía no se le preguntó al sistema, `desconocido` no significa que

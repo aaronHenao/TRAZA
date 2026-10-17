@@ -2,10 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/distancia_en_vivo.dart';
 import '../models/estado_cronometro.dart';
-import '../models/punto_gps.dart';
 import 'calculadora_distancia.dart';
 import 'cronometro_provider.dart';
-import 'recorrido_provider.dart';
+import 'ubicacion_provider.dart';
+import 'ventana_velocidad.dart';
 
 /// Cómo se construye la calculadora de cada actividad. Las pruebas la
 /// sobrescriben para ajustar los umbrales del filtro.
@@ -14,16 +14,25 @@ final fabricaCalculadoraDistanciaProvider =
       (ref) => CalculadoraDistancia.new,
     );
 
-/// Distancia recorrida en la actividad en curso (SCRUM-111 y SCRUM-112).
+/// Cómo se construye la ventana del ritmo actual. Las pruebas la
+/// sobrescriben para ajustarla.
+final fabricaVentanaVelocidadProvider = Provider<VentanaVelocidad Function()>(
+  (ref) => VentanaVelocidad.new,
+);
+
+/// Distancia recorrida y ritmo actual de la actividad en curso (SCRUM-111,
+/// SCRUM-112 y SCRUM-116).
 ///
-/// No abre ningún GPS propio: lee los puntos que [recorridoProvider] va
-/// registrando (SCRUM-110) y los pasa por [CalculadoraDistancia], que
-/// descarta el ruido y suma solo entre puntos consecutivos válidos. Al
-/// reanudar tras una pausa se rompe la continuidad, para no contar lo que
-/// el usuario se movió con la actividad pausada.
+/// Evalúa **cada** lectura de [posicionEnVivoProvider] con la actividad en
+/// curso, no solo los puntos que se guardan como recorrido: la velocidad
+/// Doppler se integra lectura a lectura, y saltarse las de reposo haría que
+/// una parada se contara como si se hubiera seguido caminando. No abre un
+/// GPS propio: comparte el stream con el mapa y el recorrido.
 ///
-/// Vive mientras la pantalla de entrenamiento lo observe; al salir se
-/// descarta junto con el recorrido.
+/// En pausa no se evalúa nada, y al reanudar se rompe la continuidad para
+/// no contar lo que el usuario se movió con la actividad pausada.
+///
+/// Vive mientras la pantalla de entrenamiento lo observe.
 final distanciaProvider =
     NotifierProvider.autoDispose<DistanciaNotifier, DistanciaEnVivo>(
       DistanciaNotifier.new,
@@ -31,45 +40,58 @@ final distanciaProvider =
 
 class DistanciaNotifier extends AutoDisposeNotifier<DistanciaEnVivo> {
   late CalculadoraDistancia _calculadora;
-  int _procesados = 0;
+  late VentanaVelocidad _ventana;
+  late Reloj _reloj;
 
   @override
   DistanciaEnVivo build() {
     _calculadora = ref.watch(fabricaCalculadoraDistanciaProvider)();
-    _procesados = 0;
+    _ventana = ref.watch(fabricaVentanaVelocidadProvider)();
+    _reloj = ref.watch(relojProvider);
 
-    ref.listen(recorridoProvider.select((recorrido) => recorrido.puntos), (
-      _,
-      puntos,
-    ) {
-      _procesar(puntos);
-      state = DistanciaEnVivo(metros: _calculadora.distanciaMetros);
+    ref.listen(posicionEnVivoProvider, (_, siguiente) {
+      final punto = siguiente.valueOrNull;
+      if (punto == null) return;
+      if (!ref.read(cronometroProvider).estaEnCurso) return;
+
+      _calculadora.agregar(punto);
+      final velocidad = _calculadora.ultimaVelocidadMps;
+      if (velocidad != null) _ventana.agregar(velocidad, _reloj());
+      _publicar();
     });
+
     ref.listen(cronometroProvider.select((estado) => estado.marcha), (
       anterior,
       actual,
     ) {
-      if (anterior == MarchaCronometro.pausado &&
-          actual == MarchaCronometro.enCurso) {
+      if (actual != MarchaCronometro.enCurso) return;
+      if (anterior == MarchaCronometro.detenido) {
+        // Actividad nueva: se empieza de cero.
+        _calculadora.reiniciar();
+        _ventana.reiniciar();
+      } else if (anterior == MarchaCronometro.pausado) {
         _calculadora.reiniciarAncla();
+        _ventana.reiniciar();
       }
+      _publicar();
     });
 
-    // Puntos registrados antes de que alguien observara la distancia.
-    _procesar(ref.read(recorridoProvider).puntos);
-    return DistanciaEnVivo(metros: _calculadora.distanciaMetros);
+    // Sin lecturas nuevas (señal perdida) las muestras caducan y el ritmo
+    // desaparece con el tiempo, en vez de quedarse congelado.
+    ref.listen(cronometroProvider.select((estado) => estado.transcurrido), (
+      _,
+      _,
+    ) {
+      _publicar();
+    });
+
+    return _instantanea();
   }
 
-  /// Pasa por la calculadora solo los puntos que aún no se evaluaron.
-  void _procesar(List<PuntoGps> puntos) {
-    if (puntos.length < _procesados) {
-      // El recorrido se reinició (nueva actividad).
-      _calculadora.reiniciar();
-      _procesados = 0;
-    }
-    for (var i = _procesados; i < puntos.length; i++) {
-      _calculadora.agregar(puntos[i]);
-    }
-    _procesados = puntos.length;
-  }
+  void _publicar() => state = _instantanea();
+
+  DistanciaEnVivo _instantanea() => DistanciaEnVivo(
+    metros: _calculadora.distanciaMetros,
+    ritmoActual: _ventana.ritmoPorKm(_reloj()),
+  );
 }

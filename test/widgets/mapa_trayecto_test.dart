@@ -29,8 +29,9 @@ void main() {
 
   Future<ProveedorTilesFalso> montar(
     WidgetTester tester,
-    List<PuntoGps> puntos,
-  ) async {
+    List<PuntoGps> puntos, {
+    List<int> cortes = const [],
+  }) async {
     final tiles = ProveedorTilesFalso();
     await tester.pumpWidget(
       ProviderScope(
@@ -40,7 +41,7 @@ void main() {
             body: SizedBox(
               width: 375,
               height: 600,
-              child: MapaTrayecto(puntos: puntos),
+              child: MapaTrayecto(puntos: puntos, cortes: cortes),
             ),
           ),
         ),
@@ -66,6 +67,20 @@ void main() {
     expect(linea.points, coordenadas(recorrido));
     expect(linea.color, AppColors.accent);
     expect(linea.strokeWidth, MapaTrayecto.grosorLinea);
+  });
+
+  testWidgets('dibuja una línea por tramo, sin unir la pausa (BUG-005)', (
+    tester,
+  ) async {
+    await montar(tester, recorrido, cortes: const [2]);
+
+    final lineas = tester
+        .widget<PolylineLayer>(find.byType(PolylineLayer))
+        .polylines;
+    expect(lineas.map((linea) => linea.points), [
+      coordenadas(recorrido.sublist(0, 2)),
+      coordenadas(recorrido.sublist(2)),
+    ]);
   });
 
   testWidgets('marca la partida en el primer punto y la llegada en el '

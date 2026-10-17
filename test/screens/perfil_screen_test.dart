@@ -4,13 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/models/insignia.dart';
+import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/services/perfil_provider.dart';
+import 'package:traza/screens/home/runner_experto_screen.dart';
 import 'package:traza/screens/onboarding/perfil_screen.dart';
 import 'package:traza/models/perfil_state.dart';
 import 'package:traza/widgets/configuracion_valor_objetivo.dart';
 import 'package:traza/screens/onboarding/permisos_screen.dart';
+import 'package:traza/widgets/seccion_insignias.dart';
+
+import '../utiles/insignias_falsas.dart';
 
 /// Pruebas de la pantalla de perfil: selección de objetivos (SCRUM-86), sus
 /// valores (SCRUM-87 y SCRUM-88), el guardado (SCRUM-89) y la edición de los
@@ -406,6 +412,56 @@ void main() {
     });
   });
 
+  group('insignias (SCRUM-222)', () {
+    final primeraHuella = Insignia(
+      id: 'i-1',
+      nombre: 'Primera huella',
+      descripcion: 'Tu primer kilómetro con TRAZA.',
+      icono: 'huella',
+      xpRequerida: 5,
+      obtenidaEl: DateTime.utc(2026, 9, 20, 15),
+    );
+
+    testWidgets('fuera del onboarding muestra las insignias obtenidas debajo '
+        'de los objetivos', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        insignias: InsigniasFalsas(catalogo: [primeraHuella]),
+      );
+
+      final seccion = find.byKey(SeccionInsignias.clave);
+      await tester.scrollUntilVisible(
+        seccion,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('insignia-i-1')),
+          matching: find.text('Obtenida'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(seccion).dy,
+        greaterThan(tester.getTopLeft(find.text('Distancia semanal')).dy),
+      );
+    });
+
+    testWidgets('en el onboarding no las muestra ni las consulta', (
+      tester,
+    ) async {
+      // Recién registrado todavía no hay XP: no hay nada que mostrar.
+      final insignias = InsigniasFalsas(catalogo: [primeraHuella]);
+      await _montarPerfil(tester, insignias: insignias);
+
+      expect(find.byKey(SeccionInsignias.clave), findsNothing);
+      expect(insignias.consultas, 0);
+    });
+  });
+
   group('edición de objetivos ya configurados', () {
     testWidgets('precarga los objetivos guardados con sus valores', (
       tester,
@@ -433,10 +489,7 @@ void main() {
       await _montarPerfil(
         tester,
         repositorio: _RepositorioFalso(
-          existentes: {
-            TipoObjetivo.distancia: 20,
-            TipoObjetivo.frecuencia: 5,
-          },
+          existentes: {TipoObjetivo.distancia: 20, TipoObjetivo.frecuencia: 5},
         ),
       );
 
@@ -540,6 +593,32 @@ void main() {
       expect(_botonGuardar(tester).onPressed, isNotNull);
     });
   });
+
+  group('invitación a Runner Experto (SCRUM-212)', () {
+    testWidgets('fuera del onboarding pregunta si quiere serlo', (
+      tester,
+    ) async {
+      await _montarPerfil(tester, enOnboarding: false);
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsOneWidget);
+      expect(find.text('¿Quieres ser Runner Experto?'), findsOneWidget);
+    });
+
+    testWidgets('en el onboarding no aparece', (tester) async {
+      await _montarPerfil(tester);
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsNothing);
+    });
+
+    testWidgets('al tocarla abre los requisitos y ventajas', (tester) async {
+      await _montarPerfil(tester, enOnboarding: false);
+
+      await tester.tap(find.byKey(PerfilScreen.claveRunnerExperto));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Runner Experto'), findsOneWidget);
+    });
+  });
 }
 
 /// Repositorio de mentira: devuelve los objetivos que se le configuren,
@@ -600,6 +679,7 @@ Future<void> _montarPerfil(
   WidgetTester tester, {
   ObjetivosRepository? repositorio,
   bool enOnboarding = true,
+  InsigniasFalsas? insignias,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -618,6 +698,11 @@ Future<void> _montarPerfil(
         path: '/inicio',
         builder: (_, _) => const Scaffold(body: Text('Portada')),
       ),
+      GoRoute(
+        path: RunnerExpertoScreen.ruta,
+        builder: (_, _) =>
+            const Scaffold(body: Text('Pantalla Runner Experto')),
+      ),
     ],
   );
 
@@ -626,6 +711,9 @@ Future<void> _montarPerfil(
       overrides: [
         objetivosRepositoryProvider.overrideWithValue(
           repositorio ?? _RepositorioFalso(),
+        ),
+        insigniasRepositoryProvider.overrideWithValue(
+          insignias ?? InsigniasFalsas(),
         ),
       ],
       child: MaterialApp.router(routerConfig: router),

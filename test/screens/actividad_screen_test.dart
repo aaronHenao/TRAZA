@@ -45,9 +45,7 @@ void main() {
       expect(find.byTooltip('Historial'), findsOneWidget);
       expect(
         tester
-            .widget<IconButton>(
-              find.widgetWithIcon(IconButton, Icons.schedule),
-            )
+            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.schedule))
             .onPressed,
         isNotNull,
       );

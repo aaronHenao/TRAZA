@@ -28,26 +28,29 @@ void main() {
     expect(peticion.url.queryParameters['select'], 'id,nombre');
   });
 
-  test('ordena como el prototipo y deja al final los tipos que no conoce', () async {
-    final supabase = _SupabaseFalso([
-      {'id': '1', 'nombre': 'Caminar'},
-      {'id': '2', 'nombre': 'Nadar'},
-      {'id': '3', 'nombre': 'Correr'},
-      {'id': '4', 'nombre': 'Bicicleta'},
-      {'id': '5', 'nombre': 'Trote'},
-    ]);
-    addTearDown(supabase.cerrar);
+  test(
+    'ordena como el prototipo y deja al final los tipos que no conoce',
+    () async {
+      final supabase = _SupabaseFalso([
+        {'id': '1', 'nombre': 'Caminar'},
+        {'id': '2', 'nombre': 'Nadar'},
+        {'id': '3', 'nombre': 'Correr'},
+        {'id': '4', 'nombre': 'Bicicleta'},
+        {'id': '5', 'nombre': 'Trote'},
+      ]);
+      addTearDown(supabase.cerrar);
 
-    final tipos = await supabase.repositorio(usuarioId: 'usuario').cargar();
+      final tipos = await supabase.repositorio(usuarioId: 'usuario').cargar();
 
-    expect(tipos.map((tipo) => tipo.nombre), [
-      'Correr',
-      'Trote',
-      'Caminar',
-      'Bicicleta',
-      'Nadar',
-    ]);
-  });
+      expect(tipos.map((tipo) => tipo.nombre), [
+        'Correr',
+        'Trote',
+        'Caminar',
+        'Bicicleta',
+        'Nadar',
+      ]);
+    },
+  );
 
   test('sin sesión devuelve el catálogo local sin tocar la red', () async {
     final supabase = _SupabaseFalso(const []);

@@ -29,7 +29,12 @@ class TrazaTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 10, AppSpacing.lg, AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        10,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
       child: Row(
         children: [
           SizedBox(

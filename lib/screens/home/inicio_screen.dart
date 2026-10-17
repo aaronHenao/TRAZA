@@ -10,16 +10,20 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/traza_card.dart';
+import 'progresion_screen.dart';
 
 /// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
 /// el usuario al entrar y desde donde arranca todo.
 ///
 /// Del prototipo se toman el saludo, el bloque de progreso y el botón "+".
-/// El nivel, los retos y las rutas quedan fuera: son historias que todavía no
-/// existen. En su lugar, el progreso muestra lo que el usuario sí tiene hoy:
-/// el objetivo semanal del perfil y sus últimos entrenamientos.
+/// Los retos y las rutas quedan fuera: son historias que todavía no existen.
+/// En su lugar, el progreso muestra lo que el usuario sí tiene hoy: el
+/// objetivo semanal del perfil, sus últimos entrenamientos y el acceso a su
+/// progresión de niveles (SCRUM-178).
 class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
+
+  static const claveAccesoProgresion = Key('inicio-progresion');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,6 +50,8 @@ class InicioScreen extends ConsumerWidget {
               _Saludo(),
               SizedBox(height: AppSpacing.lg),
               _ProgresoSemanal(),
+              SizedBox(height: AppSpacing.md),
+              _AccesoProgresion(),
               SizedBox(height: AppSpacing.lg),
               _UltimosEntrenamientos(),
             ],
@@ -187,6 +193,64 @@ class _Avance extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Entrada a la progresión de niveles (SCRUM-178).
+///
+/// La portada no repite los datos: quien quiere saber cuánto le falta para
+/// subir entra aquí y los ve juntos, sin que esta tarjeta tenga que consultar
+/// nada para pintarse.
+class _AccesoProgresion extends StatelessWidget {
+  const _AccesoProgresion();
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      key: InicioScreen.claveAccesoProgresion,
+      // `push`: al cerrarla se vuelve a la portada.
+      onTap: () => context.push(ProgresionScreen.ruta),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryTint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.stairs_outlined,
+              size: 20,
+              color: AppColors.secondaryDark,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tu progresión',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Mira cuánto te falta para el siguiente nivel',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.ink3),
+        ],
+      ),
     );
   }
 }

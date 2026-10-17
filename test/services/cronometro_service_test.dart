@@ -131,10 +131,14 @@ void main() {
   group('formatearTiempoEntrenamiento', () {
     test('usa siempre HH:MM:SS con dos dígitos', () {
       expect(formatearTiempoEntrenamiento(Duration.zero), '00:00:00');
-      expect(formatearTiempoEntrenamiento(const Duration(seconds: 9)),
-          '00:00:09');
-      expect(formatearTiempoEntrenamiento(const Duration(seconds: 61)),
-          '00:01:01');
+      expect(
+        formatearTiempoEntrenamiento(const Duration(seconds: 9)),
+        '00:00:09',
+      );
+      expect(
+        formatearTiempoEntrenamiento(const Duration(seconds: 61)),
+        '00:01:01',
+      );
       expect(
         formatearTiempoEntrenamiento(
           const Duration(hours: 1, minutes: 1, seconds: 1),
@@ -151,13 +155,17 @@ void main() {
     });
 
     test('las horas crecen más allá de 99', () {
-      expect(formatearTiempoEntrenamiento(const Duration(hours: 100)),
-          '100:00:00');
+      expect(
+        formatearTiempoEntrenamiento(const Duration(hours: 100)),
+        '100:00:00',
+      );
     });
 
     test('una duración negativa se muestra como cero', () {
-      expect(formatearTiempoEntrenamiento(const Duration(seconds: -5)),
-          '00:00:00');
+      expect(
+        formatearTiempoEntrenamiento(const Duration(seconds: -5)),
+        '00:00:00',
+      );
     });
   });
 

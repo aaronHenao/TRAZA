@@ -19,10 +19,7 @@ void main() {
 
   group('inicio de semana', () {
     test('es el lunes a las 00:00', () {
-      expect(
-        ResumenSemana.inicioDeSemana(miercoles),
-        DateTime(2026, 9, 14),
-      );
+      expect(ResumenSemana.inicioDeSemana(miercoles), DateTime(2026, 9, 14));
     });
 
     test('el propio lunes empieza ese mismo día', () {

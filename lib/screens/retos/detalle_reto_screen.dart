@@ -1,0 +1,559 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../models/periodicidad_reto.dart';
+import '../../models/reto.dart';
+import '../../models/reto_del_usuario.dart';
+import '../../services/reloj_provider.dart';
+import '../../services/retos_provider.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../widgets/ancho_contenido.dart';
+import '../../widgets/tarjeta_reto.dart';
+import '../../widgets/traza_card.dart';
+import '../../widgets/traza_toast.dart';
+import '../../widgets/traza_top_bar.dart';
+
+/// Abre el detalle del reto que pide la ruta.
+///
+/// El listado pasa el reto en `extra` para no volver a consultarlo. Si no
+/// viene —por ejemplo al abrir la ruta directamente— se busca entre los
+/// vigentes que ya están cargados.
+class DetalleRetoPorRuta extends ConsumerWidget {
+  const DetalleRetoPorRuta({required this.retoId, this.reto, super.key});
+
+  final String retoId;
+  final Reto? reto;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reto =
+        this.reto ??
+        ref
+            .watch(retosVigentesProvider)
+            .valueOrNull
+            ?.where((candidato) => candidato.id == retoId)
+            .firstOrNull;
+
+    if (reto == null) return const _NoEncontrado();
+    return DetalleRetoScreen(reto: reto);
+  }
+}
+
+class _NoEncontrado extends StatelessWidget {
+  const _NoEncontrado();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            TrazaTopBar(titulo: 'Reto', onAtras: context.pop),
+            const Expanded(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                  child: Text(
+                    'Este reto ya no está disponible.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13.5, color: AppColors.ink2),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Detalle de un reto (SCRUM-165), desde donde el corredor lo activa
+/// (SCRUM-136).
+///
+/// Responde lo que el criterio 3 de SCRUM-135 pide: el objetivo del reto y
+/// las condiciones para cumplirlo, para que decida si lo intenta.
+class DetalleRetoScreen extends ConsumerStatefulWidget {
+  const DetalleRetoScreen({required this.reto, super.key});
+
+  final Reto reto;
+
+  static const claveActivar = Key('reto-activar');
+
+  @override
+  ConsumerState<DetalleRetoScreen> createState() => _DetalleRetoScreenState();
+}
+
+class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
+  /// Se está creando la fila. Es estado de la pantalla, no del dominio: evita
+  /// que un segundo toque mande otra activación mientras la primera va.
+  bool _activando = false;
+
+  Future<void> _activar() async {
+    if (_activando) return;
+    setState(() => _activando = true);
+    try {
+      final resultado = await ref
+          .read(activacionRetoProvider)
+          .activar(widget.reto);
+      if (!mounted) return;
+
+      switch (resultado) {
+        case RetoActivado():
+          // `pop`: vuelve al catálogo, donde el reto ya figura activado.
+          context.pop();
+          mostrarToast(context, 'Reto activado. ¡A por él!');
+        case RetoNoActivado(:final mensaje):
+          mostrarToast(context, mensaje, separacionInferior: 90);
+      }
+    } finally {
+      if (mounted) setState(() => _activando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reto = widget.reto;
+    final hoy = ref.read(relojProvider)();
+
+    // SCRUM-170: si el corredor ya lo tiene en juego, la pantalla lo dice en
+    // vez de ofrecerle activarlo otra vez.
+    final mios = ref.watch(misRetosProvider);
+    final mio = mios.valueOrNull
+        ?.where((m) => m.reto.id == reto.id && m.enCursoEn(hoy))
+        .firstOrNull;
+    // Mientras no se sepa, el botón espera: ofrecer activar y rectificar un
+    // segundo después es peor que un botón quieto.
+    final cargando = mios.isLoading;
+
+    // La regla de un reto por periodicidad y tipo de actividad. Se consulta
+    // aquí para decirlo antes de que lo pulse, no después.
+    final bloqueo = mio != null
+        ? null
+        : motivoDeBloqueo(
+            reto,
+            mios.valueOrNull?.where((m) => m.enCursoEn(hoy)).toList() ??
+                const [],
+          );
+
+    return Scaffold(
+      body: SafeArea(
+        child: AnchoContenido(
+          child: Column(
+            children: [
+              TrazaTopBar(titulo: 'Reto', onAtras: context.pop),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.xs,
+                    AppSpacing.lg,
+                    AppSpacing.xl,
+                  ),
+                  children: [
+                    _Encabezado(reto: reto),
+                    const SizedBox(height: AppSpacing.lg),
+                    _Condiciones(reto: reto, hoy: hoy),
+                    const SizedBox(height: AppSpacing.md),
+                    _Descripcion(reto: reto),
+                  ],
+                ),
+              ),
+              switch (mio) {
+                // Ya es suyo: lo que falta por saber es cuánto le queda, no
+                // si lo acepta.
+                final activo? => _PieConProgreso(mio: activo),
+                // Tiene otro del mismo hueco: el botón no se ofrece, y en su
+                // lugar va el motivo.
+                _ when bloqueo != null => _PieBloqueado(motivo: bloqueo),
+                _ => _PieConBoton(
+                  activando: _activando,
+                  onActivar: _activando || cargando ? null : _activar,
+                ),
+              },
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lo que ve quien ya tiene el reto activo: cuánto lleva hecho.
+class _PieConProgreso extends StatelessWidget {
+  const _PieConProgreso({required this.mio});
+
+  final RetoDelUsuario mio;
+
+  static const clave = Key('reto-ya-activo');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: clave,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.directions_run,
+                size: 18,
+                color: AppColors.secondaryDark,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Ya lo tienes activo',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              Text(
+                '${TarjetaReto.textoKm(mio.progresoKm)} de '
+                '${TarjetaReto.textoKm(mio.reto.metaKm)} km',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: LinearProgressIndicator(
+              value: mio.progreso,
+              minHeight: 6,
+              backgroundColor: AppColors.bgAlt,
+              valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lo que ve quien ya lleva otro reto de la misma periodicidad y tipo.
+class _PieBloqueado extends StatelessWidget {
+  const _PieBloqueado({required this.motivo});
+
+  final String motivo;
+
+  static const clave = Key('reto-bloqueado');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: clave,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        14,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline, size: 18, color: AppColors.ink3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  motivo,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'Termínalo o espera a que acabe su plazo para tomar otro.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.ink2,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El botón de activar, separado del contenido para que no se desplace con
+/// él: es la decisión que trae al corredor a esta pantalla.
+class _PieConBoton extends StatelessWidget {
+  const _PieConBoton({required this.activando, required this.onActivar});
+
+  final bool activando;
+  final VoidCallback? onActivar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: FilledButton(
+        key: DetalleRetoScreen.claveActivar,
+        onPressed: onActivar,
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        child: activando
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text('Activar reto'),
+      ),
+    );
+  }
+}
+
+/// El icono, el nombre y la XP: de un vistazo, qué reto es y qué da.
+class _Encabezado extends StatelessWidget {
+  const _Encabezado({required this.reto});
+
+  final Reto reto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        IconoPeriodicidad(periodicidad: reto.periodicidad),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                reto.nombre,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.19,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  InsigniaReto(
+                    texto: '+${reto.xpOtorgada} XP',
+                    fondo: AppColors.primaryTint,
+                    color: AppColors.primaryDark,
+                  ),
+                  InsigniaReto(texto: reto.periodicidad.etiqueta),
+                  InsigniaReto(texto: reto.tipoActividad.nombre),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lo que hay que hacer para cumplirlo, en datos concretos.
+class _Condiciones extends StatelessWidget {
+  const _Condiciones({required this.reto, required this.hoy});
+
+  final Reto reto;
+  final DateTime hoy;
+
+  static const _meses = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  static String _fecha(DateTime dia) =>
+      '${dia.day} de ${_meses[dia.month - 1]}';
+
+  @override
+  Widget build(BuildContext context) {
+    final quedan = reto.vigencia.diasRestantesDesde(hoy);
+
+    return TrazaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'PARA CUMPLIRLO',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.66,
+              color: AppColors.ink2,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _Fila(
+            icono: Icons.flag_outlined,
+            titulo: 'Recorre ${TarjetaReto.textoKm(reto.metaKm)} km',
+            detalle: switch (reto.periodicidad) {
+              PeriodicidadReto.diaria => 'Durante el día de hoy.',
+              PeriodicidadReto.semanal =>
+                'Sumando lo de toda la semana, en las salidas que quieras.',
+              PeriodicidadReto.mensual =>
+                'Sumando lo de todo el mes, en las salidas que quieras.',
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _Fila(
+            icono: Icons.calendar_today_outlined,
+            titulo: reto.vigencia.dias == 1
+                ? 'Solo hoy, ${_fecha(reto.vigencia.inicio)}'
+                : 'Del ${_fecha(reto.vigencia.inicio)} al '
+                      '${_fecha(reto.vigencia.fin)}',
+            detalle: switch (quedan) {
+              0 => 'La vigencia de este reto ya terminó.',
+              1 => 'Es el último día: termina esta noche.',
+              2 => 'Queda 1 día.',
+              _ => 'Quedan ${quedan - 1} días.',
+            },
+            // El último día se resalta: es lo que cambia la decisión.
+            destacado: quedan == 1,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _Fila(
+            icono: Icons.military_tech_outlined,
+            titulo: 'Ganas ${reto.xpOtorgada} XP',
+            detalle: 'Se acreditan al completarlo.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Fila extends StatelessWidget {
+  const _Fila({
+    required this.icono,
+    required this.titulo,
+    required this.detalle,
+    this.destacado = false,
+  });
+
+  final IconData icono;
+  final String titulo;
+  final String detalle;
+  final bool destacado;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destacado ? AppColors.danger : AppColors.ink2;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icono, size: 18, color: color),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                titulo,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                detalle,
+                style: TextStyle(fontSize: 12.5, color: color, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lo que escribió el administrador, tal cual.
+class _Descripcion extends StatelessWidget {
+  const _Descripcion({required this.reto});
+
+  final Reto reto;
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'DESCRIPCIÓN',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.66,
+              color: AppColors.ink2,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            reto.descripcion,
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.ink,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

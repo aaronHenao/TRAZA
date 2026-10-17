@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/estado_cronometro.dart';
 import '../../services/cronometro_provider.dart';
 import '../../services/distancia_provider.dart';
+import '../../services/pantalla_encendida_provider.dart';
 import '../../services/recorrido_provider.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/controles_entrenamiento.dart';
@@ -159,16 +160,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     // Mantiene vivo el registro de puntos mientras la pantalla exista,
     // aunque nadie más lo observe (por ejemplo, con un mapa inyectado).
     ref.listen(recorridoProvider, (_, _) {});
+    // Con la actividad en curso la pantalla no se apaga sola; en pausa, al
+    // finalizar o al salir de aquí, sí.
+    ref.watch(pantallaEncendidaEnRutaProvider);
 
     final pausado = ref.watch(
       cronometroProvider.select((estado) => estado.estaPausado),
     );
-    // Distancia y ritmo en vivo (SCRUM-112): la distancia cambia con cada
-    // punto aceptado y el ritmo con cada tick del cronómetro.
+    // Distancia y ritmo en vivo (SCRUM-112). El ritmo es el de los últimos
+    // segundos, no el promedio de toda la actividad (SCRUM-116).
     final distancia = ref.watch(distanciaProvider);
-    final transcurrido = ref.watch(
-      cronometroProvider.select((estado) => estado.transcurrido),
-    );
 
     // Con la actividad en curso no se sale por accidente: el recorrido vive
     // en memoria hasta que se finaliza, así que un atrás sin más lo perdería
@@ -198,7 +199,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                   const CronometroEntrenamiento(),
                   EstadisticasEntrenamiento(
                     distancia: distancia.kilometros,
-                    ritmo: distancia.ritmoPara(transcurrido),
+                    ritmo: distancia.ritmoActualFormateado,
                   ),
                   ControlesEntrenamiento(
                     pausado: pausado,

@@ -8,7 +8,19 @@ import 'traza_top_bar.dart';
 /// Botón circular para cerrar sesión. Pide confirmación, cierra la sesión de
 /// Supabase y de Google, y vuelve al login.
 class BotonCerrarSesion extends ConsumerWidget {
-  const BotonCerrarSesion({super.key});
+  const BotonCerrarSesion({this.mensaje = mensajeCorredor, super.key});
+
+  /// Lo que se le dice a quien cierra sesión desde las pantallas de corredor.
+  static const mensajeCorredor =
+      'Tendrás que volver a iniciar sesión para registrar tus entrenamientos.';
+
+  /// Y a quien la cierra desde la administración. No nombra los retos a
+  /// propósito: esa parte va a crecer con más secciones.
+  static const mensajeAdministrador =
+      'Tendrás que volver a iniciar sesión para administrar TRAZA.';
+
+  /// Qué se pierde al salir. Cambia según desde dónde se cierre la sesión.
+  final String mensaje;
 
   Future<void> _cerrarSesion(BuildContext context, WidgetRef ref) async {
     // Confirmación: el botón está junto a otros y se puede tocar sin querer.
@@ -16,10 +28,7 @@ class BotonCerrarSesion extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('¿Cerrar sesión?'),
-        content: const Text(
-          'Tendrás que volver a iniciar sesión para registrar tus '
-          'entrenamientos.',
-        ),
+        content: Text(mensaje),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

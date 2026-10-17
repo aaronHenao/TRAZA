@@ -92,8 +92,20 @@ void main() {
     expect(find.text('Permitir ubicación'), findsOneWidget);
 
     expect(find.text('Datos de salud'), findsOneWidget);
-    expect(find.textContaining('métricas de salud'), findsOneWidget);
-    expect(find.text('Permitir acceso'), findsOneWidget);
+    expect(find.text('Aceptar'), findsOneWidget);
+  });
+
+  testWidgets('explica en qué funciones se usan los datos de salud '
+      '(SCRUM-131)', (tester) async {
+    await montar(tester);
+
+    final descripcion = tester
+        .widget<Text>(find.textContaining('frecuencia cardiaca'))
+        .data!;
+    expect(descripcion, contains('entrenamientos libres'));
+    expect(descripcion, contains('retos'));
+    expect(descripcion, contains('rutas'));
+    expect(descripcion, contains('foto'));
   });
 
   testWidgets('"Ahora no" avisa que se puede activar después', (tester) async {
@@ -194,7 +206,7 @@ void main() {
       ).thenAnswer((_) async => EstadoPermiso.concedido);
       await montar(tester);
 
-      await tester.tap(find.text('Permitir acceso'));
+      await tester.tap(find.text('Aceptar'));
       await tester.pumpAndSettle();
 
       verify(() => servicio.solicitarSalud()).called(1);
@@ -209,7 +221,7 @@ void main() {
       ).thenAnswer((_) async => EstadoPermiso.denegado);
       await montar(tester);
 
-      await tester.tap(find.text('Permitir acceso'));
+      await tester.tap(find.text('Aceptar'));
       await tester.pump();
 
       expect(
@@ -227,7 +239,7 @@ void main() {
       ).thenAnswer((_) async => EstadoPermiso.noDisponible);
       await montar(tester);
 
-      await tester.tap(find.text('Permitir acceso'));
+      await tester.tap(find.text('Aceptar'));
       await tester.pumpAndSettle();
       expect(find.text('Falta Health Connect'), findsOneWidget);
 

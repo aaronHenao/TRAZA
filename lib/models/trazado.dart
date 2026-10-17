@@ -4,22 +4,29 @@ import 'dart:ui' show Offset;
 import 'package:flutter/foundation.dart';
 
 import 'punto_gps.dart';
+import 'tramos.dart';
 
 /// Forma del recorrido para dibujarla en el resumen (SCRUM-119): la polilínea
 /// de los puntos GPS guardados, en coordenadas planas y sin deformar.
 ///
 /// Los puntos quedan entre 0 y 1: la dimensión más larga del recorrido mide 1
 /// y la otra conserva su proporción. Quien lo dibuja solo tiene que escalarlo
-/// a su espacio.
+/// a su espacio. Se dibuja una línea por tramo ([tramos]): lo recorrido en
+/// pausa no se une (BUG-005).
 @immutable
 class Trazado {
   const Trazado._({
     required this.puntos,
     required this.ancho,
     required this.alto,
+    this.cortes = const [],
   });
 
-  factory Trazado.desdePuntos(List<PuntoGps> puntosGps) {
+  /// [cortes]: índices de [puntosGps] donde empieza un tramo tras una pausa.
+  factory Trazado.desdePuntos(
+    List<PuntoGps> puntosGps, {
+    List<int> cortes = const [],
+  }) {
     if (puntosGps.isEmpty) {
       return const Trazado._(puntos: [], ancho: 0, alto: 0);
     }
@@ -55,6 +62,7 @@ class Trazado {
         puntos: List.filled(planos.length, Offset.zero),
         ancho: 0,
         alto: 0,
+        cortes: cortes,
       );
     }
 
@@ -65,12 +73,19 @@ class Trazado {
       ],
       ancho: (derecha - izquierda) / lado,
       alto: (abajo - arriba) / lado,
+      cortes: cortes,
     );
   }
 
   /// Puntos del recorrido en orden de captura: el primero es la partida y el
   /// último, la llegada.
   final List<Offset> puntos;
+
+  /// Índices de [puntos] donde empieza un tramo nuevo.
+  final List<int> cortes;
+
+  /// [puntos] separados por las pausas.
+  List<List<Offset>> get tramos => dividirEnTramos(puntos, cortes);
 
   /// Ancho y alto del recorrido. El mayor de los dos vale 1, salvo que el
   /// usuario no se haya movido: entonces ambos valen 0.
@@ -84,10 +99,12 @@ class Trazado {
       other is Trazado &&
       other.ancho == ancho &&
       other.alto == alto &&
-      listEquals(other.puntos, puntos);
+      listEquals(other.puntos, puntos) &&
+      listEquals(other.cortes, cortes);
 
   @override
-  int get hashCode => Object.hash(ancho, alto, Object.hashAll(puntos));
+  int get hashCode =>
+      Object.hash(ancho, alto, Object.hashAll(puntos), Object.hashAll(cortes));
 
   @override
   String toString() =>

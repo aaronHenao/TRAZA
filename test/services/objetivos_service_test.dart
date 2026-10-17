@@ -77,26 +77,32 @@ void main() {
   });
 
   group('guardar', () {
-    test('hace upsert sobre (usuario_id, tipo) con los objetivos marcados', () async {
-      final supabase = _SupabaseFalso();
-      addTearDown(supabase.cerrar);
+    test(
+      'hace upsert sobre (usuario_id, tipo) con los objetivos marcados',
+      () async {
+        final supabase = _SupabaseFalso();
+        addTearDown(supabase.cerrar);
 
-      await supabase.repositorio(usuarioId).guardar({
-        TipoObjetivo.distancia: 12.5,
-        TipoObjetivo.frecuencia: 3,
-      });
+        await supabase.repositorio(usuarioId).guardar({
+          TipoObjetivo.distancia: 12.5,
+          TipoObjetivo.frecuencia: 3,
+        });
 
-      // Con los dos marcados no hay nada que borrar: una sola petición.
-      final upsert = supabase.peticiones.single;
-      expect(upsert.method, 'POST');
-      expect(upsert.url.path, '/rest/v1/objetivos');
-      expect(upsert.url.queryParameters['on_conflict'], 'usuario_id,tipo');
-      expect(upsert.headers['Prefer'], contains('resolution=merge-duplicates'));
-      expect(jsonDecode(upsert.body), [
-        {'usuario_id': usuarioId, 'tipo': 'distancia', 'valor_meta': 12.5},
-        {'usuario_id': usuarioId, 'tipo': 'frecuencia', 'valor_meta': 3},
-      ]);
-    });
+        // Con los dos marcados no hay nada que borrar: una sola petición.
+        final upsert = supabase.peticiones.single;
+        expect(upsert.method, 'POST');
+        expect(upsert.url.path, '/rest/v1/objetivos');
+        expect(upsert.url.queryParameters['on_conflict'], 'usuario_id,tipo');
+        expect(
+          upsert.headers['Prefer'],
+          contains('resolution=merge-duplicates'),
+        );
+        expect(jsonDecode(upsert.body), [
+          {'usuario_id': usuarioId, 'tipo': 'distancia', 'valor_meta': 12.5},
+          {'usuario_id': usuarioId, 'tipo': 'frecuencia', 'valor_meta': 3},
+        ]);
+      },
+    );
 
     test('borra los desmarcados, y lo hace después de escribir', () async {
       final supabase = _SupabaseFalso();
@@ -116,18 +122,21 @@ void main() {
       expect(borrado.url.queryParameters['tipo'], 'eq.frecuencia');
     });
 
-    test('sin objetivos marcados no escribe nada y borra los dos tipos', () async {
-      final supabase = _SupabaseFalso();
-      addTearDown(supabase.cerrar);
+    test(
+      'sin objetivos marcados no escribe nada y borra los dos tipos',
+      () async {
+        final supabase = _SupabaseFalso();
+        addTearDown(supabase.cerrar);
 
-      await supabase.repositorio(usuarioId).guardar({});
+        await supabase.repositorio(usuarioId).guardar({});
 
-      expect(supabase.peticiones.map((p) => p.method), ['DELETE', 'DELETE']);
-      expect(
-        supabase.peticiones.map((p) => p.url.queryParameters['tipo']),
-        ['eq.distancia', 'eq.frecuencia'],
-      );
-    });
+        expect(supabase.peticiones.map((p) => p.method), ['DELETE', 'DELETE']);
+        expect(supabase.peticiones.map((p) => p.url.queryParameters['tipo']), [
+          'eq.distancia',
+          'eq.frecuencia',
+        ]);
+      },
+    );
   });
 
   test('sin sesión falla sin mandar ninguna petición', () async {

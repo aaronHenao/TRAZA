@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/services/calculadora_distancia.dart';
+import 'package:traza/services/criterio_movimiento.dart';
 
 // 0.001° de latitud ≈ 111.19 m en cualquier longitud.
 const double _metrosPorMiliGrado = 111.19;
@@ -12,11 +15,15 @@ PuntoGps _punto({
   double lon = -75.5812,
   int segundos = 0,
   double? precision = 5,
+  double? velocidad,
+  double? precisionVelocidad,
 }) => PuntoGps(
   latitud: lat,
   longitud: lon,
   capturadoEn: _t0.add(Duration(seconds: segundos)),
   precisionMetros: precision,
+  velocidadMps: velocidad,
+  precisionVelocidadMps: precisionVelocidad,
 );
 
 void main() {
@@ -111,12 +118,16 @@ void main() {
     });
 
     test('caminar despacio sí acumula: rechaza hasta superar el umbral', () {
-      // 1 m/s en pasos de 0.00001° (~1.1 m). Umbral 3 m → acepta cada ~3 s.
-      calc.agregar(_punto(lat: 6.24420, segundos: 0));
+      // 1 m/s en pasos de 0.00001° (~1.1 m). Con 1 m de error el umbral es
+      // el mínimo, 3 m → acepta cada ~3 s.
+      calc = CalculadoraDistancia(
+        criterio: const CriterioMovimiento(factorRuidoPrecision: 1),
+      );
+      calc.agregar(_punto(lat: 6.24420, segundos: 0, precision: 1));
       var aceptados = 0;
       for (var i = 1; i <= 10; i++) {
         final ok = calc.agregar(
-          _punto(lat: 6.24420 + i * 0.00001, segundos: i),
+          _punto(lat: 6.24420 + i * 0.00001, segundos: i, precision: 1),
         );
         if (ok) aceptados++;
       }
@@ -152,7 +163,9 @@ void main() {
     });
 
     test('velocidad justo en el límite se acepta', () {
-      final c = CalculadoraDistancia(velocidadMaximaMetrosPorSegundo: 10);
+      final c = CalculadoraDistancia(
+        criterio: const CriterioMovimiento(velocidadMaximaMps: 10),
+      );
       c.agregar(_punto(segundos: 0));
       // ~111.19 m en 11.119 s ≈ 10.0 m/s (con margen por redondeo)
       expect(
@@ -192,7 +205,10 @@ void main() {
     test('parámetros personalizados se respetan', () {
       final c = CalculadoraDistancia(
         precisionMaximaMetros: 100,
-        desplazamientoMinimoMetros: 0,
+        criterio: const CriterioMovimiento(
+          desplazamientoMinimoMetros: 0,
+          factorRuidoPrecision: 0,
+        ),
       );
       c.agregar(_punto(segundos: 0, precision: 80));
       expect(
@@ -200,6 +216,203 @@ void main() {
         isTrue,
       );
       expect(c.distanciaMetros, greaterThan(0));
+    });
+  });
+
+  group('con velocidad Doppler (SCRUM-116)', () {
+    late CalculadoraDistancia calc;
+
+    setUp(() => calc = CalculadoraDistancia());
+
+    test('integra velocidad × tiempo aunque la posición sea mala', () {
+      // Precisión de 40 m: por posiciones se descartaría todo.
+      for (var i = 0; i <= 10; i++) {
+        calc.agregar(
+          _punto(
+            segundos: i,
+            precision: 40,
+            velocidad: 1.4,
+            precisionVelocidad: 0.3,
+          ),
+        );
+      }
+      expect(calc.distanciaMetros, closeTo(14, 0.01));
+      expect(calc.ultimaVelocidadMps, 1.4);
+    });
+
+    test('quieto según el GPS no suma aunque la posición salte', () {
+      calc.agregar(
+        _punto(segundos: 0, velocidad: 0.1, precisionVelocidad: 0.3),
+      );
+      // Salto de ~22 m con el receptor diciendo que no se mueve.
+      calc.agregar(
+        _punto(
+          lat: 6.2444,
+          segundos: 1,
+          velocidad: 0.2,
+          precisionVelocidad: 0.3,
+        ),
+      );
+      expect(calc.distanciaMetros, 0);
+      expect(calc.ultimaVelocidadMps, 0);
+    });
+
+    test('una velocidad menor que su propio error cuenta como reposo', () {
+      calc.agregar(
+        _punto(segundos: 0, velocidad: 0.8, precisionVelocidad: 0.9),
+      );
+      calc.agregar(
+        _punto(segundos: 1, velocidad: 0.8, precisionVelocidad: 0.9),
+      );
+      expect(calc.distanciaMetros, 0);
+    });
+
+    test('sin precisión de velocidad se mide por posiciones', () {
+      calc.agregar(_punto(segundos: 0, velocidad: 3));
+      calc.agregar(_punto(lat: 6.2452, segundos: 30, velocidad: 3));
+      expect(calc.distanciaMetros, closeTo(_metrosPorMiliGrado, 0.5));
+    });
+
+    test('tras un hueco largo no integra: mide por posiciones', () {
+      calc.agregar(
+        _punto(segundos: 0, velocidad: 1.4, precisionVelocidad: 0.3),
+      );
+      // 60 s sin lecturas: integrar 1.4 m/s × 60 s inventaría 84 m.
+      calc.agregar(
+        _punto(
+          lat: 6.2445,
+          segundos: 60,
+          velocidad: 1.4,
+          precisionVelocidad: 0.3,
+        ),
+      );
+      expect(calc.distanciaMetros, closeTo(0.3 * _metrosPorMiliGrado, 0.1));
+    });
+
+    test('lecturas iniciales sin velocidad no congelan el ancla', () {
+      // Como en el teléfono: el GPS arranca sin velocidad durante unos
+      // segundos, y esas lecturas no pasan el filtro de posiciones. Antes el
+      // ancla se quedaba en la primera y todo lo demás contaba como hueco
+      // largo: 6 m caminados marcaban 0 (BUG-001).
+      for (var i = 0; i <= 12; i++) {
+        calc.agregar(_punto(segundos: i, precision: 12));
+      }
+      final velocidades = [0.2, 0.3, 1.0, 1.1, 1.2, 1.1, 0.9, 0.2];
+      for (var i = 0; i < velocidades.length; i++) {
+        calc.agregar(
+          _punto(
+            segundos: 13 + i,
+            precision: 7,
+            velocidad: velocidades[i],
+            precisionVelocidad: 0.25,
+          ),
+        );
+      }
+      // Trapecios con los reposos a 0: 0.5+1.05+1.15+1.15+1.0+0.45 m.
+      expect(calc.distanciaMetros, closeTo(5.3, 0.01));
+    });
+
+    test('al reanudar no integra la velocidad a través de la pausa', () {
+      calc.agregar(
+        _punto(segundos: 0, velocidad: 1.4, precisionVelocidad: 0.3),
+      );
+      calc.reiniciarAncla();
+      calc.agregar(
+        _punto(segundos: 3, velocidad: 1.4, precisionVelocidad: 0.3),
+      );
+      expect(calc.distanciaMetros, 0);
+    });
+  });
+
+  group('simulación con ruido realista del GPS (SCRUM-116)', () {
+    // Una lectura por segundo, como pide la app. El ruido de posición es
+    // independiente entre lecturas: el peor caso (en la realidad el error
+    // cambia despacio y los saltos son menores).
+    const metrosPorGrado = 111190.0;
+
+    List<PuntoGps> trayecto({
+      required List<double> velocidades,
+      required double ruidoPosicionMetros,
+      required double precisionMetros,
+      double? ruidoVelocidad,
+      double? precisionVelocidad,
+      int semilla = 7,
+    }) {
+      final azar = math.Random(semilla);
+      double ruido(double amplitud) => (azar.nextDouble() * 2 - 1) * amplitud;
+      var recorrido = 0.0;
+      final puntos = <PuntoGps>[];
+      for (var i = 0; i < velocidades.length; i++) {
+        if (i > 0) recorrido += velocidades[i];
+        final conDoppler = ruidoVelocidad != null;
+        puntos.add(
+          _punto(
+            lat:
+                6.2442 +
+                (recorrido + ruido(ruidoPosicionMetros)) / metrosPorGrado,
+            lon: -75.5812 + ruido(ruidoPosicionMetros) / metrosPorGrado,
+            segundos: i,
+            precision: precisionMetros,
+            velocidad: conDoppler
+                ? math.max(0, velocidades[i] + ruido(ruidoVelocidad))
+                : null,
+            precisionVelocidad: conDoppler ? precisionVelocidad : null,
+          ),
+        );
+      }
+      return puntos;
+    }
+
+    double medir(List<PuntoGps> puntos) {
+      final calc = CalculadoraDistancia();
+      puntos.forEach(calc.agregar);
+      return calc.distanciaMetros;
+    }
+
+    test('quieto 2 min con 35 m de error: no se inventa distancia', () {
+      final puntos = trayecto(
+        velocidades: List.filled(120, 0),
+        ruidoPosicionMetros: 20,
+        precisionMetros: 35,
+        ruidoVelocidad: 0.4,
+        precisionVelocidad: 0.4,
+      );
+      expect(medir(puntos), lessThan(2));
+    });
+
+    test('caminando 2 min a 1,4 m/s con 35 m de error: ≈168 m', () {
+      final puntos = trayecto(
+        velocidades: List.filled(121, 1.4),
+        ruidoPosicionMetros: 20,
+        precisionMetros: 35,
+        ruidoVelocidad: 0.2,
+        precisionVelocidad: 0.4,
+      );
+      expect(medir(puntos), closeTo(168, 168 * 0.05));
+    });
+
+    test('caminar, parar 1 min y seguir: la parada no suma', () {
+      final puntos = trayecto(
+        velocidades: [
+          ...List.filled(61, 1.4),
+          ...List.filled(60, 0),
+          ...List.filled(60, 1.4),
+        ],
+        ruidoPosicionMetros: 20,
+        precisionMetros: 35,
+        ruidoVelocidad: 0.2,
+        precisionVelocidad: 0.4,
+      );
+      expect(medir(puntos), closeTo(168, 168 * 0.05));
+    });
+
+    test('sin Doppler y con buena señal, caminando mide razonable', () {
+      final puntos = trayecto(
+        velocidades: List.filled(121, 1.4),
+        ruidoPosicionMetros: 3,
+        precisionMetros: 8,
+      );
+      expect(medir(puntos), closeTo(168, 168 * 0.2));
     });
   });
 }

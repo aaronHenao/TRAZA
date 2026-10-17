@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
+import 'package:traza/services/pantalla_encendida_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
@@ -12,6 +13,7 @@ import 'package:traza/widgets/estadisticas_entrenamiento.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
@@ -22,11 +24,13 @@ void main() {
 
   late FuenteUbicacionFalsa fuente;
   late RepositorioPuntosGpsFalso repositorio;
+  late PantallaEncendidaFalsa pantalla;
 
   setUp(() {
     reloj = RelojFalso();
     fuente = FuenteUbicacionFalsa();
     repositorio = RepositorioPuntosGpsFalso();
+    pantalla = PantallaEncendidaFalsa();
     addTearDown(() => fuente.cerrar());
     container = ProviderContainer(
       overrides: [
@@ -35,6 +39,7 @@ void main() {
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(repositorio),
         entrenamientoActualProvider.overrideWithValue('e-123'),
+        pantallaEncendidaProvider.overrideWithValue(pantalla),
       ],
     );
     addTearDown(container.dispose);
@@ -72,6 +77,33 @@ void main() {
 
   void detener() => container.read(cronometroProvider.notifier).detener();
 
+  testWidgets('en ruta la pantalla no se apaga; en pausa y al salir, sí', (
+    tester,
+  ) async {
+    await montar(tester);
+    expect(pantalla.encendida, isTrue);
+
+    container.read(cronometroProvider.notifier).pausar();
+    await tester.pump();
+    expect(pantalla.encendida, isFalse);
+
+    container.read(cronometroProvider.notifier).reanudar();
+    await tester.pump();
+    expect(pantalla.encendida, isTrue);
+
+    // Sale de la pantalla de entrenamiento.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SizedBox()),
+      ),
+    );
+    await tester.pump();
+    expect(pantalla.encendida, isFalse);
+
+    detener();
+  });
+
   testWidgets('arma la pantalla con el mapa, el cronómetro, las métricas '
       'y los botones de pausar y finalizar', (tester) async {
     await montar(tester);
@@ -86,8 +118,9 @@ void main() {
     detener();
   });
 
-  testWidgets('el cronómetro arranca en cero al entrar a la pantalla',
-      (tester) async {
+  testWidgets('el cronómetro arranca en cero al entrar a la pantalla', (
+    tester,
+  ) async {
     await montar(tester);
 
     expect(tiempoEnPantalla(tester), '00:00:00');
@@ -96,8 +129,9 @@ void main() {
     detener();
   });
 
-  testWidgets('el cronómetro avanza mientras el usuario hace su ruta',
-      (tester) async {
+  testWidgets('el cronómetro avanza mientras el usuario hace su ruta', (
+    tester,
+  ) async {
     await montar(tester);
 
     await correr(tester, const Duration(seconds: 5));
@@ -109,8 +143,9 @@ void main() {
     detener();
   });
 
-  testWidgets('el botón de pausa congela y reanuda el cronómetro',
-      (tester) async {
+  testWidgets('el botón de pausa congela y reanuda el cronómetro', (
+    tester,
+  ) async {
     await montar(tester);
     await correr(tester, const Duration(seconds: 20));
 
@@ -131,8 +166,9 @@ void main() {
     detener();
   });
 
-  testWidgets('finalizar detiene el cronómetro y reporta el tiempo total',
-      (tester) async {
+  testWidgets('finalizar detiene el cronómetro y reporta el tiempo total', (
+    tester,
+  ) async {
     Duration? reportada;
     await montar(tester, onFinalizar: (duracion) => reportada = duracion);
 
@@ -148,8 +184,9 @@ void main() {
     expect(tiempoEnPantalla(tester), '00:32:17');
   });
 
-  testWidgets('al finalizar sincroniza los puntos registrados en un lote',
-      (tester) async {
+  testWidgets('al finalizar sincroniza los puntos registrados en un lote', (
+    tester,
+  ) async {
     await montar(tester, onFinalizar: (_) {});
 
     for (final punto in [
@@ -169,14 +206,16 @@ void main() {
 
     expect(repositorio.lotes.length, 1);
     expect(repositorio.lotes.single.entrenamientoId, 'e-123');
-    expect(
-      repositorio.lotes.single.puntos.map((p) => p.latitud),
-      [6.2311, 6.2312, 6.2313],
-    );
+    expect(repositorio.lotes.single.puntos.map((p) => p.latitud), [
+      6.2311,
+      6.2312,
+      6.2313,
+    ]);
   });
 
-  testWidgets('si la sincronizacion falla lo avisa al finalizar',
-      (tester) async {
+  testWidgets('si la sincronizacion falla lo avisa al finalizar', (
+    tester,
+  ) async {
     await montar(tester);
     fuente.emitir(puntoDePrueba());
     await tester.pump();

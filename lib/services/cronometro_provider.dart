@@ -12,14 +12,15 @@ export 'reloj_provider.dart';
 ///
 /// Se refresca varias veces por segundo para que el salto de segundo
 /// se vea sin retraso perceptible, aunque el formato sea `HH:MM:SS`.
-final intervaloRefrescoProvider =
-    Provider<Duration>((ref) => const Duration(milliseconds: 200));
+final intervaloRefrescoProvider = Provider<Duration>(
+  (ref) => const Duration(milliseconds: 200),
+);
 
 /// Estado del cronómetro del entrenamiento en curso.
 final cronometroProvider =
     NotifierProvider<CronometroNotifier, EstadoCronometro>(
-  CronometroNotifier.new,
-);
+      CronometroNotifier.new,
+    );
 
 class CronometroNotifier extends Notifier<EstadoCronometro> {
   late final CronometroService _service;

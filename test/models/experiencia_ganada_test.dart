@@ -100,6 +100,25 @@ void main() {
       expect(xp.total, 425);
     });
 
+    test('cada reto trae su id, para cruzarlo con los retos del usuario', () {
+      final xp = ExperienciaDeEntrenamiento.desdeFilas([
+        actividad(0, 'ninguno'),
+        {
+          'origen': 'reto',
+          'cantidad': 400,
+          'ajuste': null,
+          'retos_usuario': {
+            'reto_id': 'r-1',
+            'retos': {'nombre': 'Diez km'},
+          },
+        },
+      ])!;
+
+      expect(xp.retos, const [
+        RetoCompletado(nombre: 'Diez km', xp: 400, retoId: 'r-1'),
+      ]);
+    });
+
     test('una fila que no encaja con el esquema no se disimula', () {
       expect(
         () => ExperienciaDeEntrenamiento.desdeFilas([

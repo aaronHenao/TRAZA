@@ -79,8 +79,9 @@ class ResumenScreen extends ConsumerWidget {
               child: _cuerpo(
                 ref,
                 volverAlInicio,
-                // El ascenso solo se anuncia recién finalizado (SCRUM-199).
-                anunciarAscenso: !desdeHistorial,
+                // El ascenso y el avance de los retos solo se muestran recién
+                // finalizado (SCRUM-199).
+                recienFinalizado: !desdeHistorial,
               ),
             ),
           ],
@@ -94,7 +95,7 @@ class ResumenScreen extends ConsumerWidget {
   Widget _cuerpo(
     WidgetRef ref,
     VoidCallback volverAlInicio, {
-    required bool anunciarAscenso,
+    required bool recienFinalizado,
   }) {
     // Recién terminada la actividad, los datos llegan con la navegación y no
     // hace falta consultar nada.
@@ -103,7 +104,7 @@ class ResumenScreen extends ConsumerWidget {
       return _ContenidoResumen(
         resumen: datos,
         entrenamientoId: entrenamientoId,
-        anunciarAscenso: anunciarAscenso,
+        recienFinalizado: recienFinalizado,
         onVolver: volverAlInicio,
       );
     }
@@ -129,7 +130,7 @@ class ResumenScreen extends ConsumerWidget {
               : _ContenidoResumen(
                   resumen: guardado,
                   entrenamientoId: id,
-                  anunciarAscenso: anunciarAscenso,
+                  recienFinalizado: recienFinalizado,
                   onVolver: volverAlInicio,
                 ),
         );
@@ -141,7 +142,7 @@ class _ContenidoResumen extends ConsumerWidget {
   const _ContenidoResumen({
     required this.resumen,
     required this.entrenamientoId,
-    required this.anunciarAscenso,
+    required this.recienFinalizado,
     required this.onVolver,
   });
 
@@ -149,7 +150,7 @@ class _ContenidoResumen extends ConsumerWidget {
 
   /// Sin sesión no hay id, y sin entrenamiento guardado no hay XP.
   final String? entrenamientoId;
-  final bool anunciarAscenso;
+  final bool recienFinalizado;
   final VoidCallback onVolver;
 
   @override
@@ -186,7 +187,8 @@ class _ContenidoResumen extends ConsumerWidget {
               if (entrenamientoId case final id?)
                 SeccionExperiencia(
                   entrenamientoId: id,
-                  anunciarAscenso: anunciarAscenso,
+                  resumen: resumen,
+                  recienFinalizado: recienFinalizado,
                 ),
               const SizedBox(height: 18),
               _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),

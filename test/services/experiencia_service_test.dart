@@ -30,6 +30,7 @@ void main() {
             'cantidad': 400,
             'ajuste': null,
             'retos_usuario': {
+              'reto_id': 'r-1',
               'retos': {'nombre': 'Diez km'},
             },
           },
@@ -44,7 +45,7 @@ void main() {
         const ExperienciaDeEntrenamiento(
           xpActividad: 30,
           ajuste: AjusteExperiencia.ninguno,
-          retos: [RetoCompletado(nombre: 'Diez km', xp: 400)],
+          retos: [RetoCompletado(nombre: 'Diez km', xp: 400, retoId: 'r-1')],
         ),
       );
 
@@ -54,7 +55,7 @@ void main() {
       expect(peticion.url.queryParameters['entrenamiento_id'], 'eq.e-1');
       expect(
         peticion.url.queryParameters['select'],
-        contains('retos_usuario(retos(nombre))'),
+        contains('retos_usuario(reto_id,retos(nombre))'),
       );
     });
 

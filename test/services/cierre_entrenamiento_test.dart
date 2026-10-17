@@ -4,6 +4,7 @@ import 'package:traza/models/insignia.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/models/recorrido.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/reto_del_usuario.dart';
 import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
@@ -14,11 +15,14 @@ import 'package:traza/services/mapa_progresion_provider.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/progresion_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/retos_provider.dart';
+import 'package:traza/services/retos_service.dart';
 
 import '../utiles/experiencia_falsa.dart';
 import '../utiles/insignias_falsas.dart';
 import '../utiles/niveles_falso.dart';
 import '../utiles/reloj_falso.dart';
+import '../utiles/retos_repository_falso.dart';
 
 /// Pruebas de la XP en el cierre del entrenamiento (SCRUM-206).
 ///
@@ -28,12 +32,14 @@ void main() {
   late _EntrenamientosFalso entrenamientos;
   late ExperienciaFalsa experiencia;
   late InsigniasFalsas insignias;
+  late _RetosContados retos;
   late ProviderContainer container;
 
   setUp(() {
     entrenamientos = _EntrenamientosFalso();
     experiencia = ExperienciaFalsa(acumulada: 100);
     insignias = InsigniasFalsas(catalogo: const [_diezMil]);
+    retos = _RetosContados();
 
     container = ProviderContainer(
       overrides: [
@@ -49,6 +55,7 @@ void main() {
         ),
         relojProvider.overrideWithValue(RelojFalso().call),
         insigniasRepositoryProvider.overrideWithValue(insignias),
+        retosRepositoryProvider.overrideWithValue(retos),
       ],
     );
     addTearDown(container.dispose);
@@ -165,6 +172,39 @@ void main() {
       },
     );
   });
+
+  group('retos del usuario', () {
+    test(
+      'si estaban en memoria, se vuelven a leer con el progreso nuevo',
+      () async {
+        // Como el resumen o la pantalla de retos abiertos: los mantiene vivos.
+        container.listen(misRetosProvider, (_, _) {});
+        await container.read(misRetosProvider.future);
+        expect(retos.consultas, 1);
+
+        expect(await finalizar(), isNull);
+
+        await container.read(misRetosProvider.future);
+        expect(retos.consultas, 2);
+      },
+    );
+
+    test('si nadie los tenía, no se consultan al cerrar', () async {
+      expect(await finalizar(), isNull);
+
+      expect(retos.consultas, 0);
+    });
+  });
+}
+
+class _RetosContados extends RetosRepositorioFalso {
+  var consultas = 0;
+
+  @override
+  Future<List<RetoDelUsuario>> misRetos() async {
+    consultas++;
+    return const [];
+  }
 }
 
 const _diezMil = Insignia(

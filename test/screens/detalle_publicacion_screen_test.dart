@@ -207,8 +207,8 @@ void main() {
         ],
       );
 
-      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsOneWidget);
-      expect(find.text(DetallePublicacionScreen.insigniaAutor), findsNothing);
+      expect(find.text(InsigniaForo.textoAdministrador), findsOneWidget);
+      expect(find.text(InsigniaForo.textoAutor), findsNothing);
     });
 
     testWidgets('el creador de la publicación dice Autor en sus comentarios', (
@@ -227,8 +227,8 @@ void main() {
         ],
       );
 
-      expect(find.text(DetallePublicacionScreen.insigniaAutor), findsOneWidget);
-      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsNothing);
+      expect(find.text(InsigniaForo.textoAutor), findsOneWidget);
+      expect(find.text(InsigniaForo.textoAdministrador), findsNothing);
     });
 
     testWidgets('un corredor que no creó la publicación no lleva insignia', (
@@ -239,9 +239,19 @@ void main() {
         preparar: (r) => r.comentariosDe['pub-1'] = [comentarioDePrueba()],
       );
 
-      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsNothing);
-      expect(find.text(DetallePublicacionScreen.insigniaAutor), findsNothing);
+      expect(find.text(InsigniaForo.textoAdministrador), findsNothing);
+      expect(find.text(InsigniaForo.textoAutor), findsNothing);
     });
+  });
+
+  testWidgets('una publicación del administrador dice Administrador junto a '
+      'su nombre', (tester) async {
+    await abrir(
+      tester,
+      publicaciones: [publicacionDePrueba(id: 'pub-1', autorEsAdmin: true)],
+    );
+
+    expect(find.text(InsigniaForo.textoAdministrador), findsOneWidget);
   });
 
   testWidgets(
@@ -250,14 +260,14 @@ void main() {
       await abrir(
         tester,
         vistaModeracion: true,
-        preparar: (r) => r.comentarComoAdmin = true,
+        preparar: (r) => r.comoAdmin = true,
       );
 
       expect(find.text('Publicada'), findsOneWidget);
       await comentar(tester, 'Recuerden hidratarse.');
 
       expect(find.text('Recuerden hidratarse.'), findsOneWidget);
-      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsOneWidget);
+      expect(find.text(InsigniaForo.textoAdministrador), findsOneWidget);
     },
   );
 

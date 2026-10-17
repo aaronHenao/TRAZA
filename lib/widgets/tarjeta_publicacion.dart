@@ -49,15 +49,25 @@ class TarjetaPublicacion extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      publicacion.autorNombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            publicacion.autorNombre,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        if (publicacion.autorEsAdmin) ...[
+                          const SizedBox(width: 6),
+                          const Flexible(child: InsigniaForo.administrador()),
+                        ],
+                      ],
                     ),
                     Text(
                       fechaRelativa(publicacion.fechaCreacion, ahora),
@@ -143,6 +153,50 @@ class _NumeroComentarios extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Marca junto al nombre de quien escribe en el foro: si es el administrador
+/// (color principal) o el creador de la publicación que se comenta (color
+/// secundario).
+///
+/// Va dentro de un `Flexible`: en pantallas angostas cede espacio antes que
+/// desbordar la fila del nombre.
+class InsigniaForo extends StatelessWidget {
+  const InsigniaForo.administrador({super.key})
+    : texto = textoAdministrador,
+      color = AppColors.primary;
+
+  const InsigniaForo.autor({super.key})
+    : texto = textoAutor,
+      color = AppColors.secondary;
+
+  static const textoAdministrador = 'Administrador';
+  static const textoAutor = 'Autor';
+
+  final String texto;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        texto,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          height: 1.2,
+        ),
+      ),
     );
   }
 }

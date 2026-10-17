@@ -60,6 +60,21 @@ void main() {
     expect(consulta['order'], startsWith('fecha_creacion.desc'));
   });
 
+  test('sabe qué publicaciones escribió el administrador', () async {
+    final supabase = _SupabaseFalso(
+      filas: [
+        {...fila, 'autor_es_admin': true},
+        // Antes de 0023 la columna no existía.
+        {...fila, 'id': 'pub-2'},
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final lista = await supabase.repositorio.publicadas();
+
+    expect(lista.map((p) => p.autorEsAdmin), [true, false]);
+  });
+
   test('la moderación no filtra por estado', () async {
     final supabase = _SupabaseFalso(filas: [fila]);
     addTearDown(supabase.cerrar);

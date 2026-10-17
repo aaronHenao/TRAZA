@@ -20,8 +20,9 @@ import '../../widgets/traza_top_bar.dart';
 ///
 /// El administrador la abre en [vistaModeracion]: ve la publicación en
 /// cualquier estado, con su motivo, y comenta como cualquiera mientras esté
-/// publicada. Sus comentarios llevan la insignia "Administrador" y los del
-/// creador de la publicación, la de "Autor".
+/// publicada. Lo que escribe el administrador lleva la insignia
+/// "Administrador", y los comentarios del creador de la publicación, la de
+/// "Autor" (SCRUM-354).
 class DetallePublicacionScreen extends ConsumerWidget {
   const DetallePublicacionScreen({
     required this.publicacionId,
@@ -39,9 +40,6 @@ class DetallePublicacionScreen extends ConsumerWidget {
   static const claveEnviar = Key('comentario-enviar');
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
-
-  static const insigniaAdmin = 'Administrador';
-  static const insigniaAutor = 'Autor';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -186,6 +184,10 @@ class _Publicacion extends StatelessWidget {
               child: _AutorYFecha(
                 autor: publicacion.autorNombre,
                 fecha: fechaRelativa(publicacion.fechaCreacion, ahora),
+                insignias: [
+                  if (publicacion.autorEsAdmin)
+                    const InsigniaForo.administrador(),
+                ],
               ),
             ),
             if (conEstado) EstadoPublicacionChip(estado: publicacion.estado),
@@ -320,15 +322,8 @@ class _Comentario extends StatelessWidget {
                     enLinea: true,
                     insignias: [
                       if (comentario.autorEsAdmin)
-                        const _Insignia(
-                          texto: DetallePublicacionScreen.insigniaAdmin,
-                          color: AppColors.primary,
-                        ),
-                      if (esDelAutor)
-                        const _Insignia(
-                          texto: DetallePublicacionScreen.insigniaAutor,
-                          color: AppColors.secondary,
-                        ),
+                        const InsigniaForo.administrador(),
+                      if (esDelAutor) const InsigniaForo.autor(),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -383,15 +378,18 @@ class _AutorYFecha extends StatelessWidget {
       fecha,
       style: const TextStyle(fontSize: 11.5, color: AppColors.ink3),
     );
+    final conInsignias = [
+      Flexible(child: nombre),
+      for (final insignia in insignias) ...[
+        const SizedBox(width: 6),
+        Flexible(child: insignia),
+      ],
+    ];
 
     if (enLinea) {
       return Row(
         children: [
-          Flexible(child: nombre),
-          for (final insignia in insignias) ...[
-            const SizedBox(width: 6),
-            insignia,
-          ],
+          ...conInsignias,
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 6),
             child: Text(
@@ -405,36 +403,10 @@ class _AutorYFecha extends StatelessWidget {
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [nombre, cuando],
-    );
-  }
-}
-
-/// Marca junto al nombre de quien comenta: si es el administrador o el creador
-/// de la publicación.
-class _Insignia extends StatelessWidget {
-  const _Insignia({required this.texto, required this.color});
-
-  final String texto;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        texto,
-        style: const TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-          height: 1.2,
-        ),
-      ),
+      children: [
+        Row(children: conInsignias),
+        cuando,
+      ],
     );
   }
 }

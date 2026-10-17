@@ -37,6 +37,7 @@ class ForoRepositorioFalso implements ForoRepository {
       contenido: publicacion.contenido,
       estado: estadoAlCrear,
       fechaCreacion: ahora ?? DateTime(2026, 10, 16, 9),
+      autorEsAdmin: comoAdmin,
     );
     publicaciones.insert(0, creada);
     return creada;
@@ -69,9 +70,9 @@ class ForoRepositorioFalso implements ForoRepository {
   /// de estar disponible mientras se escribía.
   Object? errorAlComentar;
 
-  /// Simula que quien comenta es el administrador: la base le pone
+  /// Simula que quien publica o comenta es el administrador: la base le pone
   /// `autor_es_admin`.
-  bool comentarComoAdmin = false;
+  bool comoAdmin = false;
 
   @override
   Future<PublicacionForo?> publicacion(String id) async {
@@ -104,7 +105,7 @@ class ForoRepositorioFalso implements ForoRepository {
       autorNombre: 'Ana Runner',
       contenido: comentario.contenido,
       fechaCreacion: ahora ?? DateTime(2026, 10, 16, 9),
-      autorEsAdmin: comentarComoAdmin,
+      autorEsAdmin: comoAdmin,
     );
     lista.add(creado);
     return creado;
@@ -122,6 +123,7 @@ class ForoRepositorioFalso implements ForoRepository {
       contenido: p.contenido,
       estado: EstadoPublicacion.retenida,
       fechaCreacion: p.fechaCreacion,
+      autorEsAdmin: p.autorEsAdmin,
     );
   }
 }
@@ -154,6 +156,7 @@ PublicacionForo publicacionDePrueba({
   EstadoPublicacion estado = EstadoPublicacion.publicada,
   DateTime? fecha,
   String? motivo,
+  bool autorEsAdmin = false,
 }) => PublicacionForo(
   id: id,
   autorId: 'autor-$id',
@@ -163,4 +166,5 @@ PublicacionForo publicacionDePrueba({
   estado: estado,
   fechaCreacion: fecha ?? DateTime(2026, 10, 16, 8),
   motivoModeracion: motivo,
+  autorEsAdmin: autorEsAdmin,
 );

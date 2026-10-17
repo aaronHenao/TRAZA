@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/screens/admin/moderacion_foro_screen.dart';
+import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/widgets/tarjeta_publicacion.dart';
 
 import '../utiles/foro_repository_falso.dart';
 
@@ -91,5 +94,57 @@ void main() {
       find.textContaining('La moderación automática todavía no está activa'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('el administrador publica desde la moderación y su publicación '
+      'dice Administrador', (tester) async {
+    tester.view.physicalSize = const Size(390 * 3, 900 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repositorio = ForoRepositorioFalso(ahora: ahora)..comoAdmin = true;
+    final router = GoRouter(
+      initialLocation: ModeracionForoScreen.ruta,
+      routes: [
+        GoRoute(
+          path: ModeracionForoScreen.ruta,
+          builder: (_, _) => const ModeracionForoScreen(),
+          routes: [
+            GoRoute(
+              path: 'nueva',
+              builder: (_, _) => const NuevaPublicacionScreen(),
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foroRepositoryProvider.overrideWithValue(repositorio),
+          relojProvider.overrideWithValue(() => ahora),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ModeracionForoScreen.claveNueva));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(NuevaPublicacionScreen.claveTitulo),
+      'Carrera del domingo',
+    );
+    await tester.enterText(
+      find.byKey(NuevaPublicacionScreen.claveContenido),
+      'Salida a las 6 a. m. desde el estadio.',
+    );
+    await tester.tap(find.byKey(NuevaPublicacionScreen.clavePublicar));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ModeracionForoScreen), findsOneWidget);
+    expect(find.text('Carrera del domingo'), findsOneWidget);
+    expect(find.text(InsigniaForo.textoAdministrador), findsOneWidget);
   });
 }

@@ -117,7 +117,10 @@ class CreacionPublicacion {
 
     try {
       final creada = await _ref.read(foroRepositoryProvider).crear(nueva);
-      _ref.invalidate(publicacionesForoProvider);
+      _ref
+        ..invalidate(publicacionesForoProvider)
+        // El administrador también publica, desde la moderación.
+        ..invalidate(moderacionForoProvider);
       return switch (creada.estado) {
         EstadoPublicacion.publicada => PublicacionCreada(creada),
         // Eliminada recién creada no tiene sentido; si la moderación llegara

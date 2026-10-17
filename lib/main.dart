@@ -228,6 +228,14 @@ final _navegacion = GoRouter(
       builder: (context, state) =>
           const SoloAdministrador(hijo: ModeracionForoScreen()),
       routes: [
+        // El administrador también publica (SCRUM-354), con el mismo
+        // formulario. Antes de ':publicacionId' por la misma razón que en
+        // el foro.
+        GoRoute(
+          path: 'nueva',
+          builder: (context, state) =>
+              const SoloAdministrador(hijo: NuevaPublicacionScreen()),
+        ),
         // El mismo detalle en vista de moderación: el administrador lo ve
         // en cualquier estado y comenta lo que está publicado.
         GoRoute(

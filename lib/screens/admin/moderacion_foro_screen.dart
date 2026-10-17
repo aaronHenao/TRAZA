@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../services/foro_provider.dart';
 import '../foro/detalle_publicacion_screen.dart';
+import '../foro/nueva_publicacion_screen.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
@@ -15,12 +16,15 @@ import '../../widgets/traza_top_bar.dart';
 /// Lo que el administrador ve del foro (SCRUM-323): todas las publicaciones,
 /// separadas entre las que están a la vista y las que retuvo la moderación.
 ///
-/// Por ahora es solo de consulta. Aprobar o eliminar llega con SCRUM-322 y
-/// SCRUM-242, y la retención la hará la IA, que todavía no existe.
+/// Desde aquí el administrador también publica (SCRUM-354). Aprobar o
+/// eliminar llega con SCRUM-322 y SCRUM-242, y la retención la hará la IA,
+/// que todavía no existe.
 class ModeracionForoScreen extends ConsumerWidget {
   const ModeracionForoScreen({super.key});
 
   static const ruta = '/admin/foro';
+
+  static const claveNueva = Key('moderacion-nueva-publicacion');
 
   static Key claveVista(VistaModeracionForo vista) =>
       Key('moderacion-${vista.name}');
@@ -34,6 +38,11 @@ class ModeracionForoScreen extends ConsumerWidget {
 
     void recargar() => ref.invalidate(moderacionForoProvider);
 
+    Future<void> nueva() async {
+      await context.push(NuevaPublicacionScreen.rutaAdmin);
+      recargar();
+    }
+
     int cuantas(VistaModeracionForo opcion) => switch (todas) {
       AsyncData(value: final lista) =>
         lista.where((p) => p.estado == opcion.estado).length,
@@ -45,7 +54,16 @@ class ModeracionForoScreen extends ConsumerWidget {
         child: AnchoContenido(
           child: Column(
             children: [
-              TrazaTopBar(titulo: 'Moderación del foro', onAtras: context.pop),
+              TrazaTopBar(
+                titulo: 'Moderación del foro',
+                onAtras: context.pop,
+                accion: TrazaIconButton(
+                  key: claveNueva,
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Nueva publicación',
+                  onPressed: nueva,
+                ),
+              ),
               FilaChips(
                 children: [
                   for (final opcion in VistaModeracionForo.values)

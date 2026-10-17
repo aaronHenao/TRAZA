@@ -29,8 +29,8 @@ enum EstadoPublicacion {
 /// Una publicación del foro, tal como vive en `publicaciones_foro`
 /// (SCRUM-323).
 ///
-/// El nombre del autor, el estado y la fecha los pone la base al insertarla,
-/// no el cliente.
+/// El nombre del autor, si es administrador, el estado y la fecha los pone
+/// la base al insertarla, no el cliente.
 @immutable
 class PublicacionForo {
   const PublicacionForo({
@@ -43,6 +43,7 @@ class PublicacionForo {
     required this.fechaCreacion,
     this.motivoModeracion,
     this.numeroComentarios = 0,
+    this.autorEsAdmin = false,
   });
 
   final String id;
@@ -59,6 +60,10 @@ class PublicacionForo {
   /// Cuántos comentarios tiene (SCRUM-324). Cero si la consulta no los
   /// contó, como la fila que devuelve el insert.
   final int numeroComentarios;
+
+  /// La escribió el administrador: lleva la insignia "Administrador"
+  /// (SCRUM-354).
+  final bool autorEsAdmin;
 
   /// Si se le puede comentar: solo a lo publicado (criterio 3 de SCRUM-324).
   bool get admiteComentarios => estado == EstadoPublicacion.publicada;
@@ -97,6 +102,7 @@ class PublicacionForo {
       fechaCreacion: DateTime.parse(fecha).toLocal(),
       motivoModeracion: motivo as String?,
       numeroComentarios: _conteo(fila['comentarios_foro']),
+      autorEsAdmin: fila['autor_es_admin'] == true,
     );
   }
 

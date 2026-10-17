@@ -12,10 +12,14 @@ import '../../widgets/traza_top_bar.dart';
 
 /// Formulario para publicar en el foro (SCRUM-344), con la validación de
 /// título, contenido y límite de caracteres (SCRUM-345).
+///
+/// El administrador usa el mismo formulario desde la moderación
+/// ([rutaAdmin], SCRUM-354).
 class NuevaPublicacionScreen extends ConsumerStatefulWidget {
   const NuevaPublicacionScreen({super.key});
 
   static const ruta = '/foro/nueva';
+  static const rutaAdmin = '/admin/foro/nueva';
 
   static const claveTitulo = Key('publicacion-titulo');
   static const claveContenido = Key('publicacion-contenido');

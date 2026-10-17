@@ -65,6 +65,17 @@ void main() {
       expect(lista.single.autorNombre, 'Ana Runner');
     });
 
+    test('al comentar se refresca el conteo de la moderación', () async {
+      container.listen(moderacionForoProvider, (_, _) {});
+      await container.read(moderacionForoProvider.future);
+      final antes = repositorio.consultas;
+
+      await comentar('Recuerden hidratarse.');
+      await container.read(moderacionForoProvider.future);
+
+      expect(repositorio.consultas, greaterThan(antes));
+    });
+
     test('vacío no llega al repositorio y dice por qué', () async {
       final resultado = await comentar('   ');
 

@@ -18,17 +18,19 @@ import '../../widgets/traza_top_bar.dart';
 /// Una publicación del foro con sus comentarios y la caja para comentarla
 /// (SCRUM-351).
 ///
-/// El administrador la abre en [soloLectura]: ve la publicación en cualquier
-/// estado y sus comentarios, pero no comenta desde la moderación.
+/// El administrador la abre en [vistaModeracion]: ve la publicación en
+/// cualquier estado, con su motivo, y comenta como cualquiera mientras esté
+/// publicada. Sus comentarios llevan la insignia "Admin" y los del creador de
+/// la publicación, la de "Autor".
 class DetallePublicacionScreen extends ConsumerWidget {
   const DetallePublicacionScreen({
     required this.publicacionId,
-    this.soloLectura = false,
+    this.vistaModeracion = false,
     super.key,
   });
 
   final String publicacionId;
-  final bool soloLectura;
+  final bool vistaModeracion;
 
   static String rutaDe(String id) => '/foro/$id';
   static String rutaAdminDe(String id) => '/admin/foro/$id';
@@ -38,11 +40,15 @@ class DetallePublicacionScreen extends ConsumerWidget {
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 
+  static const insigniaAdmin = 'Admin';
+  static const insigniaAutor = 'Autor';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final publicacion = ref.watch(publicacionForoProvider(publicacionId));
+    // Ni el administrador comenta lo retenido o eliminado: la policy de
+    // insert de `comentarios_foro` lo rechazaría igual.
     final comentable =
-        !soloLectura &&
         publicacion is AsyncData<PublicacionForo?> &&
         (publicacion.value?.admiteComentarios ?? false);
 
@@ -67,7 +73,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
                     // (criterio 3 de SCRUM-324).
                     AsyncData(value: final p)
                         when p == null ||
-                            (!soloLectura && !p.admiteComentarios) =>
+                            (!vistaModeracion && !p.admiteComentarios) =>
                       EstadoVacio(
                         icono: Icons.visibility_off_outlined,
                         titulo: noDisponible,
@@ -81,7 +87,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
                       ),
                     AsyncData(value: final p?) => _Conversacion(
                       publicacion: p,
-                      soloLectura: soloLectura,
+                      vistaModeracion: vistaModeracion,
                     ),
                     AsyncError() => EstadoVacio(
                       icono: Icons.cloud_off_outlined,
@@ -107,10 +113,13 @@ class DetallePublicacionScreen extends ConsumerWidget {
 
 /// La publicación entera y, debajo, sus comentarios.
 class _Conversacion extends ConsumerWidget {
-  const _Conversacion({required this.publicacion, required this.soloLectura});
+  const _Conversacion({
+    required this.publicacion,
+    required this.vistaModeracion,
+  });
 
   final PublicacionForo publicacion;
-  final bool soloLectura;
+  final bool vistaModeracion;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -129,12 +138,13 @@ class _Conversacion extends ConsumerWidget {
         _Publicacion(
           publicacion: publicacion,
           ahora: ahora,
-          conEstado: soloLectura,
+          conEstado: vistaModeracion,
         ),
         const SizedBox(height: AppSpacing.lg),
         switch (comentarios) {
           AsyncData(value: final lista) => _Comentarios(
             comentarios: lista,
+            autorPublicacionId: publicacion.autorId,
             ahora: ahora,
           ),
           AsyncError() => MensajeVacio(
@@ -218,9 +228,16 @@ class _Publicacion extends StatelessWidget {
 }
 
 class _Comentarios extends StatelessWidget {
-  const _Comentarios({required this.comentarios, required this.ahora});
+  const _Comentarios({
+    required this.comentarios,
+    required this.autorPublicacionId,
+    required this.ahora,
+  });
 
   final List<ComentarioForo> comentarios;
+
+  /// Quién creó la publicación, para marcar sus respuestas con "Autor".
+  final String autorPublicacionId;
   final DateTime ahora;
 
   @override
@@ -257,16 +274,25 @@ class _Comentarios extends StatelessWidget {
           )
         else
           for (final comentario in comentarios)
-            _Comentario(comentario: comentario, ahora: ahora),
+            _Comentario(
+              comentario: comentario,
+              esDelAutor: comentario.autorId == autorPublicacionId,
+              ahora: ahora,
+            ),
       ],
     );
   }
 }
 
 class _Comentario extends StatelessWidget {
-  const _Comentario({required this.comentario, required this.ahora});
+  const _Comentario({
+    required this.comentario,
+    required this.esDelAutor,
+    required this.ahora,
+  });
 
   final ComentarioForo comentario;
+  final bool esDelAutor;
   final DateTime ahora;
 
   @override
@@ -292,6 +318,18 @@ class _Comentario extends StatelessWidget {
                     autor: comentario.autorNombre,
                     fecha: fechaRelativa(comentario.fechaCreacion, ahora),
                     enLinea: true,
+                    insignias: [
+                      if (comentario.autorEsAdmin)
+                        const _Insignia(
+                          texto: DetallePublicacionScreen.insigniaAdmin,
+                          color: AppColors.primary,
+                        ),
+                      if (esDelAutor)
+                        const _Insignia(
+                          texto: DetallePublicacionScreen.insigniaAutor,
+                          color: AppColors.secondary,
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -317,10 +355,14 @@ class _AutorYFecha extends StatelessWidget {
     required this.autor,
     required this.fecha,
     this.enLinea = false,
+    this.insignias = const [],
   });
 
   final String autor;
   final String fecha;
+
+  /// Van pegadas al nombre: "Admin", "Autor".
+  final List<Widget> insignias;
 
   /// En el comentario van en la misma línea para no robarle alto.
   final bool enLinea;
@@ -346,6 +388,10 @@ class _AutorYFecha extends StatelessWidget {
       return Row(
         children: [
           Flexible(child: nombre),
+          for (final insignia in insignias) ...[
+            const SizedBox(width: 6),
+            insignia,
+          ],
           const SizedBox(width: 6),
           cuando,
         ],
@@ -354,6 +400,35 @@ class _AutorYFecha extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [nombre, cuando],
+    );
+  }
+}
+
+/// Marca junto al nombre de quien comenta: si es el administrador o el creador
+/// de la publicación.
+class _Insignia extends StatelessWidget {
+  const _Insignia({required this.texto, required this.color});
+
+  final String texto;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        texto,
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          height: 1.2,
+        ),
+      ),
     );
   }
 }

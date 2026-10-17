@@ -138,6 +138,22 @@ void main() {
       },
     );
 
+    test('sabe qué comentarios escribió el administrador', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...filaComentario, 'autor_es_admin': true},
+          {...filaComentario, 'id': 'com-2', 'autor_es_admin': false},
+          // Antes de 0022 la columna no existía.
+          {...filaComentario, 'id': 'com-3'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final lista = await supabase.repositorio.comentarios('pub-1');
+
+      expect(lista.map((c) => c.autorEsAdmin), [true, false, false]);
+    });
+
     for (final (codigo, causa) in [
       ('42501', 'la publicación ya no está publicada'),
       ('23503', 'la publicación ya no existe'),

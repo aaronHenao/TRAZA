@@ -22,7 +22,7 @@ void main() {
   Future<void> abrir(
     WidgetTester tester, {
     List<PublicacionForo>? publicaciones,
-    bool soloLectura = false,
+    bool vistaModeracion = false,
     void Function(ForoRepositorioFalso)? preparar,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 900 * 3);
@@ -47,7 +47,7 @@ void main() {
               path: ':publicacionId',
               builder: (_, state) => DetallePublicacionScreen(
                 publicacionId: state.pathParameters['publicacionId']!,
-                soloLectura: soloLectura,
+                vistaModeracion: vistaModeracion,
               ),
             ),
           ],
@@ -174,7 +174,7 @@ void main() {
   ) async {
     await abrir(
       tester,
-      soloLectura: true,
+      vistaModeracion: true,
       publicaciones: [
         publicacionDePrueba(
           id: 'pub-1',
@@ -188,6 +188,73 @@ void main() {
     expect(find.text('Retenida'), findsOneWidget);
     expect(find.text('Motivo: spam'), findsOneWidget);
     expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
+  });
+
+  group('insignias', () {
+    testWidgets('el comentario del administrador dice Admin', (tester) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.comentariosDe['pub-1'] = [
+          comentarioDePrueba(
+            id: 'com-1',
+            autorNombre: 'David',
+            autorEsAdmin: true,
+          ),
+          comentarioDePrueba(id: 'com-2', autorNombre: 'Lucía'),
+        ],
+      );
+
+      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsOneWidget);
+      expect(find.text(DetallePublicacionScreen.insigniaAutor), findsNothing);
+    });
+
+    testWidgets('el creador de la publicación dice Autor en sus comentarios', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.comentariosDe['pub-1'] = [
+          comentarioDePrueba(id: 'com-1', autorNombre: 'Lucía'),
+          // `publicacionDePrueba(id: 'pub-1')` la escribió 'autor-pub-1'.
+          comentarioDePrueba(
+            id: 'com-2',
+            autorId: 'autor-pub-1',
+            autorNombre: 'Carlos',
+          ),
+        ],
+      );
+
+      expect(find.text(DetallePublicacionScreen.insigniaAutor), findsOneWidget);
+      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsNothing);
+    });
+
+    testWidgets('un corredor que no creó la publicación no lleva insignia', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.comentariosDe['pub-1'] = [comentarioDePrueba()],
+      );
+
+      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsNothing);
+      expect(find.text(DetallePublicacionScreen.insigniaAutor), findsNothing);
+    });
+  });
+
+  testWidgets('el administrador comenta una publicada y sale como Admin', (
+    tester,
+  ) async {
+    await abrir(
+      tester,
+      vistaModeracion: true,
+      preparar: (r) => r.comentarComoAdmin = true,
+    );
+
+    expect(find.text('Publicada'), findsOneWidget);
+    await comentar(tester, 'Recuerden hidratarse.');
+
+    expect(find.text('Recuerden hidratarse.'), findsOneWidget);
+    expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsOneWidget);
   });
 
   testWidgets('desde el foro, tocar una publicación abre su detalle', (

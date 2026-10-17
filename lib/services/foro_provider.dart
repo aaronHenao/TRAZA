@@ -214,15 +214,17 @@ class ComentarioPublicacion {
           .comentar(nuevo);
       _ref
         ..invalidate(comentariosForoProvider(publicacionId))
-        // El listado muestra cuántos comentarios tiene cada publicación.
-        ..invalidate(publicacionesForoProvider);
+        // Los listados muestran cuántos comentarios tiene cada publicación.
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(moderacionForoProvider);
       return ComentarioRegistrado(comentario);
     } on PublicacionNoDisponibleException {
       // Se vuelve a pedir la publicación para que el detalle pase a decir que
       // ya no está disponible, en vez de seguir ofreciendo la caja.
       _ref
         ..invalidate(publicacionForoProvider(publicacionId))
-        ..invalidate(publicacionesForoProvider);
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(moderacionForoProvider);
       return const PublicacionNoDisponible();
     } on SesionRequeridaParaForoException {
       return const ComentarioNoGuardado(sinSesion);

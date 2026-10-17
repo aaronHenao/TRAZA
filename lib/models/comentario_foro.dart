@@ -7,7 +7,8 @@ const maxCaracteresComentario = 500;
 /// Un comentario de una publicación del foro, tal como vive en
 /// `comentarios_foro` (SCRUM-324).
 ///
-/// El nombre del autor y la fecha los pone la base al insertarlo.
+/// El nombre del autor, si es administrador y la fecha los pone la base al
+/// insertarlo.
 @immutable
 class ComentarioForo {
   const ComentarioForo({
@@ -17,6 +18,7 @@ class ComentarioForo {
     required this.autorNombre,
     required this.contenido,
     required this.fechaCreacion,
+    this.autorEsAdmin = false,
   });
 
   final String id;
@@ -25,6 +27,9 @@ class ComentarioForo {
   final String autorNombre;
   final String contenido;
   final DateTime fechaCreacion;
+
+  /// Lo escribió el administrador: lleva la insignia "Admin".
+  final bool autorEsAdmin;
 
   factory ComentarioForo.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
@@ -53,6 +58,7 @@ class ComentarioForo {
       autorNombre: autorNombre,
       contenido: contenido,
       fechaCreacion: DateTime.parse(fecha).toLocal(),
+      autorEsAdmin: fila['autor_es_admin'] == true,
     );
   }
 

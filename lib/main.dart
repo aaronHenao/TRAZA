@@ -228,14 +228,14 @@ final _navegacion = GoRouter(
       builder: (context, state) =>
           const SoloAdministrador(hijo: ModeracionForoScreen()),
       routes: [
-        // El mismo detalle, de solo lectura: el administrador lo ve en
-        // cualquier estado y no comenta desde la moderación.
+        // El mismo detalle en vista de moderación: el administrador lo ve
+        // en cualquier estado y comenta lo que está publicado.
         GoRoute(
           path: ':publicacionId',
           builder: (context, state) => SoloAdministrador(
             hijo: DetallePublicacionScreen(
               publicacionId: state.pathParameters['publicacionId']!,
-              soloLectura: true,
+              vistaModeracion: true,
             ),
           ),
         ),

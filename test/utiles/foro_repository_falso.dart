@@ -69,6 +69,10 @@ class ForoRepositorioFalso implements ForoRepository {
   /// de estar disponible mientras se escribía.
   Object? errorAlComentar;
 
+  /// Simula que quien comenta es el administrador: la base le pone
+  /// `autor_es_admin`.
+  bool comentarComoAdmin = false;
+
   @override
   Future<PublicacionForo?> publicacion(String id) async {
     final error = this.error;
@@ -100,6 +104,7 @@ class ForoRepositorioFalso implements ForoRepository {
       autorNombre: 'Ana Runner',
       contenido: comentario.contenido,
       fechaCreacion: ahora ?? DateTime(2026, 10, 16, 9),
+      autorEsAdmin: comentarComoAdmin,
     );
     lista.add(creado);
     return creado;
@@ -125,16 +130,19 @@ class ForoRepositorioFalso implements ForoRepository {
 ComentarioForo comentarioDePrueba({
   String id = 'com-1',
   String publicacionId = 'pub-1',
+  String? autorId,
   String autorNombre = 'Lucía',
   String contenido = 'Prueba con unos de drop bajo.',
   DateTime? fecha,
+  bool autorEsAdmin = false,
 }) => ComentarioForo(
   id: id,
   publicacionId: publicacionId,
-  autorId: 'autor-$id',
+  autorId: autorId ?? 'autor-$id',
   autorNombre: autorNombre,
   contenido: contenido,
   fechaCreacion: fecha ?? DateTime(2026, 10, 16, 10),
+  autorEsAdmin: autorEsAdmin,
 );
 
 /// Una publicación de ejemplo para las pruebas.

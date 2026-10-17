@@ -12,6 +12,7 @@ import '../../theme/app_dimens.dart';
 import '../../utils/fecha_relativa.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
+import '../../widgets/historial_versiones.dart';
 import '../../widgets/tarjeta_publicacion.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
@@ -46,6 +47,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
   static const claveCaja = Key('comentario-caja');
   static const claveEnviar = Key('comentario-enviar');
   static const claveEditar = Key('publicacion-editar');
+  static const claveEditada = Key('publicacion-editada');
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 
@@ -211,6 +213,10 @@ class _Publicacion extends StatelessWidget {
                   if (publicacion.autorEsAdmin)
                     const InsigniaForo.administrador(),
                 ],
+                // SCRUM-355: "Editada" abre cómo se leía antes.
+                onEditada: publicacion.editada
+                    ? () => mostrarHistorialVersiones(context, publicacion)
+                    : null,
               ),
             ),
             if (conEstado) EstadoPublicacionChip(estado: publicacion.estado),
@@ -374,10 +380,15 @@ class _AutorYFecha extends StatelessWidget {
     required this.fecha,
     this.enLinea = false,
     this.insignias = const [],
+    this.onEditada,
   });
 
   final String autor;
   final String fecha;
+
+  /// Si la publicación se editó, junto a la fecha va "Editada" y al tocarlo
+  /// se abre su historial.
+  final VoidCallback? onEditada;
 
   /// Van pegadas al nombre: "Administrador", "Autor".
   final List<Widget> insignias;
@@ -397,10 +408,40 @@ class _AutorYFecha extends StatelessWidget {
         color: AppColors.ink,
       ),
     );
-    final cuando = Text(
+    final soloFecha = Text(
       fecha,
       style: const TextStyle(fontSize: 11.5, color: AppColors.ink3),
     );
+    final alEditada = onEditada;
+    final cuando = alEditada == null
+        ? soloFecha
+        : Row(
+            children: [
+              soloFecha,
+              const Text(
+                ' • ',
+                style: TextStyle(fontSize: 11.5, color: AppColors.ink3),
+              ),
+              InkWell(
+                key: DetallePublicacionScreen.claveEditada,
+                onTap: alEditada,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    'Editada',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
     final conInsignias = [
       Flexible(child: nombre),
       for (final insignia in insignias) ...[

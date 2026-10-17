@@ -110,6 +110,22 @@ void main() {
       expect(find.text('2 oct'), findsOneWidget);
     });
 
+    testWidgets('una publicación editada lo dice junto a la fecha', (
+      tester,
+    ) async {
+      await abrirForo(
+        tester,
+        publicaciones: [
+          publicacionDePrueba(
+            fecha: DateTime(2026, 10, 16, 7),
+            fechaEdicion: DateTime(2026, 10, 16, 9),
+          ),
+        ],
+      );
+
+      expect(find.text('Hoy • Editada'), findsOneWidget);
+    });
+
     testWidgets('sin publicaciones invita a abrir la conversación', (
       tester,
     ) async {

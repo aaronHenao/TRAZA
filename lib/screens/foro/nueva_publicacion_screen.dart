@@ -109,7 +109,7 @@ class _NuevaPublicacionScreenState
   }
 
   /// Guarda la edición (SCRUM-355). Pide confirmación antes, porque lo que
-  /// había escrito se reemplaza y no se puede recuperar.
+  /// todos leen cambia y la publicación queda marcada como editada.
   Future<void> _guardarCambios(PublicacionForo original) async {
     if (_publicando) return;
     final borrador = BorradorPublicacion(
@@ -135,8 +135,8 @@ class _NuevaPublicacionScreenState
       builder: (context) => AlertDialog(
         title: const Text('¿Guardar los cambios?'),
         content: const Text(
-          'El título y el contenido anteriores se reemplazarán y no podrás '
-          'recuperarlos.',
+          'La publicación quedará marcada como editada y la versión anterior '
+          'se verá en su historial.',
         ),
         actions: [
           TextButton(

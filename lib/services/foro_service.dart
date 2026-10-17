@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/version_publicacion.dart';
 
 /// Repositorio del foro que usa la app. Las pruebas lo sustituyen con
 /// `overrideWithValue`.
@@ -101,6 +102,10 @@ abstract interface class ForoRepository {
   /// Lanza [PublicacionNoDisponibleException] si no es del usuario o ya no
   /// está publicada.
   Future<PublicacionForo> editar(String id, NuevaPublicacion cambios);
+
+  /// Las versiones anteriores de una publicación editada, de la más reciente
+  /// a la original (SCRUM-355). La actual no está: es la publicación misma.
+  Future<List<VersionPublicacion>> versiones(String publicacionId);
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -114,6 +119,7 @@ class SupabaseForoRepository implements ForoRepository {
 
   static const _tabla = 'publicaciones_foro';
   static const _tablaComentarios = 'comentarios_foro';
+  static const _tablaVersiones = 'versiones_publicacion_foro';
 
   /// Las columnas de la publicación más cuántos comentarios tiene, contados
   /// por PostgREST sin traerlos.
@@ -251,6 +257,20 @@ class SupabaseForoRepository implements ForoRepository {
   }
 
   @override
+  Future<List<VersionPublicacion>> versiones(String publicacionId) async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaVersiones)
+        .select()
+        .eq('publicacion_id', publicacionId)
+        .order('reemplazada_en', ascending: false)
+        .limit(limite);
+
+    return filas.map(VersionPublicacion.desdeSupabase).toList();
+  }
+
+  @override
   Future<PublicacionForo> editar(String id, NuevaPublicacion cambios) async {
     _usuarioId();
 
@@ -258,7 +278,8 @@ class SupabaseForoRepository implements ForoRepository {
       final fila = await _cliente
           .from(_tabla)
           // Solo el texto. Lo demás, aunque se mandara, lo deja igual el
-          // trigger `publicaciones_foro_proteger`.
+          // trigger `publicaciones_foro_proteger`, que además guarda la
+          // versión anterior y marca la fecha de edición.
           .update(cambios.aSupabase())
           .eq('id', id)
           .select(_columnas)

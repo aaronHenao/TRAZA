@@ -10,6 +10,7 @@ import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/widgets/historial_versiones.dart';
 import 'package:traza/widgets/tarjeta_publicacion.dart';
 
 import '../utiles/foro_repository_falso.dart';
@@ -358,6 +359,33 @@ void main() {
       expect(find.byType(DetallePublicacionScreen), findsOneWidget);
       expect(find.text('Tenis para asfalto y trail'), findsOneWidget);
       expect(find.text(NuevaPublicacionScreen.editada), findsOneWidget);
+    });
+
+    testWidgets('editada, lo dice y su historial guarda cómo se leía', (
+      tester,
+    ) async {
+      await abrir(tester, usuario: autor);
+      expect(find.byKey(DetallePublicacionScreen.claveEditada), findsNothing);
+
+      await editar(tester, titulo: 'Tenis para asfalto y trail');
+      await tester.tap(
+        find.byKey(NuevaPublicacionScreen.claveConfirmarEdicion),
+      );
+      await tester.pumpAndSettle();
+      // Que se cierre el aviso de "Publicación actualizada".
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editada'), findsOneWidget);
+      await tester.tap(find.byKey(DetallePublicacionScreen.claveEditada));
+      await tester.pumpAndSettle();
+
+      expect(find.text(HistorialVersiones.titulo), findsOneWidget);
+      expect(find.textContaining('Versión 2 · actual'), findsOneWidget);
+      expect(find.textContaining('Versión 1 · original'), findsOneWidget);
+      // La de ahora en el detalle y en el historial; la original solo allí.
+      expect(find.text('Tenis para asfalto y trail'), findsNWidgets(2));
+      expect(find.text('¿Qué tenis para asfalto?'), findsOneWidget);
     });
 
     testWidgets('si cancela, no se guarda nada y sigue editando', (

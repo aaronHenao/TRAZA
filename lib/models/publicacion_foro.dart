@@ -44,6 +44,7 @@ class PublicacionForo {
     this.motivoModeracion,
     this.numeroComentarios = 0,
     this.autorEsAdmin = false,
+    this.fechaEdicion,
   });
 
   final String id;
@@ -64,6 +65,13 @@ class PublicacionForo {
   /// La escribió el administrador: lleva la insignia "Administrador"
   /// (SCRUM-354).
   final bool autorEsAdmin;
+
+  /// Cuándo se editó por última vez, o null si nunca (SCRUM-355). La pone la
+  /// base al cambiar el título o el contenido.
+  final DateTime? fechaEdicion;
+
+  /// Si se editó: se avisa junto a la fecha y se puede ver su historial.
+  bool get editada => fechaEdicion != null;
 
   /// Si se le puede comentar: solo a lo publicado (criterio 3 de SCRUM-324).
   bool get admiteComentarios => estado == EstadoPublicacion.publicada;
@@ -86,6 +94,7 @@ class PublicacionForo {
     final estado = EstadoPublicacion.desdeDb(fila['estado'] as String?);
     final fecha = fila['fecha_creacion'];
     final motivo = fila['motivo_moderacion'];
+    final edicion = fila['fecha_edicion'];
 
     if (id is! String ||
         autorId is! String ||
@@ -94,7 +103,8 @@ class PublicacionForo {
         contenido is! String ||
         estado == null ||
         fecha is! String ||
-        (motivo != null && motivo is! String)) {
+        (motivo != null && motivo is! String) ||
+        (edicion != null && edicion is! String)) {
       throw FormatException(
         'Fila de publicaciones_foro incompleta o inesperada',
         fila,
@@ -112,6 +122,9 @@ class PublicacionForo {
       motivoModeracion: motivo as String?,
       numeroComentarios: _conteo(fila['comentarios_foro']),
       autorEsAdmin: fila['autor_es_admin'] == true,
+      fechaEdicion: edicion is String
+          ? DateTime.parse(edicion).toLocal()
+          : null,
     );
   }
 

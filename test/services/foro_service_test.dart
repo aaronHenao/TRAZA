@@ -201,6 +201,47 @@ void main() {
       });
     });
 
+    test('lee el historial de la más reciente a la original', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {
+            'id': 'ver-1',
+            'publicacion_id': 'pub-1',
+            'titulo': 'Tenis',
+            'contenido': 'Antes',
+            'vigente_desde': '2026-10-16T14:00:00+00:00',
+            'reemplazada_en': '2026-10-16T15:00:00+00:00',
+          },
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final versiones = await supabase.repositorio.versiones('pub-1');
+
+      expect(versiones.single.contenido, 'Antes');
+      final consulta = supabase.peticiones.single.url;
+      expect(consulta.path, '/rest/v1/versiones_publicacion_foro');
+      expect(consulta.queryParameters['publicacion_id'], 'eq.pub-1');
+      expect(
+        consulta.queryParameters['order'],
+        startsWith('reemplazada_en.desc'),
+      );
+    });
+
+    test('sabe si una publicación fue editada', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'fecha_edicion': '2026-10-16T16:00:00+00:00'},
+          {...fila, 'id': 'pub-2'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final lista = await supabase.repositorio.publicadas();
+
+      expect(lista.map((p) => p.editada), [true, false]);
+    });
+
     for (final (codigo, causa) in [
       ('PGRST116', 'la policy no dejó tocar la fila'),
       ('42501', 'la seguridad a nivel de fila lo negó'),

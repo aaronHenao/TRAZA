@@ -1,6 +1,7 @@
 import 'package:traza/models/borrador_publicacion.dart';
 import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/version_publicacion.dart';
 import 'package:traza/services/foro_service.dart';
 
 /// Doble de `ForoRepository` con el foro en memoria.
@@ -127,6 +128,18 @@ class ForoRepositorioFalso implements ForoRepository {
       throw const PublicacionNoDisponibleException();
     }
     final p = publicaciones[i];
+    // Como el trigger: la versión anterior va al historial.
+    versionesDe
+        .putIfAbsent(id, () => [])
+        .insert(
+          0,
+          VersionPublicacion(
+            id: 'ver-${versionesDe[id]!.length + 1}',
+            titulo: p.titulo,
+            contenido: p.contenido,
+            vigenteDesde: p.fechaEdicion ?? p.fechaCreacion,
+          ),
+        );
     return publicaciones[i] = PublicacionForo(
       id: p.id,
       autorId: p.autorId,
@@ -136,7 +149,19 @@ class ForoRepositorioFalso implements ForoRepository {
       estado: p.estado,
       fechaCreacion: p.fechaCreacion,
       autorEsAdmin: p.autorEsAdmin,
+      fechaEdicion: ahora ?? DateTime(2026, 10, 16, 12),
     );
+  }
+
+  /// Versiones anteriores por id de publicación, de la más reciente a la
+  /// original.
+  final Map<String, List<VersionPublicacion>> versionesDe = {};
+
+  @override
+  Future<List<VersionPublicacion>> versiones(String publicacionId) async {
+    final error = this.error;
+    if (error != null) throw error;
+    return [...?versionesDe[publicacionId]];
   }
 
   /// Simula que la moderación retiró la publicación [id].
@@ -185,6 +210,7 @@ PublicacionForo publicacionDePrueba({
   DateTime? fecha,
   String? motivo,
   bool autorEsAdmin = false,
+  DateTime? fechaEdicion,
 }) => PublicacionForo(
   id: id,
   autorId: 'autor-$id',
@@ -195,4 +221,5 @@ PublicacionForo publicacionDePrueba({
   fechaCreacion: fecha ?? DateTime(2026, 10, 16, 8),
   motivoModeracion: motivo,
   autorEsAdmin: autorEsAdmin,
+  fechaEdicion: fechaEdicion,
 );

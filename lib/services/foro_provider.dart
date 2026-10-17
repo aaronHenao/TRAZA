@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/version_publicacion.dart';
 import 'foro_service.dart';
 
 /// Cómo terminó un intento de publicar en el foro (SCRUM-323).
@@ -238,6 +239,13 @@ class ComentarioPublicacion {
   }
 }
 
+/// Las versiones anteriores de una publicación editada (SCRUM-355).
+final versionesPublicacionProvider = FutureProvider.autoDispose
+    .family<List<VersionPublicacion>, String>(
+      (ref, publicacionId) =>
+          ref.watch(foroRepositoryProvider).versiones(publicacionId),
+    );
+
 /// Cómo terminó un intento de editar una publicación (SCRUM-355).
 sealed class ResultadoEdicion {
   const ResultadoEdicion();
@@ -314,10 +322,12 @@ class EdicionPublicacion {
     }
   }
 
-  /// El detalle y los dos listados muestran el título y el contenido.
+  /// El detalle y los dos listados muestran el título y el contenido, y el
+  /// historial ganó una versión.
   void _refrescar(String publicacionId) {
     _ref
       ..invalidate(publicacionForoProvider(publicacionId))
+      ..invalidate(versionesPublicacionProvider(publicacionId))
       ..invalidate(publicacionesForoProvider)
       ..invalidate(moderacionForoProvider);
   }

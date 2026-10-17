@@ -70,7 +70,10 @@ class TarjetaPublicacion extends StatelessWidget {
                       ],
                     ),
                     Text(
-                      fechaRelativa(publicacion.fechaCreacion, ahora),
+                      publicacion.editada
+                          ? '${fechaRelativa(publicacion.fechaCreacion, ahora)}'
+                                ' • Editada'
+                          : fechaRelativa(publicacion.fechaCreacion, ahora),
                       style: const TextStyle(
                         fontSize: 11.5,
                         color: AppColors.ink3,

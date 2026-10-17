@@ -19,6 +19,7 @@ import 'screens/home/progresion_screen.dart';
 import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/onboarding/perfil_screen.dart';
+import 'screens/rutas/rutas_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
 import 'screens/retos/detalle_reto_screen.dart';
 import 'screens/retos/historial_retos_screen.dart';
@@ -196,6 +197,12 @@ final _navegacion = GoRouter(
           ),
         ),
       ],
+    ),
+    // Rutas de la comunidad (SCRUM-284). La pantalla es provisional: la
+    // llenan HU-29 y las suyas cuando se puedan publicar rutas.
+    GoRoute(
+      path: RutasScreen.ruta,
+      builder: (context, state) => const RutasScreen(),
     ),
     // Foro de la comunidad (SCRUM-323). Publicar se abre con `push`, así al
     // volver el foro se consulta de nuevo con lo recién publicado.

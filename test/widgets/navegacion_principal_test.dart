@@ -155,6 +155,60 @@ void main() {
     });
   });
 
+  group('sección Rutas (SCRUM-284)', () {
+    test('va entre Retos y Foro, con su icono y su ruta', () {
+      // El orden del prototipo: Inicio, Progreso, Retos, Rutas, Foro, Perfil.
+      final orden = SeccionPrincipal.values.map((s) => s.etiqueta).toList();
+      expect(
+        orden.indexOf('Rutas'),
+        orden.indexOf('Retos') + 1,
+        reason: 'Rutas va justo después de Retos',
+      );
+      expect(orden.indexOf('Rutas'), lessThan(orden.indexOf('Foro')));
+
+      expect(SeccionPrincipal.rutas.etiqueta, 'Rutas');
+      expect(SeccionPrincipal.rutas.icono, Icons.map_outlined);
+      expect(SeccionPrincipal.rutas.ruta, '/rutas');
+    });
+
+    testWidgets('tocar "Rutas" lleva a su sección', (tester) async {
+      final router = await montar(tester);
+
+      await tester.tap(find.text('Rutas'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Contenido de Rutas'), findsOneWidget);
+      expect(router.routerDelegate.currentConfiguration.uri.path, '/rutas');
+    });
+
+    testWidgets('está a la vista desde las demás secciones', (tester) async {
+      for (final seccion in SeccionPrincipal.values) {
+        if (seccion == SeccionPrincipal.rutas) continue;
+        await montar(tester, seccion: seccion);
+
+        expect(
+          find.text('Rutas'),
+          findsOneWidget,
+          reason: 'desde ${seccion.etiqueta}',
+        );
+      }
+    });
+
+    testWidgets('con Rutas, la barra sigue cabiendo en 320 px', (tester) async {
+      // Siete entradas mientras Historial no se mude al perfil: es cuando más
+      // apretada va a estar.
+      tester.view.physicalSize = const Size(320 * 3, 568 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await montar(tester, onNuevaActividad: () {});
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Rutas'), findsOneWidget);
+    });
+  });
+
   group('botón "+"', () {
     testWidgets('sin acción no se muestra: solo la portada lo lleva', (
       tester,

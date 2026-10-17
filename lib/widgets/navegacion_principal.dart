@@ -13,6 +13,9 @@ enum SeccionPrincipal {
     ruta: '/progreso',
   ),
   retos(etiqueta: 'Retos', icono: Icons.flag_outlined, ruta: '/retos'),
+  // Las rutas de la comunidad (SCRUM-284). La sección existe desde ya para
+  // que la barra sea la del prototipo; lo que muestra lo llena HU-29.
+  rutas(etiqueta: 'Rutas', icono: Icons.map_outlined, ruta: '/rutas'),
   // El foro de la comunidad (SCRUM-323).
   foro(etiqueta: 'Foro', icono: Icons.forum_outlined, ruta: '/foro'),
   historial(
@@ -36,9 +39,10 @@ enum SeccionPrincipal {
 /// Pone [child] sobre la barra de navegación del prototipo (`.bottom-nav`),
 /// con el botón "+" flotante para arrancar una actividad.
 ///
-/// El prototipo completo lleva seis secciones (Inicio, Progreso, Retos,
-/// Rutas, Foro, Perfil); aquí están solo las que existen hoy. Las demás se
-/// agregan a [SeccionPrincipal] cuando lleguen sus historias.
+/// El prototipo completo lleva seis secciones: Inicio, Progreso, Retos,
+/// Rutas, Foro y Perfil. Todas están ya en [SeccionPrincipal]. Historial
+/// sobra respecto al prototipo —sus entrenamientos pasan a una pestaña del
+/// perfil— y sale de la barra en la subtarea que hace ese traslado.
 class NavegacionPrincipal extends StatelessWidget {
   const NavegacionPrincipal({
     required this.seccion,

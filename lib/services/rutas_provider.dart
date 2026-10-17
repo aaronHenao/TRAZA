@@ -39,6 +39,15 @@ class RutaNoPublicada extends ResultadoPublicacionRuta {
   final String mensaje;
 }
 
+/// Las rutas que la comunidad ya puede ver, para el apartado del foro.
+///
+/// `autoDispose`: una ruta se publica cuando el Runner Experto la aprueba, o
+/// sea mientras el usuario hace otra cosa. Volver al apartado vuelve a
+/// preguntar en vez de enseñar lo que había al abrir la app.
+final rutasPublicadasProvider = FutureProvider.autoDispose<List<Ruta>>(
+  (ref) => ref.read(rutasRepositoryProvider).publicadas(),
+);
+
 /// Une la validación del borrador con el guardado (SCRUM-241).
 ///
 /// Es el único camino para publicar una ruta: valida primero y solo entonces

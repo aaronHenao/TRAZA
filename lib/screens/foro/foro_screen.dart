@@ -5,13 +5,31 @@ import 'package:go_router/go_router.dart';
 import '../../models/publicacion_foro.dart';
 import '../../services/foro_provider.dart';
 import '../../services/reloj_provider.dart';
+import '../../services/rutas_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_publicacion.dart';
+import '../../widgets/tarjeta_ruta.dart';
 import 'detalle_publicacion_screen.dart';
 import 'nueva_publicacion_screen.dart';
+
+/// Las dos caras del foro.
+///
+/// Las rutas son publicaciones de la comunidad como los temas, pero no se
+/// leen igual: un tema se abre para responderlo y una ruta se mira para ir a
+/// correrla. Mezcladas en una sola lista, quien busca una ruta tendría que
+/// ir descartando conversaciones.
+enum SeccionForo {
+  temas('Temas'),
+  rutas('Rutas');
+
+  const SeccionForo(this.etiqueta);
+
+  final String etiqueta;
+}
 
 /// El foro de la comunidad (SCRUM-346): lo que publican los corredores, de lo
 /// más reciente a lo más antiguo, con su autor y su fecha.
@@ -27,6 +45,9 @@ class ForoScreen extends ConsumerStatefulWidget {
   static const claveNueva = Key('foro-nueva-publicacion');
   static const claveNuevas = Key('foro-publicaciones-nuevas');
 
+  static Key claveSeccion(SeccionForo seccion) =>
+      Key('foro-seccion-${seccion.name}');
+
   static String textoNuevas(int cuantas) =>
       cuantas == 1 ? '1 publicación nueva' : '$cuantas publicaciones nuevas';
 
@@ -36,6 +57,8 @@ class ForoScreen extends ConsumerStatefulWidget {
 
 class _ForoScreenState extends ConsumerState<ForoScreen> {
   final _desplazamiento = ScrollController();
+
+  SeccionForo _seccion = SeccionForo.temas;
 
   @override
   void dispose() {
@@ -80,59 +103,72 @@ class _ForoScreenState extends ConsumerState<ForoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Cabecera(onNueva: nueva),
-              Expanded(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: RefreshIndicator(
-                        onRefresh: () async => recargar(),
-                        child: switch (publicaciones) {
-                          AsyncData(value: final lista) when lista.isEmpty =>
-                            EstadoVacio(
-                              icono: Icons.forum_outlined,
-                              titulo: 'Aún no hay publicaciones',
+              // Publicar un tema solo se ofrece en los temas: una ruta no
+              // se escribe aquí, se publica desde el resumen del
+              // entrenamiento que la grabó.
+              _Cabecera(onNueva: _seccion == SeccionForo.temas ? nueva : null),
+              _Secciones(
+                actual: _seccion,
+                onCambiar: (seccion) => setState(() => _seccion = seccion),
+              ),
+              if (_seccion == SeccionForo.rutas)
+                const Expanded(child: _Rutas())
+              else
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: RefreshIndicator(
+                          onRefresh: () async => recargar(),
+                          child: switch (publicaciones) {
+                            AsyncData(value: final lista) when lista.isEmpty =>
+                              EstadoVacio(
+                                icono: Icons.forum_outlined,
+                                titulo: 'Aún no hay publicaciones',
+                                detalle:
+                                    'Abre la conversación: pregunta o comparte algo '
+                                    'sobre running.',
+                                accion: OutlinedButton(
+                                  onPressed: nueva,
+                                  child: const Text('Publicar'),
+                                ),
+                              ),
+                            AsyncData(value: final lista) => _Lista(
+                              publicaciones: _sinLasNuevas(lista, nuevas),
+                              desplazamiento: _desplazamiento,
+                            ),
+                            AsyncError() => EstadoVacio(
+                              icono: Icons.cloud_off_outlined,
+                              titulo: 'No pudimos cargar el foro',
                               detalle:
-                                  'Abre la conversación: pregunta o comparte algo '
-                                  'sobre running.',
+                                  'Revisa tu conexión e inténtalo de nuevo.',
                               accion: OutlinedButton(
-                                onPressed: nueva,
-                                child: const Text('Publicar'),
+                                onPressed: recargar,
+                                child: const Text('Reintentar'),
                               ),
                             ),
-                          AsyncData(value: final lista) => _Lista(
-                            publicaciones: _sinLasNuevas(lista, nuevas),
-                            desplazamiento: _desplazamiento,
-                          ),
-                          AsyncError() => EstadoVacio(
-                            icono: Icons.cloud_off_outlined,
-                            titulo: 'No pudimos cargar el foro',
-                            detalle: 'Revisa tu conexión e inténtalo de nuevo.',
-                            accion: OutlinedButton(
-                              onPressed: recargar,
-                              child: const Text('Reintentar'),
+                            _ => const Center(
+                              child: CircularProgressIndicator(),
                             ),
-                          ),
-                          _ => const Center(child: CircularProgressIndicator()),
-                        },
-                      ),
-                    ),
-                    if (_cuantasEsperan(publicaciones, nuevas) case final n
-                        when n > 0)
-                      Positioned(
-                        top: AppSpacing.sm,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: _AvisoNuevas(
-                            texto: ForoScreen.textoNuevas(n),
-                            onVer: _verNuevas,
-                          ),
+                          },
                         ),
                       ),
-                  ],
+                      if (_cuantasEsperan(publicaciones, nuevas) case final n
+                          when n > 0)
+                        Positioned(
+                          top: AppSpacing.sm,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: _AvisoNuevas(
+                              texto: ForoScreen.textoNuevas(n),
+                              onVer: _verNuevas,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -213,7 +249,8 @@ class _AvisoNuevas extends StatelessWidget {
 class _Cabecera extends StatelessWidget {
   const _Cabecera({required this.onNueva});
 
-  final VoidCallback onNueva;
+  /// Null en el apartado de rutas, donde no hay nada que redactar.
+  final VoidCallback? onNueva;
 
   @override
   Widget build(BuildContext context) {
@@ -247,23 +284,111 @@ class _Cabecera extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          FilledButton.icon(
-            key: ForoScreen.claveNueva,
-            onPressed: onNueva,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 38),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              textStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+          if (onNueva case final publicar?) ...[
+            const SizedBox(width: AppSpacing.sm),
+            FilledButton.icon(
+              key: ForoScreen.claveNueva,
+              onPressed: publicar,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+              icon: const Icon(Icons.edit_outlined, size: 17),
+              label: const Text('Publicar'),
             ),
-            icon: const Icon(Icons.edit_outlined, size: 17),
-            label: const Text('Publicar'),
-          ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// La tira de chips que elige qué parte del foro se está mirando.
+class _Secciones extends StatelessWidget {
+  const _Secciones({required this.actual, required this.onCambiar});
+
+  final SeccionForo actual;
+  final void Function(SeccionForo seccion) onCambiar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        children: [
+          for (final seccion in SeccionForo.values)
+            ChipFiltro(
+              key: ForoScreen.claveSeccion(seccion),
+              texto: seccion.etiqueta,
+              activo: seccion == actual,
+              onTap: () => onCambiar(seccion),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Las rutas que la comunidad ya puede usar (SCRUM-241).
+///
+/// Cada una dice quién la publicó y cuándo, que es lo que pide el criterio 4,
+/// y cuánto mide. Todavía no se abren: el detalle de una ruta es de
+/// SCRUM-240.
+class _Rutas extends ConsumerWidget {
+  const _Rutas();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rutas = ref.watch(rutasPublicadasProvider);
+    final ahora = ref.read(relojProvider)();
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(rutasPublicadasProvider),
+      child: switch (rutas) {
+        AsyncData(value: final lista) when lista.isEmpty => const EstadoVacio(
+          icono: Icons.route_outlined,
+          titulo: 'Todavía no hay rutas publicadas',
+          detalle:
+              'Cuando termines un entrenamiento, publica su recorrido desde '
+              'el resumen para que la comunidad pueda seguirlo.',
+        ),
+        AsyncData(value: final lista) => ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.xl,
+          ),
+          itemCount: lista.length,
+          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+          itemBuilder: (_, i) => TarjetaRuta(
+            key: TarjetaRuta.claveDe(lista[i].id),
+            ruta: lista[i],
+            ahora: ahora,
+          ),
+        ),
+        AsyncError() => EstadoVacio(
+          icono: Icons.cloud_off_outlined,
+          titulo: 'No pudimos cargar las rutas',
+          detalle: 'Revisa tu conexión e inténtalo de nuevo.',
+          accion: OutlinedButton(
+            onPressed: () => ref.invalidate(rutasPublicadasProvider),
+            child: const Text('Reintentar'),
+          ),
+        ),
+        _ => const Center(child: CircularProgressIndicator()),
+      },
     );
   }
 }

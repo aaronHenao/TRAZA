@@ -98,6 +98,14 @@ abstract interface class RutasRepository {
   /// lo que mandó (criterio 1). Sin el trazado, que un listado no dibuja.
   Future<List<Ruta>> misRutas();
 
+  /// Las rutas que la comunidad ya puede ver, de la última publicada a la
+  /// primera.
+  ///
+  /// Sin el trazado, que un listado no dibuja. Traen su autor y su fecha de
+  /// publicación, que es lo que hay que mostrar de cada una (criterio 4), y
+  /// su distancia (SCRUM-240).
+  Future<List<Ruta>> publicadas();
+
   /// La ruta con [id] y su trazado, o null si no existe o el usuario no
   /// puede verla.
   ///
@@ -215,6 +223,23 @@ class SupabaseRutasRepository implements RutasRepository {
         .select(_columnas)
         .eq('autor_id', usuarioId)
         .order('fecha_creacion', ascending: false)
+        .limit(limite);
+
+    return filas.map(Ruta.desdeSupabase).toList();
+  }
+
+  @override
+  Future<List<Ruta>> publicadas() async {
+    _usuarioId();
+
+    // El filtro por estado va aunque RLS ya oculte lo ajeno en revisión: al
+    // autor le devolvería también lo suyo sin aprobar, y eso no es la
+    // comunidad.
+    final filas = await _cliente
+        .from(tabla)
+        .select(_columnas)
+        .eq('estado', EstadoRuta.publicada.valorDb)
+        .order('fecha_publicacion', ascending: false)
         .limit(limite);
 
     return filas.map(Ruta.desdeSupabase).toList();

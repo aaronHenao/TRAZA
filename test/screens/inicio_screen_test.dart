@@ -10,9 +10,13 @@ import 'package:traza/screens/home/inicio_screen.dart';
 import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/inicio_provider.dart';
+import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
+
+import '../utiles/notificaciones_falso.dart';
 
 /// Historial de mentira: responde lo que la prueba le indique.
 class _HistorialFalso implements HistorialRepository {
@@ -81,6 +85,7 @@ void main() {
     Future<Map<TipoObjetivo, num>> Function()? objetivos,
     String? nombre = 'Ana',
     bool esperar = true,
+    int sinLeer = 0,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
@@ -104,6 +109,11 @@ void main() {
           builder: (_, _) => const Scaffold(body: Text('Pantalla Perfil')),
         ),
         GoRoute(
+          path: NotificacionesScreen.ruta,
+          builder: (_, _) =>
+              const Scaffold(body: Text('Pantalla Notificaciones')),
+        ),
+        GoRoute(
           path: ProgresionScreen.ruta,
           builder: (_, _) => const Scaffold(body: Text('Pantalla Progresión')),
         ),
@@ -120,6 +130,9 @@ void main() {
             _ObjetivosFalsos(
               objetivos ?? () async => {TipoObjetivo.distancia: 15},
             ),
+          ),
+          notificacionesRepositoryProvider.overrideWithValue(
+            NotificacionesFalso(sinLeer: sinLeer),
           ),
           // El nombre sale de la sesión de Supabase, que en las pruebas no
           // existe.
@@ -252,6 +265,51 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Historial'), findsOneWidget);
+    });
+  });
+
+  group('notificaciones (SCRUM-241)', () {
+    testWidgets('sin avisos sin leer la campana no lleva numero', (
+      tester,
+    ) async {
+      await abrirPortada(tester);
+
+      expect(find.byKey(InicioScreen.claveNotificaciones), findsOneWidget);
+      expect(find.text('0'), findsNothing);
+    });
+
+    testWidgets('un nombre largo no desborda al lado de la campana', (
+      tester,
+    ) async {
+      await abrirPortada(
+        tester,
+        nombre: 'Maria Fernanda de los Angeles Restrepo Echavarria',
+        sinLeer: 3,
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('muestra cuantos avisos lleva sin leer', (tester) async {
+      await abrirPortada(tester, sinLeer: 3);
+
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('pasado de nueve no dice el numero exacto', (tester) async {
+      // El numero exacto no le dice nada a nadie, y el globo no da para mas.
+      await abrirPortada(tester, sinLeer: 12);
+
+      expect(find.text('9+'), findsOneWidget);
+    });
+
+    testWidgets('la campana abre la bandeja', (tester) async {
+      await abrirPortada(tester, sinLeer: 1);
+
+      await tester.tap(find.byKey(InicioScreen.claveNotificaciones));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Notificaciones'), findsOneWidget);
     });
   });
 

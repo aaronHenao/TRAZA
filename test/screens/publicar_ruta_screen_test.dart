@@ -235,6 +235,18 @@ void main() {
       expect(find.byKey(PublicarRutaScreen.claveNombre), findsNothing);
     });
 
+    testWidgets('aguanta el nombre mas largo que admite la tabla', (
+      tester,
+    ) async {
+      await _abrir(
+        tester,
+        resumen: resumen(),
+        existente: rutaDePrueba(nombre: 'R' * 120),
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('ya publicada: lo dice con su nombre', (tester) async {
       await _abrir(
         tester,

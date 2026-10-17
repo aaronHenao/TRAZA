@@ -42,6 +42,7 @@ class PublicacionForo {
     required this.estado,
     required this.fechaCreacion,
     this.motivoModeracion,
+    this.numeroComentarios = 0,
   });
 
   final String id;
@@ -54,6 +55,13 @@ class PublicacionForo {
 
   /// Por qué la moderación la retuvo o eliminó. Null mientras esté publicada.
   final String? motivoModeracion;
+
+  /// Cuántos comentarios tiene (SCRUM-324). Cero si la consulta no los
+  /// contó, como la fila que devuelve el insert.
+  final int numeroComentarios;
+
+  /// Si se le puede comentar: solo a lo publicado (criterio 3 de SCRUM-324).
+  bool get admiteComentarios => estado == EstadoPublicacion.publicada;
 
   factory PublicacionForo.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
@@ -88,7 +96,14 @@ class PublicacionForo {
       estado: estado,
       fechaCreacion: DateTime.parse(fecha).toLocal(),
       motivoModeracion: motivo as String?,
+      numeroComentarios: _conteo(fila['comentarios_foro']),
     );
+  }
+
+  /// PostgREST devuelve `comentarios_foro(count)` como `[{"count": n}]`.
+  static int _conteo(Object? embebido) {
+    if (embebido case [{'count': final num n}, ...]) return n.toInt();
+    return 0;
   }
 
   @override

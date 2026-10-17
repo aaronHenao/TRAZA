@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/borrador_publicacion.dart';
+import '../models/comentario_foro.dart';
 import '../models/publicacion_foro.dart';
 import 'foro_service.dart';
 
@@ -132,6 +133,102 @@ class CreacionPublicacion {
     } catch (error) {
       debugPrint('No se pudo publicar: $error');
       return const PublicacionNoGuardada(noSePudo);
+    }
+  }
+}
+
+/// Una publicación por su id, para el detalle (SCRUM-351).
+///
+/// Se consulta siempre y no se toma la del listado: lo que importa al abrirla
+/// es cómo está ahora, porque pudo ser retenida o eliminada después de que
+/// se cargó el foro (criterio 3 de SCRUM-324).
+final publicacionForoProvider = FutureProvider.autoDispose
+    .family<PublicacionForo?, String>(
+      (ref, id) => ref.watch(foroRepositoryProvider).publicacion(id),
+    );
+
+/// Los comentarios de una publicación, del más antiguo al más reciente.
+final comentariosForoProvider = FutureProvider.autoDispose
+    .family<List<ComentarioForo>, String>(
+      (ref, publicacionId) =>
+          ref.watch(foroRepositoryProvider).comentarios(publicacionId),
+    );
+
+/// Cómo terminó un intento de comentar (SCRUM-324).
+sealed class ResultadoComentario {
+  const ResultadoComentario();
+}
+
+/// El comentario quedó registrado y ya se ve bajo la publicación.
+class ComentarioRegistrado extends ResultadoComentario {
+  const ComentarioRegistrado(this.comentario);
+
+  final ComentarioForo comentario;
+}
+
+/// El texto no pasó las reglas: no se llegó a tocar la base (criterio 2).
+class ComentarioInvalido extends ResultadoComentario {
+  const ComentarioInvalido(this.error);
+
+  final String error;
+}
+
+/// La publicación fue eliminada o retenida y ya no admite comentarios
+/// (criterio 3).
+class PublicacionNoDisponible extends ResultadoComentario {
+  const PublicacionNoDisponible();
+}
+
+/// El guardado falló por otra razón. Lo escrito sigue en la caja.
+class ComentarioNoGuardado extends ResultadoComentario {
+  const ComentarioNoGuardado(this.mensaje);
+
+  final String mensaje;
+}
+
+final comentarioForoProvider = Provider<ComentarioPublicacion>(
+  ComentarioPublicacion.new,
+);
+
+/// Une la validación del comentario con el guardado (SCRUM-350).
+class ComentarioPublicacion {
+  const ComentarioPublicacion(this._ref);
+
+  final Ref _ref;
+
+  static const noDisponible = 'La publicación ya no se encuentra disponible.';
+  static const sinSesion = 'Inicia sesión para comentar.';
+  static const noSePudo =
+      'No se pudo enviar el comentario. Inténtalo de nuevo.';
+
+  Future<ResultadoComentario> comentar(
+    String publicacionId,
+    BorradorComentario borrador,
+  ) async {
+    final nuevo = borrador.aNuevoComentario(publicacionId);
+    if (nuevo == null) return ComentarioInvalido(borrador.error!);
+
+    try {
+      final comentario = await _ref
+          .read(foroRepositoryProvider)
+          .comentar(nuevo);
+      _ref
+        ..invalidate(comentariosForoProvider(publicacionId))
+        // El listado muestra cuántos comentarios tiene cada publicación.
+        ..invalidate(publicacionesForoProvider);
+      return ComentarioRegistrado(comentario);
+    } on PublicacionNoDisponibleException {
+      // Se vuelve a pedir la publicación para que el detalle pase a decir que
+      // ya no está disponible, en vez de seguir ofreciendo la caja.
+      _ref
+        ..invalidate(publicacionForoProvider(publicacionId))
+        ..invalidate(publicacionesForoProvider);
+      return const PublicacionNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const ComentarioNoGuardado(sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo comentar: $error');
+      return const ComentarioNoGuardado(noSePudo);
     }
   }
 }

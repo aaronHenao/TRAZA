@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:traza/models/presentacion_traza.dart';
 import 'package:traza/screens/auth/conocer_traza_screen.dart';
+import 'package:traza/services/auth_service.dart';
+
+/// Service falso: la pantalla solo le pregunta si hay sesión.
+class _MockAuthService extends Mock implements AuthService {}
 
 /// Pruebas de la pantalla de presentación (SCRUM-279).
 ///
@@ -80,13 +86,30 @@ void main() {
     expect(iconos.toSet(), hasLength(iconos.length));
   });
 
-  testWidgets('no ofrece registrarse ni iniciar sesión', (tester) async {
-    // Es informativa: no reemplaza esas pantallas, así que tampoco compite
-    // con ellas.
-    await _montar(tester);
+  testWidgets('sin sesión invita a crear la cuenta', (tester) async {
+    await _montar(tester, tamano: const Size(390, 1800));
 
-    expect(find.byType(TextButton), findsNothing);
-    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byKey(ConocerTrazaScreen.claveCrearCuenta), findsOneWidget);
+    expect(find.text(PresentacionTraza.invitacion), findsOneWidget);
+  });
+
+  testWidgets('con sesión no invita a nada', (tester) async {
+    // A quien ya tiene cuenta, ofrecerle crearla no le dice nada.
+    await _montar(tester, tamano: const Size(390, 1800), haySesion: true);
+
+    expect(
+      find.byKey(ConocerTrazaScreen.claveCrearCuenta, skipOffstage: false),
+      findsNothing,
+    );
+    expect(find.text(PresentacionTraza.invitacion), findsNothing);
+  });
+
+  testWidgets('no ofrece iniciar sesión: no reemplaza al login', (
+    tester,
+  ) async {
+    await _montar(tester, tamano: const Size(390, 1800));
+
+    expect(find.textContaining('Iniciar sesión'), findsNothing);
     expect(find.textContaining('Regístrate'), findsNothing);
   });
 
@@ -118,12 +141,17 @@ void main() {
 }
 
 /// Abre la presentación como única pantalla: aquí no se navega a ninguna
-/// parte, pero lleva router porque la pantalla pregunta si hay a dónde volver.
+/// parte, pero lleva router porque la pantalla pregunta si hay a dónde volver,
+/// y service de autenticación porque pregunta si hay sesión.
 Future<void> _montar(
   WidgetTester tester, {
   Size tamano = const Size(390, 844),
   double escalaTexto = 1,
+  bool haySesion = false,
 }) async {
+  final auth = _MockAuthService();
+  when(() => auth.haySesion).thenReturn(haySesion);
+
   tester.view.physicalSize = tamano * 3;
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.resetPhysicalSize);
@@ -135,9 +163,12 @@ Future<void> _montar(
   addTearDown(router.dispose);
 
   await tester.pumpWidget(
-    MediaQuery(
-      data: MediaQueryData(textScaler: TextScaler.linear(escalaTexto)),
-      child: MaterialApp.router(routerConfig: router),
+    ProviderScope(
+      overrides: [authServiceProvider.overrideWithValue(auth)],
+      child: MediaQuery(
+        data: MediaQueryData(textScaler: TextScaler.linear(escalaTexto)),
+        child: MaterialApp.router(routerConfig: router),
+      ),
     ),
   );
   await tester.pumpAndSettle();

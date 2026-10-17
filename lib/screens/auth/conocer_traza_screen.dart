@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/presentacion_traza.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
@@ -23,6 +25,9 @@ class ConocerTrazaScreen extends StatelessWidget {
   static const ruta = '/conocer';
 
   static const titulo = 'Conoce TRAZA';
+
+  /// La invitación a registrarse del final (SCRUM-281).
+  static const claveCrearCuenta = Key('conocer-crear-cuenta');
 
   @override
   Widget build(BuildContext context) {
@@ -71,11 +76,7 @@ class ConocerTrazaScreen extends StatelessWidget {
                       const SizedBox(height: AppSpacing.md),
                     ],
                     const SizedBox(height: AppSpacing.xs),
-                    const Text(
-                      PresentacionTraza.invitacion,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12.5, color: AppColors.ink3),
-                    ),
+                    const _InvitacionARegistrarse(),
                   ],
                 ),
               ),
@@ -128,6 +129,48 @@ class _Portada extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Cierra la presentación invitando a crear la cuenta (SCRUM-281).
+///
+/// Solo para quien no tiene sesión: a quien ya entró, ofrecerle registrarse no
+/// le dice nada. Se decide por la sesión y no por la pantalla de la que vino,
+/// porque el criterio real es si ya tiene cuenta.
+class _InvitacionARegistrarse extends ConsumerWidget {
+  const _InvitacionARegistrarse();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(authServiceProvider).haySesion) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      children: [
+        const Text(
+          PresentacionTraza.invitacion,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12.5, color: AppColors.ink3),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        FilledButton(
+          key: ConocerTrazaScreen.claveCrearCuenta,
+          // `go`: crear la cuenta es salir de la presentación, no apilar otra
+          // pantalla encima de ella.
+          onPressed: () => context.go('/registro'),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            shape: const StadiumBorder(),
+            textStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          child: const Text('Crear cuenta'),
+        ),
+      ],
     );
   }
 }

@@ -12,6 +12,7 @@ import 'insignias_provider.dart';
 import 'mapa_progresion_provider.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
 import 'progresion_provider.dart';
+import 'retos_provider.dart';
 import 'ubicacion_provider.dart';
 import 'reloj_provider.dart';
 
@@ -269,6 +270,11 @@ class CierreEntrenamiento {
     // iba a ver (lo detecta cierre_entrenamiento_test).
     if (_ref.exists(mapaProgresionProvider)) {
       _ref.invalidate(mapaProgresionProvider);
+    }
+    // El trigger también movió el progreso de los retos. Si alguien los tiene
+    // en memoria, el resumen no puede leer el de antes del cierre.
+    if (_ref.exists(misRetosProvider)) {
+      _ref.invalidate(misRetosProvider);
     }
     return null;
   }

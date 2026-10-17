@@ -28,7 +28,7 @@ class ComentarioForo {
   final String contenido;
   final DateTime fechaCreacion;
 
-  /// Lo escribió el administrador: lleva la insignia "Admin".
+  /// Lo escribió el administrador: lleva la insignia "Administrador".
   final bool autorEsAdmin;
 
   factory ComentarioForo.desdeSupabase(Map<String, dynamic> fila) {

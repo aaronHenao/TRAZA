@@ -4,7 +4,7 @@
 -- Corre esto DESPUÉS de 0021_foro_comentarios.sql.
 --
 -- El administrador también comenta, y su comentario lleva la
--- insignia "Admin". La app no puede averiguar el rol de otro
+-- insignia "Administrador". La app no puede averiguar el rol de otro
 -- usuario (`perfiles` solo deja leer el propio), así que la base
 -- lo anota en el comentario al insertarlo, igual que el nombre.
 --

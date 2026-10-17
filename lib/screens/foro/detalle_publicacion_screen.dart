@@ -20,8 +20,8 @@ import '../../widgets/traza_top_bar.dart';
 ///
 /// El administrador la abre en [vistaModeracion]: ve la publicación en
 /// cualquier estado, con su motivo, y comenta como cualquiera mientras esté
-/// publicada. Sus comentarios llevan la insignia "Admin" y los del creador de
-/// la publicación, la de "Autor".
+/// publicada. Sus comentarios llevan la insignia "Administrador" y los del
+/// creador de la publicación, la de "Autor".
 class DetallePublicacionScreen extends ConsumerWidget {
   const DetallePublicacionScreen({
     required this.publicacionId,
@@ -40,7 +40,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 
-  static const insigniaAdmin = 'Admin';
+  static const insigniaAdmin = 'Administrador';
   static const insigniaAutor = 'Autor';
 
   @override
@@ -361,7 +361,7 @@ class _AutorYFecha extends StatelessWidget {
   final String autor;
   final String fecha;
 
-  /// Van pegadas al nombre: "Admin", "Autor".
+  /// Van pegadas al nombre: "Administrador", "Autor".
   final List<Widget> insignias;
 
   /// En el comentario van en la misma línea para no robarle alto.
@@ -392,7 +392,13 @@ class _AutorYFecha extends StatelessWidget {
             const SizedBox(width: 6),
             insignia,
           ],
-          const SizedBox(width: 6),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 6),
+            child: Text(
+              '•',
+              style: TextStyle(fontSize: 11.5, color: AppColors.ink3),
+            ),
+          ),
           cuando,
         ],
       );

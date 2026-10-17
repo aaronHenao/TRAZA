@@ -96,6 +96,7 @@ void main() {
     expect(find.text('COMENTARIOS (1)'), findsOneWidget);
     expect(find.text('Lucía'), findsOneWidget);
     expect(find.text('Ayer'), findsOneWidget);
+    expect(find.text('•'), findsOneWidget);
     expect(find.text('Prueba con drop bajo.'), findsOneWidget);
   });
 
@@ -191,7 +192,9 @@ void main() {
   });
 
   group('insignias', () {
-    testWidgets('el comentario del administrador dice Admin', (tester) async {
+    testWidgets('el comentario del administrador dice Administrador', (
+      tester,
+    ) async {
       await abrir(
         tester,
         preparar: (r) => r.comentariosDe['pub-1'] = [
@@ -241,21 +244,22 @@ void main() {
     });
   });
 
-  testWidgets('el administrador comenta una publicada y sale como Admin', (
-    tester,
-  ) async {
-    await abrir(
-      tester,
-      vistaModeracion: true,
-      preparar: (r) => r.comentarComoAdmin = true,
-    );
+  testWidgets(
+    'el administrador comenta una publicada y sale como Administrador',
+    (tester) async {
+      await abrir(
+        tester,
+        vistaModeracion: true,
+        preparar: (r) => r.comentarComoAdmin = true,
+      );
 
-    expect(find.text('Publicada'), findsOneWidget);
-    await comentar(tester, 'Recuerden hidratarse.');
+      expect(find.text('Publicada'), findsOneWidget);
+      await comentar(tester, 'Recuerden hidratarse.');
 
-    expect(find.text('Recuerden hidratarse.'), findsOneWidget);
-    expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsOneWidget);
-  });
+      expect(find.text('Recuerden hidratarse.'), findsOneWidget);
+      expect(find.text(DetallePublicacionScreen.insigniaAdmin), findsOneWidget);
+    },
+  );
 
   testWidgets('desde el foro, tocar una publicación abre su detalle', (
     tester,

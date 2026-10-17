@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:traza/screens/auth/conocer_traza_screen.dart';
 import 'package:traza/screens/auth/forgot_password_screen.dart';
 import 'package:traza/screens/auth/login_screen.dart';
 import 'package:traza/services/auth_service.dart';
@@ -141,6 +142,41 @@ void main() {
 
       expect(find.byType(ForgotPasswordScreen), findsNothing);
       expect(find.byType(LoginScreen), findsOneWidget);
+    });
+  });
+
+  group('SCRUM-280 — acceso a la presentación de la app', () {
+    Future<void> tocarConocerTraza(WidgetTester tester) async {
+      final enlace = find.byKey(LoginScreen.claveConocerTraza);
+      await tester.ensureVisible(enlace);
+      await tester.tap(enlace);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('el enlace abre la presentación sin pedir cuenta', (
+      tester,
+    ) async {
+      await abrirPantalla(tester);
+      await tocarConocerTraza(tester);
+
+      expect(find.byType(ConocerTrazaScreen), findsOneWidget);
+    });
+
+    // Demuestra el push: mirar qué es la app no saca a nadie del login.
+    testWidgets('al cerrarla se vuelve al login con lo que ya estaba '
+        'escrito', (tester) async {
+      await abrirPantalla(tester);
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'ana@correo.com',
+      );
+
+      await tocarConocerTraza(tester);
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.text('ana@correo.com'), findsOneWidget);
     });
   });
 

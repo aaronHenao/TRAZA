@@ -7,9 +7,13 @@ import '../../services/login_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/boton_google.dart';
+import 'conocer_traza_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
+
+  /// El acceso a la presentación de la app (SCRUM-280).
+  static const claveConocerTraza = Key('login-conocer-traza');
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -227,6 +231,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                 ],
+              ),
+
+              // Para quien todavía no sabe qué es esto (SCRUM-280). `push`:
+              // mirar no debe sacar a nadie del login, y al cerrarla vuelve
+              // aquí con lo que hubiera escrito.
+              TextButton(
+                key: LoginScreen.claveConocerTraza,
+                onPressed: () => context.push(ConocerTrazaScreen.ruta),
+                child: const Text('¿Qué es TRAZA?'),
               ),
             ],
           ),

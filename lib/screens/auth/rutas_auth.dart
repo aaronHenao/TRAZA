@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import 'conocer_traza_screen.dart';
 import 'forgot_password_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -25,10 +26,26 @@ final rutasAuth = <GoRoute>[
     builder: (context, state) =>
         ResetPasswordScreen(correo: state.extra as String? ?? ''),
   ),
+  // Qué es TRAZA (SCRUM-277). Vive con las de auth porque se abre desde el
+  // login, antes de tener cuenta.
+  GoRoute(
+    path: ConocerTrazaScreen.ruta,
+    builder: (context, state) => const ConocerTrazaScreen(),
+  ),
 ];
 
 /// Rutas que se pueden abrir sin haber iniciado sesión.
-const rutasSinSesion = {'/login', '/registro', '/recuperar', '/restablecer'};
+///
+/// La presentación está aquí a propósito: su razón de ser es que alguien
+/// decida si se registra, así que pedirle cuenta para verla no tendría
+/// sentido.
+const rutasSinSesion = {
+  '/login',
+  '/registro',
+  '/recuperar',
+  '/restablecer',
+  ConocerTrazaScreen.ruta,
+};
 
 /// A dónde mandar a la persona según si tiene sesión guardada. `null` deja
 /// seguir a [ruta].

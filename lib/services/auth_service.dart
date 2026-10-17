@@ -353,6 +353,12 @@ class AuthService {
   /// Lo mismo para el usuario con la sesión abierta.
   bool get requiereOnboarding => requiereOnboardingDe(_auth.currentUser);
 
+  /// Si hay una sesión guardada.
+  ///
+  /// La usa la presentación de la app (SCRUM-281) para ofrecer crear cuenta
+  /// solo a quien no la tiene.
+  bool get haySesion => _auth.currentSession != null;
+
   /// Nombre para saludar en la portada, o null si la cuenta no tiene ninguno.
   ///
   /// Sale de `full_name`, el mismo metadato del que el trigger

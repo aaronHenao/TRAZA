@@ -45,3 +45,5 @@ app.*.map.json
 /android/app/release
 CLAUDE.md
 .claude
+# Supabase CLI: estado local (versión, proyecto), no va al repositorio.
+supabase/.temp/

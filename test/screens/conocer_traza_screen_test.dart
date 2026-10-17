@@ -27,6 +27,31 @@ void main() {
     expect(find.text(PresentacionTraza.queEs), findsOneWidget);
   });
 
+  testWidgets('explica cómo funciona en tres pasos numerados', (tester) async {
+    await _montar(tester);
+
+    expect(find.text('CÓMO FUNCIONA'), findsOneWidget);
+    for (final paso in PasoTraza.values) {
+      await tester.scrollUntilVisible(find.text(paso.texto), 200);
+
+      expect(find.text(paso.texto), findsOneWidget, reason: paso.name);
+      expect(find.text('${paso.numero}'), findsOneWidget, reason: paso.name);
+    }
+  });
+
+  testWidgets('los pasos van antes que la lista de funciones', (tester) async {
+    // Primero cómo encaja todo y después el detalle: al revés hay que
+    // deducir la gamificación de una lista.
+    await _montar(tester, tamano: const Size(390, 1800));
+
+    final pasos = tester.getTopLeft(find.text(PasoTraza.corres.texto)).dy;
+    final funciones = tester
+        .getTopLeft(find.text(FuncionTraza.registrar.titulo))
+        .dy;
+
+    expect(pasos, lessThan(funciones));
+  });
+
   testWidgets('enumera las cinco funciones con su explicación', (tester) async {
     await _montar(tester);
 

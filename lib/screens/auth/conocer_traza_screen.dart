@@ -58,6 +58,12 @@ class ConocerTrazaScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
+                    // Primero cómo encaja todo, y después el detalle: así se
+                    // entiende la gamificación antes de leer la lista.
+                    const _Rotulo('CÓMO FUNCIONA'),
+                    const SizedBox(height: AppSpacing.md),
+                    const _ComoFunciona(),
+                    const SizedBox(height: AppSpacing.xl),
                     const _Rotulo('LO QUE PUEDES HACER'),
                     const SizedBox(height: AppSpacing.md),
                     for (final funcion in FuncionTraza.values) ...[
@@ -122,6 +128,76 @@ class _Portada extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// El ciclo de la app en tres pasos numerados (SCRUM-279).
+///
+/// Van en una sola tarjeta y no en tres: son un recorrido, no tres cosas
+/// sueltas, y juntos se leen de un vistazo.
+class _ComoFunciona extends StatelessWidget {
+  const _ComoFunciona();
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      child: Column(
+        children: [
+          for (final paso in PasoTraza.values) ...[
+            if (paso != PasoTraza.values.first)
+              const SizedBox(height: AppSpacing.md),
+            _Paso(paso: paso),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Paso extends StatelessWidget {
+  const _Paso({required this.paso});
+
+  final PasoTraza paso;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.primary,
+          ),
+          child: Text(
+            '${paso.numero}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Padding(
+            // Centra la frase con el número cuando ocupa una sola línea.
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              paso.texto,
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: AppColors.ink,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

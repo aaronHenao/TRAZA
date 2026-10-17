@@ -9,6 +9,7 @@ import 'screens/admin/gestion_niveles_screen.dart';
 import 'screens/admin/gestion_retos_screen.dart';
 import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
+import 'screens/foro/detalle_publicacion_screen.dart';
 import 'screens/foro/foro_screen.dart';
 import 'screens/foro/nueva_publicacion_screen.dart';
 import 'screens/history/historial_screen.dart';
@@ -210,6 +211,14 @@ final _navegacion = GoRouter(
           path: 'nueva',
           builder: (context, state) => const NuevaPublicacionScreen(),
         ),
+        // Detalle con comentarios (SCRUM-324). Después de 'nueva': si no,
+        // 'nueva' se tomaría por un id.
+        GoRoute(
+          path: ':publicacionId',
+          builder: (context, state) => DetallePublicacionScreen(
+            publicacionId: state.pathParameters['publicacionId']!,
+          ),
+        ),
       ],
     ),
     // Lo que el administrador ve del foro. Tras SoloAdministrador como los
@@ -218,6 +227,19 @@ final _navegacion = GoRouter(
       path: ModeracionForoScreen.ruta,
       builder: (context, state) =>
           const SoloAdministrador(hijo: ModeracionForoScreen()),
+      routes: [
+        // El mismo detalle, de solo lectura: el administrador lo ve en
+        // cualquier estado y no comenta desde la moderación.
+        GoRoute(
+          path: ':publicacionId',
+          builder: (context, state) => SoloAdministrador(
+            hijo: DetallePublicacionScreen(
+              publicacionId: state.pathParameters['publicacionId']!,
+              soloLectura: true,
+            ),
+          ),
+        ),
+      ],
     ),
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(

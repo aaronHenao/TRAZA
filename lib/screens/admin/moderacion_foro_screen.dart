@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/foro_provider.dart';
+import '../foro/detalle_publicacion_screen.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
@@ -98,6 +99,9 @@ class ModeracionForoScreen extends ConsumerWidget {
                         publicacion: lista[i],
                         ahora: ahora,
                         conEstado: true,
+                        onTap: () => context.push(
+                          DetallePublicacionScreen.rutaAdminDe(lista[i].id),
+                        ),
                       ),
                     ),
                     AsyncError() => EstadoVacio(

@@ -10,6 +10,7 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_publicacion.dart';
+import 'detalle_publicacion_screen.dart';
 import 'nueva_publicacion_screen.dart';
 
 /// El foro de la comunidad (SCRUM-346): lo que publican los corredores, de lo
@@ -164,6 +165,12 @@ class _Lista extends ConsumerWidget {
           key: TarjetaPublicacion.claveDe(publicacion.id),
           publicacion: publicacion,
           ahora: ahora,
+          // SCRUM-351: del foro al detalle. Al volver se refresca para que
+          // el número de comentarios esté al día.
+          onTap: () async {
+            await context.push(DetallePublicacionScreen.rutaDe(publicacion.id));
+            ref.invalidate(publicacionesForoProvider);
+          },
         );
       },
     );

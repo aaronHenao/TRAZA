@@ -69,7 +69,7 @@ class TarjetaPublicacion extends StatelessWidget {
                   ],
                 ),
               ),
-              if (conEstado) _EstadoPublicacion(estado: publicacion.estado),
+              if (conEstado) EstadoPublicacionChip(estado: publicacion.estado),
             ],
           ),
           const SizedBox(height: 12),
@@ -104,8 +104,45 @@ class TarjetaPublicacion extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          _NumeroComentarios(cuantos: publicacion.numeroComentarios),
         ],
       ),
+    );
+  }
+}
+
+/// Cuántos comentarios tiene, al pie de la tarjeta (SCRUM-324).
+class _NumeroComentarios extends StatelessWidget {
+  const _NumeroComentarios({required this.cuantos});
+
+  final int cuantos;
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = switch (cuantos) {
+      0 => 'Comentar',
+      1 => '1 comentario',
+      _ => '$cuantos comentarios',
+    };
+
+    return Row(
+      children: [
+        const Icon(
+          Icons.chat_bubble_outline_rounded,
+          size: 15,
+          color: AppColors.ink3,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          texto,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink2,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -142,8 +179,9 @@ class AvatarAutor extends StatelessWidget {
   }
 }
 
-class _EstadoPublicacion extends StatelessWidget {
-  const _EstadoPublicacion({required this.estado});
+/// Pastilla con el estado de una publicación, para el administrador.
+class EstadoPublicacionChip extends StatelessWidget {
+  const EstadoPublicacionChip({required this.estado, super.key});
 
   final EstadoPublicacion estado;
 

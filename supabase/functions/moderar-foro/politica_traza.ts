@@ -48,9 +48,15 @@ Allowed Behaviors:
 // "Guns/Illegal Weapons"). Por eso se reconocen por palabras clave y no por
 // el nombre completo. El orden importa: gana la primera que coincide, así
 // "Sexual (minor)" no se confunde con "Sexual".
+// Motivo de lo que se rechaza por spam (criterio 1 de SCRUM-322).
+export const MOTIVO_SPAM = "Spam";
+
 const MOTIVOS_POR_CATEGORIA: ReadonlyArray<
   readonly [ReadonlyArray<string>, string]
 > = [
+  // La política de TRAZA la devuelve así: "Safety Categories: Spam"
+  // (probado contra la API el 2026-10-17).
+  [["spam"], MOTIVO_SPAM],
   [["minor"], "Contenido sexual con menores"],
   [["hate"], "Lenguaje discriminatorio o de odio"],
   [["harass"], "Acoso o insultos"],
@@ -80,8 +86,6 @@ export const CATEGORIA_DUDA = "needscaution";
 // Lo que se muestra si la categoría no se reconoce.
 export const MOTIVO_GENERICO = "Contenido contrario a las normas de la comunidad";
 
-// Motivo de lo que se rechaza por spam (criterio 1 de SCRUM-322).
-export const MOTIVO_SPAM = "Spam";
 
 // El nombre de una categoría sin mayúsculas, espacios ni signos, para
 // compararla sin depender de cómo la escriba la API.

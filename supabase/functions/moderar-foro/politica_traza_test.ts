@@ -39,6 +39,10 @@ describe("motivoDeCategoria", () => {
     assert.equal(motivoDeCategoria("Sexual"), "Contenido sexual");
   });
 
+  it("reconoce el spam que nombra la política de TRAZA", () => {
+    assert.equal(motivoDeCategoria("Spam"), "Spam");
+  });
+
   it("usa el motivo genérico si no la reconoce", () => {
     assert.equal(motivoDeCategoria("Other"), MOTIVO_GENERICO);
     assert.equal(motivoDeCategoria("Algo nuevo"), MOTIVO_GENERICO);

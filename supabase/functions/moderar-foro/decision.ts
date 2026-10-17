@@ -45,6 +45,11 @@ function conDuda(detalle: string): string {
   return `${DUDA}: ${detalle}`;
 }
 
+// Los motivos de varias listas, sin repetir y en orden.
+function unir(...listas: ReadonlyArray<readonly string[]>): string[] {
+  return [...new Set(listas.flat())];
+}
+
 export function decidir(
   a: ResultadoPasada,
   b: ResultadoPasada,
@@ -57,6 +62,8 @@ export function decidir(
   const taxonomia = a.veredicto;
   const politica = b.veredicto;
   const motivosA = motivosDeCategorias(taxonomia.categorias);
+  // La política de TRAZA también nombra lo que marca ("Spam").
+  const motivosB = motivosDeCategorias(politica.categorias);
   // "Needs Caution" sola: la propia IA pide que lo mire una persona.
   const soloDudaA = taxonomia.categorias.length > 0 &&
     taxonomia.categorias.every(esCategoriaDeDuda);
@@ -73,21 +80,24 @@ export function decidir(
   }
 
   if (!taxonomia.seguro && !politica.seguro && !soloDudaA) {
-    const categorias = motivosA.length > 0 ? [...motivosA] : [MOTIVO_GENERICO];
-    if (spam.esSpam && !categorias.includes(MOTIVO_SPAM)) {
-      categorias.push(MOTIVO_SPAM);
-    }
-    return { estado: "rechazada", motivo: categorias.join(", "), categorias };
+    const categorias = unir(motivosA, motivosB, spam.esSpam ? [MOTIVO_SPAM] : []);
+    const finales = categorias.length > 0 ? categorias : [MOTIVO_GENERICO];
+    return { estado: "rechazada", motivo: finales.join(", "), categorias: finales };
   }
 
   if (taxonomia.seguro && !politica.seguro) {
     if (spam.esSpam) {
-      return { estado: "rechazada", motivo: MOTIVO_SPAM, categorias: [MOTIVO_SPAM] };
+      const categorias = unir(motivosB, [MOTIVO_SPAM]);
+      return { estado: "rechazada", motivo: categorias.join(", "), categorias };
     }
     return {
       estado: "pendiente",
-      motivo: conDuda("podría incumplir las normas de la comunidad"),
-      categorias: [MOTIVO_GENERICO],
+      motivo: conDuda(
+        motivosB.length > 0
+          ? motivosB.join(", ").toLowerCase()
+          : "podría incumplir las normas de la comunidad",
+      ),
+      categorias: motivosB.length > 0 ? motivosB : [MOTIVO_GENERICO],
     };
   }
 

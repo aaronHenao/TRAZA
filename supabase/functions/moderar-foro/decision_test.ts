@@ -49,6 +49,18 @@ describe("decidir", () => {
     });
   });
 
+  it("usa también lo que nombra la política de TRAZA", () => {
+    const decision = decidir(inseguro("Profanity"), inseguro("Spam"), sinSpam);
+    assert.deepEqual(decision.categorias, ["Lenguaje ofensivo o vulgar", MOTIVO_SPAM]);
+  });
+
+  it("si la política dice spam pero no hay señales, lo decide el administrador", () => {
+    const decision = decidir(seguro, inseguro("Spam"), sinSpam);
+    assert.equal(decision.estado, "pendiente");
+    assert.deepEqual(decision.categorias, [MOTIVO_SPAM]);
+    assert.match(decision.motivo ?? "", /no está segura: spam/);
+  });
+
   it("suma el spam a lo ofensivo si también lo es", () => {
     const decision = decidir(inseguro("Profanity"), inseguro(), conSpam);
     assert.deepEqual(decision.categorias, ["Lenguaje ofensivo o vulgar", MOTIVO_SPAM]);

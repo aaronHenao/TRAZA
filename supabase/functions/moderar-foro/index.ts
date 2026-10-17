@@ -86,7 +86,7 @@ async function moderar(moderacionId: string): Promise<void> {
         apiKey,
         url: variable("NVIDIA_URL") ?? URL_NVIDIA,
         modelo,
-        timeoutMs: Number(variable("NVIDIA_TIMEOUT_MS") ?? 20000),
+        timeoutMs: Number(variable("NVIDIA_TIMEOUT_MS") ?? 30000),
       });
       return { ok: true, veredicto, crudo };
     } catch (e) {

@@ -28,6 +28,7 @@ import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
 import 'models/reto.dart';
 import 'models/resumen_entrenamiento.dart';
+import 'screens/rutas/detalle_ruta_screen.dart';
 import 'screens/rutas/publicar_ruta_screen.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
@@ -239,6 +240,14 @@ final _navegacion = GoRouter(
     GoRoute(
       path: NotificacionesScreen.ruta,
       builder: (context, state) => const NotificacionesScreen(),
+    ),
+    // El detalle de una ruta de la comunidad (SCRUM-240). Se abre con
+    // `push` desde el apartado de rutas del foro, así al cerrarlo se vuelve
+    // a la lista donde estaba.
+    GoRoute(
+      path: DetalleRutaScreen.ruta,
+      builder: (context, state) =>
+          DetalleRutaScreen(rutaId: state.pathParameters['rutaId']!),
     ),
     // Publicar como ruta el recorrido de un entrenamiento (SCRUM-241). Se
     // abre con `push` desde el resumen, que ya tiene el entrenamiento

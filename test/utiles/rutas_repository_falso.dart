@@ -49,8 +49,11 @@ class RutasRepositorioFalso implements RutasRepository {
   }
 
   @override
-  Future<Ruta?> ruta(String id) async =>
-      rutas.where((ruta) => ruta.id == id).firstOrNull;
+  Future<Ruta?> ruta(String id) async {
+    final error = this.error;
+    if (error != null) throw error;
+    return rutas.where((ruta) => ruta.id == id).firstOrNull;
+  }
 
   @override
   Future<Ruta?> rutaDeEntrenamiento(String entrenamientoId) async {

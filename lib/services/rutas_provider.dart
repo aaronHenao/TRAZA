@@ -48,6 +48,11 @@ final rutasPublicadasProvider = FutureProvider.autoDispose<List<Ruta>>(
   (ref) => ref.read(rutasRepositoryProvider).publicadas(),
 );
 
+/// Una ruta con su trazado, para su detalle (SCRUM-240).
+final rutaProvider = FutureProvider.autoDispose.family<Ruta?, String>(
+  (ref, rutaId) => ref.read(rutasRepositoryProvider).ruta(rutaId),
+);
+
 /// Une la validación del borrador con el guardado (SCRUM-241).
 ///
 /// Es el único camino para publicar una ruta: valida primero y solo entonces

@@ -8,6 +8,7 @@ import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/boton_publicar.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_publicacion.dart';
 import '../../widgets/traza_toast.dart';
@@ -95,13 +96,18 @@ class _ForoScreenState extends ConsumerState<ForoScreen> {
     }
 
     return Scaffold(
+      // Abajo a la derecha, donde el pulgar llega. La lista deja
+      // `espacioBotonPublicar` al final para que no tape la última tarjeta.
+      floatingActionButton: BotonPublicar(
+        key: ForoScreen.claveNueva,
+        onPressed: nueva,
+      ),
       body: SafeArea(
         child: AnchoContenido(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Cabecera(
-                onNueva: nueva,
                 rechazosSinVer: rechazosSinVer,
                 onRechazados: () => context.push(MisRechazadosScreen.ruta),
               ),
@@ -235,13 +241,7 @@ class _AvisoNuevas extends StatelessWidget {
 }
 
 class _Cabecera extends StatelessWidget {
-  const _Cabecera({
-    required this.onNueva,
-    required this.rechazosSinVer,
-    required this.onRechazados,
-  });
-
-  final VoidCallback onNueva;
+  const _Cabecera({required this.rechazosSinVer, required this.onRechazados});
 
   /// Cuántos rechazos no ha visto el usuario (criterio 5 de SCRUM-322).
   final int rechazosSinVer;
@@ -291,21 +291,6 @@ class _Cabecera extends StatelessWidget {
               onPressed: onRechazados,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          FilledButton.icon(
-            key: ForoScreen.claveNueva,
-            onPressed: onNueva,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 38),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              textStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            icon: const Icon(Icons.edit_outlined, size: 17),
-            label: const Text('Publicar'),
-          ),
         ],
       ),
     );
@@ -329,7 +314,7 @@ class _Lista extends ConsumerWidget {
         AppSpacing.lg,
         0,
         AppSpacing.lg,
-        AppSpacing.xl,
+        espacioBotonPublicar,
       ),
       itemCount: publicaciones.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),

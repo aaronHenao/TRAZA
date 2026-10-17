@@ -220,6 +220,36 @@ void main() {
     );
   });
 
+  testWidgets('el "+" flotante no tapa los botones de la última moderación', (
+    tester,
+  ) async {
+    await abrir(
+      tester,
+      publicaciones,
+      moderaciones: [
+        for (var i = 0; i < 6; i++)
+          moderacionDePrueba(id: 'm$i', estado: EstadoModeracion.pendiente),
+      ],
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(ModeracionForoScreen.claveNueva),
+        matching: find.byIcon(Icons.add),
+      ),
+      findsOneWidget,
+    );
+    await irA(tester, VistaModeracionForo.pendientes);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+
+    final aprobar = tester.getRect(
+      find.byKey(TarjetaModeracion.claveAprobar('m5')),
+    );
+    final boton = tester.getRect(find.byKey(ModeracionForoScreen.claveNueva));
+    expect(aprobar.bottom, lessThanOrEqualTo(boton.top));
+  });
+
   testWidgets('sin nada pendiente lo dice', (tester) async {
     await abrir(tester, [publicacionDePrueba()]);
 

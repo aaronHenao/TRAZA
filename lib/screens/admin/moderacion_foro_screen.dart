@@ -11,6 +11,7 @@ import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/boton_publicar.dart';
 import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_moderacion.dart';
@@ -75,20 +76,14 @@ class ModeracionForoScreen extends ConsumerWidget {
     };
 
     return Scaffold(
+      // Como en el foro: abajo a la derecha, con hueco al final de las
+      // listas para que no tape la última tarjeta ni sus botones.
+      floatingActionButton: BotonPublicar(key: claveNueva, onPressed: nueva),
       body: SafeArea(
         child: AnchoContenido(
           child: Column(
             children: [
-              TrazaTopBar(
-                titulo: 'Moderación del foro',
-                onAtras: context.pop,
-                accion: TrazaIconButton(
-                  key: claveNueva,
-                  icon: Icons.edit_outlined,
-                  tooltip: 'Nueva publicación',
-                  onPressed: nueva,
-                ),
-              ),
+              TrazaTopBar(titulo: 'Moderación del foro', onAtras: context.pop),
               FilaChips(
                 children: [
                   for (final opcion in VistaModeracionForo.values)
@@ -332,7 +327,7 @@ class _Lista extends StatelessWidget {
         AppSpacing.lg,
         0,
         AppSpacing.lg,
-        AppSpacing.xl,
+        espacioBotonPublicar,
       ),
       itemCount: cuantos,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),

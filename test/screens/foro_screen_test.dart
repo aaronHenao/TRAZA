@@ -387,6 +387,46 @@ void main() {
     });
   });
 
+  group('botón de publicar', () {
+    testWidgets('es un "+" flotante abajo a la derecha, no un botón arriba', (
+      tester,
+    ) async {
+      await abrirForo(tester);
+
+      final boton = find.byKey(ForoScreen.claveNueva);
+      expect(
+        find.descendant(of: boton, matching: find.byIcon(Icons.add)),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+
+      final pantalla = tester.view.physicalSize / tester.view.devicePixelRatio;
+      final centro = tester.getCenter(boton);
+      expect(centro.dx, greaterThan(pantalla.width / 2));
+      expect(centro.dy, greaterThan(pantalla.height / 2));
+    });
+
+    testWidgets('al llegar al final, la última tarjeta queda por encima del '
+        'botón', (tester) async {
+      await abrirForo(
+        tester,
+        publicaciones: [
+          for (var i = 0; i < 12; i++)
+            publicacionDePrueba(id: 'p$i', titulo: 'Publicación $i'),
+        ],
+      );
+
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+
+      final ultima = tester.getRect(
+        find.byKey(TarjetaPublicacion.claveDe('p11')),
+      );
+      final boton = tester.getRect(find.byKey(ForoScreen.claveNueva));
+      expect(ultima.bottom, lessThanOrEqualTo(boton.top));
+    });
+  });
+
   group('rechazos (SCRUM-322)', () {
     final tenis = publicacionDePrueba(id: 'a', titulo: 'Tenis para asfalto');
 

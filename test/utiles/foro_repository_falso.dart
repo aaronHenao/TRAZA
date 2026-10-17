@@ -1,4 +1,5 @@
 import 'package:traza/models/borrador_publicacion.dart';
+import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/services/foro_service.dart';
 
@@ -58,7 +59,83 @@ class ForoRepositorioFalso implements ForoRepository {
     if (error != null) throw error;
     return [...publicaciones];
   }
+
+  /// Comentarios por id de publicación.
+  final Map<String, List<ComentarioForo>> comentariosDe = {};
+
+  NuevoComentario? comentarioRecibido;
+
+  /// Error que lanza solo `comentar`, para simular que la publicación dejó
+  /// de estar disponible mientras se escribía.
+  Object? errorAlComentar;
+
+  @override
+  Future<PublicacionForo?> publicacion(String id) async {
+    final error = this.error;
+    if (error != null) throw error;
+    for (final p in publicaciones) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  @override
+  Future<List<ComentarioForo>> comentarios(String publicacionId) async {
+    final error = this.error;
+    if (error != null) throw error;
+    return [...?comentariosDe[publicacionId]];
+  }
+
+  @override
+  Future<ComentarioForo> comentar(NuevoComentario comentario) async {
+    comentarioRecibido = comentario;
+    final error = errorAlComentar ?? this.error;
+    if (error != null) throw error;
+
+    final lista = comentariosDe.putIfAbsent(comentario.publicacionId, () => []);
+    final creado = ComentarioForo(
+      id: 'com-${lista.length + 1}',
+      publicacionId: comentario.publicacionId,
+      autorId: 'usuario-1',
+      autorNombre: 'Ana Runner',
+      contenido: comentario.contenido,
+      fechaCreacion: ahora ?? DateTime(2026, 10, 16, 9),
+    );
+    lista.add(creado);
+    return creado;
+  }
+
+  /// Simula que la moderación retiró la publicación [id].
+  void retener(String id) {
+    final i = publicaciones.indexWhere((p) => p.id == id);
+    final p = publicaciones[i];
+    publicaciones[i] = PublicacionForo(
+      id: p.id,
+      autorId: p.autorId,
+      autorNombre: p.autorNombre,
+      titulo: p.titulo,
+      contenido: p.contenido,
+      estado: EstadoPublicacion.retenida,
+      fechaCreacion: p.fechaCreacion,
+    );
+  }
 }
+
+/// Un comentario de ejemplo para las pruebas.
+ComentarioForo comentarioDePrueba({
+  String id = 'com-1',
+  String publicacionId = 'pub-1',
+  String autorNombre = 'Lucía',
+  String contenido = 'Prueba con unos de drop bajo.',
+  DateTime? fecha,
+}) => ComentarioForo(
+  id: id,
+  publicacionId: publicacionId,
+  autorId: 'autor-$id',
+  autorNombre: autorNombre,
+  contenido: contenido,
+  fechaCreacion: fecha ?? DateTime(2026, 10, 16, 10),
+);
 
 /// Una publicación de ejemplo para las pruebas.
 PublicacionForo publicacionDePrueba({

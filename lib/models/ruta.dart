@@ -202,38 +202,113 @@ class Ruta {
   String toString() => 'Ruta($nombre, ${estado.valorDb})';
 }
 
-/// Una ruta lista para insertar: el recorrido de un entrenamiento finalizado
-/// con el nombre y la descripción que le puso su autor.
+/// Campos del formulario de publicación de una ruta.
 ///
-/// Se construye con [NuevaRuta.desdeRecorrido], que es quien convierte los
-/// puntos del entrenamiento en el trazado que se guarda.
+/// El criterio 3 pide indicar *la información que hace falta*: por eso los
+/// errores se devuelven por campo.
+enum CampoRuta { nombre, descripcion, trazado }
+
+/// Cuánto puede medir el nombre. Los mismos límites están en las
+/// restricciones de `rutas` (`0029_rutas.sql`).
+const maxCaracteresNombreRuta = 120;
+
+/// Cuánto puede medir la descripción.
+const maxCaracteresDescripcionRuta = 2000;
+
+/// Lo que el usuario lleva escrito sobre el recorrido que quiere publicar,
+/// todavía sin validar.
+///
+/// El trazado no se escribe: sale del entrenamiento. Lo que se valida de él
+/// es que haya recorrido que publicar.
+@immutable
+class BorradorRuta {
+  const BorradorRuta({
+    required this.entrenamientoId,
+    required this.puntos,
+    this.nombre = '',
+    this.descripcion = '',
+  });
+
+  final String entrenamientoId;
+
+  /// El recorrido del entrenamiento, tal como lo grabó el GPS.
+  final List<PuntoGps> puntos;
+
+  final String nombre;
+  final String descripcion;
+
+  BorradorRuta copyWith({String? nombre, String? descripcion}) => BorradorRuta(
+    entrenamientoId: entrenamientoId,
+    puntos: puntos,
+    nombre: nombre ?? this.nombre,
+    descripcion: descripcion ?? this.descripcion,
+  );
+
+  /// Qué le falta o qué está mal, por campo. Vacío si se puede publicar.
+  ///
+  /// La tabla repite estas reglas y es la última palabra; aquí existen para
+  /// que el usuario sepa qué corregir antes de que la base lo rechace.
+  Map<CampoRuta, String> get errores {
+    final errores = <CampoRuta, String>{};
+
+    // Una cadena de espacios no es un nombre.
+    final nombre = this.nombre.trim();
+    if (nombre.isEmpty) {
+      errores[CampoRuta.nombre] = 'Ponle un nombre a tu ruta.';
+    } else if (nombre.length > maxCaracteresNombreRuta) {
+      errores[CampoRuta.nombre] =
+          'El nombre no puede superar $maxCaracteresNombreRuta caracteres.';
+    }
+
+    if (descripcion.trim().length > maxCaracteresDescripcionRuta) {
+      errores[CampoRuta.descripcion] =
+          'La descripción no puede superar $maxCaracteresDescripcionRuta '
+          'caracteres.';
+    }
+
+    // Un punto solo no es un camino que alguien pueda seguir, y dos lecturas
+    // en la misma coordenada son un entrenamiento sin recorrido: el GPS
+    // encendido con el corredor quieto.
+    if (puntos.length < 2 ||
+        puntos.every((punto) => punto.mismaCoordenadaQue(puntos.first))) {
+      errores[CampoRuta.trazado] =
+          'Este entrenamiento no tiene un recorrido que publicar.';
+    }
+
+    return errores;
+  }
+
+  bool get esValido => errores.isEmpty;
+
+  /// La ruta lista para enviar, o null si el borrador tiene errores.
+  ///
+  /// Devolver null es lo que impide registrar una ruta inválida: quien quiera
+  /// crearla tiene que pasar por aquí.
+  NuevaRuta? aNuevaRuta() {
+    if (!esValido) return null;
+
+    final descripcion = this.descripcion.trim();
+    return NuevaRuta._(
+      entrenamientoId: entrenamientoId,
+      nombre: nombre.trim(),
+      descripcion: descripcion.isEmpty ? null : descripcion,
+      trazado: NuevaRuta.trazadoDesdePuntos(puntos),
+    );
+  }
+}
+
+/// Una ruta validada, lista para insertar: el recorrido de un entrenamiento
+/// finalizado con el nombre y la descripción que le puso su autor.
+///
+/// Solo se obtiene de [BorradorRuta.aNuevaRuta].
 @immutable
 class NuevaRuta {
-  const NuevaRuta({
+  const NuevaRuta._({
     required this.entrenamientoId,
     required this.nombre,
     required this.trazado,
     this.descripcion,
   });
-
-  /// El recorrido de [entrenamientoId] convertido en trazado.
-  ///
-  /// [puntos] son los del entrenamiento, en orden de captura; se quedan
-  /// hasta [maxPuntosTrazadoRuta]. Las pausas no se marcan: quien siga la
-  /// ruta no necesita saber dónde paró a tomar agua el que la grabó.
-  factory NuevaRuta.desdeRecorrido({
-    required String entrenamientoId,
-    required String nombre,
-    required List<PuntoGps> puntos,
-    String? descripcion,
-  }) {
-    return NuevaRuta(
-      entrenamientoId: entrenamientoId,
-      nombre: nombre,
-      descripcion: descripcion,
-      trazado: trazadoDesdePuntos(puntos),
-    );
-  }
 
   final String entrenamientoId;
   final String nombre;
@@ -245,16 +320,11 @@ class NuevaRuta {
   Map<String, dynamic> aSupabase() => {
     'entrenamiento_id': entrenamientoId,
     'nombre': nombre,
-    // Una descripción en blanco no se manda: la columna admite nulo y
-    // guardar espacios sería guardar ruido.
-    'descripcion': ?_descripcionGuardable,
+    // Sin descripción no se manda la clave: la columna admite nulo y
+    // guardar una cadena vacía sería guardar ruido.
+    'descripcion': ?descripcion,
     'trazado': [for (final punto in trazado) punto.aJson()],
   };
-
-  String? get _descripcionGuardable {
-    final texto = descripcion?.trim();
-    return texto == null || texto.isEmpty ? null : texto;
-  }
 
   /// Convierte el recorrido de un entrenamiento en el trazado de una ruta,
   /// recortándolo a [maximo] puntos.
@@ -262,6 +332,9 @@ class NuevaRuta {
   /// El recorte reparte los puntos a lo largo del recorrido y conserva
   /// siempre el primero y el último: el primero es el que la base guarda
   /// como inicio de la ruta, y el último es donde termina.
+  ///
+  /// Las pausas no se marcan: quien siga la ruta no necesita saber dónde
+  /// paró a tomar agua el que la grabó.
   static List<PuntoRuta> trazadoDesdePuntos(
     List<PuntoGps> puntos, {
     int maximo = maxPuntosTrazadoRuta,

@@ -37,6 +37,21 @@ class EntrenamientoNoPublicableException implements Exception {
       'no está finalizado o ya no existe';
 }
 
+/// Se lanza cuando ese entrenamiento ya tiene una ruta en pie.
+///
+/// Nadie quiere publicar dos veces el mismo recorrido: pasa por un doble
+/// toque, por reintentar un envío que en realidad funcionó, o por volver al
+/// entrenamiento sin acordarse. Lo impide el índice
+/// `rutas_una_por_entrenamiento` (`0031`), que deja fuera las rechazadas
+/// para que se puedan corregir y volver a mandar.
+class EntrenamientoYaPublicadoException implements Exception {
+  const EntrenamientoYaPublicadoException();
+
+  @override
+  String toString() =>
+      'EntrenamientoYaPublicadoException: ese entrenamiento ya tiene una ruta';
+}
+
 /// Se lanza cuando la base rechaza los datos de la ruta.
 ///
 /// Las restricciones de `rutas` y el trigger `rutas_preparar` piden un nombre
@@ -62,10 +77,19 @@ abstract interface class RutasRepository {
   /// y la distancia.
   ///
   /// Lanza [EntrenamientoNoPublicableException] si el entrenamiento no es del
-  /// usuario, no está finalizado o ya no existe, y
+  /// usuario, no está finalizado o ya no existe,
+  /// [EntrenamientoYaPublicadoException] si ya tiene una ruta en pie, y
   /// [DatosDeRutaInvalidosException] si la base rechaza el nombre o el
   /// trazado.
   Future<Ruta> crear(NuevaRuta ruta);
+
+  /// La ruta que el usuario ya publicó de [entrenamientoId], o null si no
+  /// tiene ninguna.
+  ///
+  /// Es lo que deja al formulario decir "ya publicaste esta ruta" y llevar a
+  /// verla, en vez de dejar crear una gemela y descubrirlo después. Las
+  /// rechazadas no cuentan: esas se pueden corregir y volver a mandar.
+  Future<Ruta?> rutaDeEntrenamiento(String entrenamientoId);
 
   /// Las rutas del usuario de la sesión, de la más reciente a la más
   /// antigua, en cualquier estado.
@@ -118,6 +142,9 @@ class SupabaseRutasRepository implements RutasRepository {
   /// apuntar.
   static const _sinReferencia = '23503';
 
+  /// Ese entrenamiento ya tiene una ruta: lo dice el índice único de 0031.
+  static const _duplicado = '23505';
+
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
 
@@ -149,11 +176,31 @@ class SupabaseRutasRepository implements RutasRepository {
       if (e.code == _restriccionIncumplida) {
         throw DatosDeRutaInvalidosException(e.message);
       }
+      if (e.code == _duplicado) {
+        throw const EntrenamientoYaPublicadoException();
+      }
       if (e.code == _rlsRechazo || e.code == _sinReferencia) {
         throw const EntrenamientoNoPublicableException();
       }
       rethrow;
     }
+  }
+
+  @override
+  Future<Ruta?> rutaDeEntrenamiento(String entrenamientoId) async {
+    final usuarioId = _usuarioId();
+
+    // Como mucho hay una: lo garantiza el índice único de 0031. Sin el
+    // trazado, que esto solo contesta "sí, y es esta".
+    final fila = await _cliente
+        .from(tabla)
+        .select(_columnas)
+        .eq('autor_id', usuarioId)
+        .eq('entrenamiento_id', entrenamientoId)
+        .neq('estado', EstadoRuta.rechazada.valorDb)
+        .maybeSingle();
+
+    return fila == null ? null : Ruta.desdeSupabase(fila);
   }
 
   @override

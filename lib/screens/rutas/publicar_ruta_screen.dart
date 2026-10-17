@@ -339,7 +339,7 @@ class _Recorrido extends StatelessWidget {
         Row(
           children: [
             const Icon(
-              Icons.straighten_rounded,
+              Icons.linear_scale_rounded,
               size: 15,
               color: AppColors.ink3,
             ),

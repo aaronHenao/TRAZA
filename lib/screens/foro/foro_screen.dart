@@ -13,6 +13,7 @@ import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_publicacion.dart';
 import '../../widgets/tarjeta_ruta.dart';
+import '../rutas/detalle_ruta_screen.dart';
 import 'detalle_publicacion_screen.dart';
 import 'nueva_publicacion_screen.dart';
 
@@ -376,6 +377,9 @@ class _Rutas extends ConsumerWidget {
             key: TarjetaRuta.claveDe(lista[i].id),
             ruta: lista[i],
             ahora: ahora,
+            // `push`: al cerrar el detalle se vuelve a la lista donde
+            // estaba (SCRUM-240).
+            onTap: () => context.push(DetalleRutaScreen.rutaDe(lista[i].id)),
           ),
         ),
         AsyncError() => EstadoVacio(

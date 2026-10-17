@@ -81,7 +81,7 @@ class TarjetaRuta extends StatelessWidget {
                 Row(
                   children: [
                     const Icon(
-                      Icons.straighten_rounded,
+                      Icons.linear_scale_rounded,
                       size: 14,
                       color: AppColors.ink3,
                     ),

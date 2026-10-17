@@ -23,6 +23,35 @@ class SesionRequeridaParaRutasException implements Exception {
       'SesionRequeridaParaRutasException: no hay una sesión abierta';
 }
 
+/// Se lanza cuando la base no deja publicar una ruta de ese entrenamiento.
+///
+/// La policy de insert de `rutas` exige que el entrenamiento sea del usuario
+/// y esté finalizado, y la clave foránea, que todavía exista. Un entrenamiento
+/// ajeno, en curso, cancelado o borrado cae aquí.
+class EntrenamientoNoPublicableException implements Exception {
+  const EntrenamientoNoPublicableException();
+
+  @override
+  String toString() =>
+      'EntrenamientoNoPublicableException: el entrenamiento no es del usuario, '
+      'no está finalizado o ya no existe';
+}
+
+/// Se lanza cuando la base rechaza los datos de la ruta.
+///
+/// Las restricciones de `rutas` y el trigger `rutas_preparar` piden un nombre
+/// de 1 a 120 caracteres y un trazado de al menos dos puntos con coordenadas.
+/// No debería llegar aquí: la app valida lo mismo antes de enviar. Si pasa,
+/// la tabla y la validación de Dart se desalinearon.
+class DatosDeRutaInvalidosException implements Exception {
+  const DatosDeRutaInvalidosException(this.detalle);
+
+  final String detalle;
+
+  @override
+  String toString() => 'DatosDeRutaInvalidosException: $detalle';
+}
+
 /// Acceso a la tabla `rutas` (SCRUM-241).
 abstract interface class RutasRepository {
   /// Registra [ruta] a nombre del usuario de la sesión y devuelve la fila
@@ -31,10 +60,30 @@ abstract interface class RutasRepository {
   /// Lo que vuelve trae lo que puso la base: el nombre del autor, el estado
   /// —siempre `en_revision`, publicar manda a revisión— el punto de inicio
   /// y la distancia.
+  ///
+  /// Lanza [EntrenamientoNoPublicableException] si el entrenamiento no es del
+  /// usuario, no está finalizado o ya no existe, y
+  /// [DatosDeRutaInvalidosException] si la base rechaza el nombre o el
+  /// trazado.
   Future<Ruta> crear(NuevaRuta ruta);
+
+  /// Las rutas del usuario de la sesión, de la más reciente a la más
+  /// antigua, en cualquier estado.
+  ///
+  /// En revisión, publicadas y rechazadas: es donde el autor ve en qué quedó
+  /// lo que mandó (criterio 1). Sin el trazado, que un listado no dibuja.
+  Future<List<Ruta>> misRutas();
+
+  /// La ruta con [id] y su trazado, o null si no existe o el usuario no
+  /// puede verla.
+  ///
+  /// Puede volver en cualquier estado: el autor ve lo suyo en revisión, el
+  /// Runner Experto lo que tiene que revisar y el administrador todo. Lo
+  /// publicado lo ve cualquiera.
+  Future<Ruta?> ruta(String id);
 }
 
-/// Inserta en `rutas`.
+/// Lee y escribe en `rutas`.
 ///
 /// La policy de insert exige que el entrenamiento sea del usuario y esté
 /// finalizado: si el insert falla por permiso, revisa eso antes que el
@@ -47,6 +96,27 @@ class SupabaseRutasRepository implements RutasRepository {
        _usuarioActual = usuarioActual;
 
   static const String tabla = 'rutas';
+
+  /// Cuántas rutas se traen de una vez.
+  static const limite = 100;
+
+  /// Lo que se lee de una ruta cuando no hace falta su trazado. Pedir `*`
+  /// traería cientos de coordenadas por fila para no dibujar ninguna.
+  static const _columnas =
+      'id,autor_id,autor_nombre,entrenamiento_id,nombre,descripcion,'
+      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion';
+
+  static const _columnasConTrazado = '$_columnas,trazado';
+
+  /// La policy de insert no dejó crear la fila.
+  static const _rlsRechazo = '42501';
+
+  /// Una restricción de la tabla o el trigger dijo que no.
+  static const _restriccionIncumplida = '23514';
+
+  /// El entrenamiento ya no existe: la clave foránea no encuentra a quién
+  /// apuntar.
+  static const _sinReferencia = '23503';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -63,16 +133,56 @@ class SupabaseRutasRepository implements RutasRepository {
   Future<Ruta> crear(NuevaRuta ruta) async {
     final usuarioId = _usuarioId();
 
-    // Ni el nombre del autor, ni el estado, ni el inicio, ni la distancia
-    // van en el insert: los pone el trigger `rutas_preparar`. Si los mandara
-    // el cliente, cualquiera publicaría a nombre de otro, se saltaría la
-    // revisión del experto o se inventaría los kilómetros de su ruta.
+    try {
+      // Ni el nombre del autor, ni el estado, ni el inicio, ni la distancia
+      // van en el insert: los pone el trigger `rutas_preparar`. Si los
+      // mandara el cliente, cualquiera publicaría a nombre de otro, se
+      // saltaría la revisión del experto o se inventaría sus kilómetros.
+      final fila = await _cliente
+          .from(tabla)
+          .insert({...ruta.aSupabase(), 'autor_id': usuarioId})
+          .select(_columnasConTrazado)
+          .single();
+
+      return Ruta.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDeRutaInvalidosException(e.message);
+      }
+      if (e.code == _rlsRechazo || e.code == _sinReferencia) {
+        throw const EntrenamientoNoPublicableException();
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<Ruta>> misRutas() async {
+    final usuarioId = _usuarioId();
+
+    // El filtro por autor va aunque RLS ya decida qué se puede leer: al
+    // Runner Experto y al administrador les devolvería también las de los
+    // demás, y estas son "mis rutas".
+    final filas = await _cliente
+        .from(tabla)
+        .select(_columnas)
+        .eq('autor_id', usuarioId)
+        .order('fecha_creacion', ascending: false)
+        .limit(limite);
+
+    return filas.map(Ruta.desdeSupabase).toList();
+  }
+
+  @override
+  Future<Ruta?> ruta(String id) async {
+    _usuarioId();
+
     final fila = await _cliente
         .from(tabla)
-        .insert({...ruta.aSupabase(), 'autor_id': usuarioId})
-        .select()
-        .single();
+        .select(_columnasConTrazado)
+        .eq('id', id)
+        .maybeSingle();
 
-    return Ruta.desdeSupabase(fila);
+    return fila == null ? null : Ruta.desdeSupabase(fila);
   }
 }

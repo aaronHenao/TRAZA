@@ -126,13 +126,18 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - Edge Function `supabase/functions/moderar-foro/`: doble pasada con Nemotron (taxonomía estándar + política de TRAZA en `politica_traza.ts`) y señales de spam sin IA. Si coinciden rechaza, si no coinciden deja pendiente para el administrador, y si NVIDIA falla también deja pendiente. Pruebas: `node --test` (o `deno test`) dentro de la carpeta; CI no las corre.
 - App: "En revisión" para el autor, pestañas de moderación con responsable, fecha exacta y motivo, "Mis rechazados" con faltas, contador en el foro y aviso en vivo del rechazo.
 
+- Activa en el proyecto compartido desde el 2026-10-17: 0029 aplicada, secreto en Vault, función desplegada y secretos `NVIDIA_API_KEY` y `MODERACION_WEBHOOK_SECRET` guardados. Una vez listo todo, se vio que "Odio a los peruanos" sale rechazada como discurso de odio en menos de 5 s.
+
+**Cómo se opera:**
+
+- Desplegar tras cambiar la función: `npx supabase@2 functions deploy moderar-foro --project-ref prrumhnwizdirntqvynk --no-verify-jwt --use-api` (requiere `npx supabase@2 login` en una terminal propia; el `!` de Claude Code no es interactivo).
+- Cambiar un secreto (rol Admin u Owner en la organización): `npx supabase@2 secrets set NVIDIA_API_KEY=... --project-ref prrumhnwizdirntqvynk`.
+- Si algo se queda en revisión: Dashboard → Edge Functions → `moderar-foro` → Logs, y en el SQL Editor `select status_code, content, error_msg, created from net._http_response order by created desc limit 10;`. Si `vault.decrypted_secrets` no tiene `moderacion_webhook_secret`, el trigger no avisa a nadie.
+- No usar `supabase db push`: intentaría aplicar todas las migraciones sobre la base compartida.
+
 **Qué falta:**
 
-- **Infraestructura, en este orden** (nada de esto va al repositorio):
-  1. API key en build.nvidia.com. Probar con `curl` contra `https://integrate.api.nvidia.com/v1/chat/completions` que el id `nvidia/nemotron-3.5-content-safety` existe y que acepta `chat_template_kwargs` (`request_categories`, `custom_policy`, `enable_thinking`). Si el id es otro, se cambia con el secreto `NVIDIA_MODELO`, sin tocar código.
-  2. Supabase CLI: `npm i -g supabase`, `supabase login`, `supabase link --project-ref prrumhnwizdirntqvynk` (requiere acceso al proyecto compartido). Si pide `supabase/config.toml`, crearlo con `supabase init` y revisar el diff antes de subirlo.
-  3. `supabase secrets set NVIDIA_API_KEY=... MODERACION_WEBHOOK_SECRET=...`
-  4. SQL Editor: `select vault.create_secret('<el mismo secreto>', 'moderacion_webhook_secret');` y aplicar la 0029. Al final trae un script de verificación.
-  5. `supabase functions deploy moderar-foro --no-verify-jwt`
-- **Probar en el dispositivo** los 7 casos: normal, insulto, spam con enlace, algo ambiguo, edición ofensiva, comentario ofensivo y la key de NVIDIA apagada. Calibrar la heurística de spam (`spam.ts`) y la política con publicaciones reales en español coloquial: puede marcar de más.
+- **Rotar la key de NVIDIA**: la primera se compartió en un chat. Generar otra en build.nvidia.com, guardarla con `secrets set` y revocar la anterior.
+- **Reintentos del aviso**: pg_net manda el aviso una sola vez. Si la función no responde (caída o arranque en frío de más de 5 s), la fila se queda en revisión hasta que el administrador la decida. Si pasa seguido, agregar en una migración nueva un reintento periódico (pg_cron) de lo que lleve más de un minuto en revisión.
+- **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
 - **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.

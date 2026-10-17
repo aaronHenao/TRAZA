@@ -169,6 +169,66 @@ void main() {
       expect(lista.map((c) => c.autorEsAdmin), [true, false, false]);
     });
 
+    test('al editar manda solo el texto de ese comentario', () async {
+      final supabase = _SupabaseFalso(filas: [filaComentario]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.editarComentario('com-1', nuevo);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'PATCH');
+      expect(peticion.url.path, '/rest/v1/comentarios_foro');
+      expect(peticion.url.queryParameters['id'], 'eq.com-1');
+      expect(jsonDecode(peticion.body), {'contenido': 'Buen dato'});
+    });
+
+    test(
+      'si la policy no deja editarlo, la publicación no está disponible',
+      () {
+        final supabase = _SupabaseFalso(codigoPostgres: 'PGRST116');
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.editarComentario('com-1', nuevo),
+          throwsA(isA<PublicacionNoDisponibleException>()),
+        );
+      },
+    );
+
+    test('sabe si un comentario fue editado y lee su historial', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...filaComentario, 'fecha_edicion': '2026-10-16T16:00:00+00:00'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final lista = await supabase.repositorio.comentarios('pub-1');
+      expect(lista.single.editado, isTrue);
+
+      final historial = _SupabaseFalso(
+        filas: [
+          {
+            'id': 'vc-1',
+            'comentario_id': 'com-1',
+            'contenido': 'Antes',
+            'vigente_desde': '2026-10-16T15:00:00+00:00',
+            'reemplazada_en': '2026-10-16T16:00:00+00:00',
+          },
+        ],
+      );
+      addTearDown(historial.cerrar);
+
+      final versiones = await historial.repositorio.versionesComentario(
+        'com-1',
+      );
+
+      expect(versiones.single.contenido, 'Antes');
+      final consulta = historial.peticiones.single.url;
+      expect(consulta.path, '/rest/v1/versiones_comentario_foro');
+      expect(consulta.queryParameters['comentario_id'], 'eq.com-1');
+    });
+
     for (final (codigo, causa) in [
       ('42501', 'la publicación ya no está publicada'),
       ('23503', 'la publicación ya no existe'),

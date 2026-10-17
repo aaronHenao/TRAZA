@@ -49,6 +49,16 @@ class DetallePublicacionScreen extends ConsumerWidget {
   static const claveEditar = Key('publicacion-editar');
   static const claveEditada = Key('publicacion-editada');
 
+  // Editar comentarios (SCRUM-356).
+  static Key claveEditarComentario(String id) => Key('comentario-editar-$id');
+  static Key claveComentarioEditado(String id) => Key('comentario-editado-$id');
+  static const claveCajaEdicion = Key('comentario-caja-edicion');
+  static const claveGuardarEdicion = Key('comentario-guardar-edicion');
+  static const claveConfirmarEdicionComentario = Key(
+    'comentario-confirmar-edicion',
+  );
+  static const comentarioEditado = 'Comentario actualizado';
+
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 
   @override
@@ -148,6 +158,7 @@ class _Conversacion extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final comentarios = ref.watch(comentariosForoProvider(publicacion.id));
     final ahora = ref.read(relojProvider)();
+    final usuario = ref.read(usuarioActualProvider)();
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -169,6 +180,10 @@ class _Conversacion extends ConsumerWidget {
             comentarios: lista,
             autorPublicacionId: publicacion.autorId,
             ahora: ahora,
+            // Se edita lo propio y solo mientras la publicación se pueda
+            // comentar: la misma regla de la policy de update.
+            editablesPor: publicacion.admiteComentarios ? usuario : null,
+            vistaModeracion: vistaModeracion,
           ),
           AsyncError() => MensajeVacio(
             icono: Icons.cloud_off_outlined,
@@ -273,6 +288,8 @@ class _Comentarios extends StatelessWidget {
     required this.comentarios,
     required this.autorPublicacionId,
     required this.ahora,
+    required this.editablesPor,
+    required this.vistaModeracion,
   });
 
   final List<ComentarioForo> comentarios;
@@ -280,6 +297,12 @@ class _Comentarios extends StatelessWidget {
   /// Quién creó la publicación, para marcar sus respuestas con "Autor".
   final String autorPublicacionId;
   final DateTime ahora;
+
+  /// Quién puede editar sus comentarios ahora, o null si nadie.
+  final String? editablesPor;
+
+  /// El administrador abre el historial de lo editado.
+  final bool vistaModeracion;
 
   @override
   Widget build(BuildContext context) {
@@ -319,6 +342,8 @@ class _Comentarios extends StatelessWidget {
               comentario: comentario,
               esDelAutor: comentario.autorId == autorPublicacionId,
               ahora: ahora,
+              editable: comentario.editablePor(editablesPor),
+              vistaModeracion: vistaModeracion,
             ),
       ],
     );
@@ -330,14 +355,23 @@ class _Comentario extends StatelessWidget {
     required this.comentario,
     required this.esDelAutor,
     required this.ahora,
+    required this.editable,
+    required this.vistaModeracion,
   });
 
   final ComentarioForo comentario;
   final bool esDelAutor;
   final DateTime ahora;
+  final bool editable;
+  final bool vistaModeracion;
 
   @override
   Widget build(BuildContext context) {
+    final fecha = fechaRelativa(comentario.fechaCreacion, ahora);
+    // SCRUM-356: todos ven que se editó; solo el administrador abre el
+    // historial.
+    final conHistorial = comentario.editado && vistaModeracion;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       child: Row(
@@ -355,14 +389,49 @@ class _Comentario extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _AutorYFecha(
-                    autor: comentario.autorNombre,
-                    fecha: fechaRelativa(comentario.fechaCreacion, ahora),
-                    enLinea: true,
-                    insignias: [
-                      if (comentario.autorEsAdmin)
-                        const InsigniaForo.administrador(),
-                      if (esDelAutor) const InsigniaForo.autor(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _AutorYFecha(
+                          autor: comentario.autorNombre,
+                          fecha: comentario.editado && !conHistorial
+                              ? '$fecha • Editado'
+                              : fecha,
+                          enLinea: true,
+                          insignias: [
+                            if (comentario.autorEsAdmin)
+                              const InsigniaForo.administrador(),
+                            if (esDelAutor) const InsigniaForo.autor(),
+                          ],
+                          onEditada: conHistorial
+                              ? () => mostrarHistorialComentario(
+                                  context,
+                                  comentario,
+                                )
+                              : null,
+                          textoEdicion: 'Editado',
+                          claveEdicion:
+                              DetallePublicacionScreen.claveComentarioEditado(
+                                comentario.id,
+                              ),
+                        ),
+                      ),
+                      if (editable)
+                        SizedBox.square(
+                          dimension: 28,
+                          child: IconButton(
+                            key: DetallePublicacionScreen.claveEditarComentario(
+                              comentario.id,
+                            ),
+                            onPressed: () =>
+                                _editarComentario(context, comentario),
+                            tooltip: 'Editar comentario',
+                            padding: EdgeInsets.zero,
+                            iconSize: 16,
+                            color: AppColors.ink3,
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -391,14 +460,18 @@ class _AutorYFecha extends StatelessWidget {
     this.enLinea = false,
     this.insignias = const [],
     this.onEditada,
+    this.textoEdicion = 'Editada',
+    this.claveEdicion = DetallePublicacionScreen.claveEditada,
   });
 
   final String autor;
   final String fecha;
 
-  /// Para el administrador, si la publicación se editó: junto a la fecha va
-  /// "Editada" y al tocarlo se abre su historial.
+  /// Para el administrador, si se editó: junto a la fecha va "Editada" (o
+  /// "Editado", [textoEdicion]) y al tocarlo se abre su historial.
   final VoidCallback? onEditada;
+  final String textoEdicion;
+  final Key claveEdicion;
 
   /// Van pegadas al nombre: "Administrador", "Autor".
   final List<Widget> insignias;
@@ -433,14 +506,14 @@ class _AutorYFecha extends StatelessWidget {
                 style: TextStyle(fontSize: 11.5, color: AppColors.ink3),
               ),
               InkWell(
-                key: DetallePublicacionScreen.claveEditada,
+                key: claveEdicion,
                 onTap: alEditada,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 2),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Text(
-                    'Editada',
-                    style: TextStyle(
+                    textoEdicion,
+                    style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.primary,
@@ -481,6 +554,205 @@ class _AutorYFecha extends StatelessWidget {
         Row(children: conInsignias),
         cuando,
       ],
+    );
+  }
+}
+
+/// Abre desde abajo la caja para editar [comentario] (SCRUM-356).
+Future<void> _editarComentario(
+  BuildContext context,
+  ComentarioForo comentario,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: AppColors.bg,
+    builder: (contexto) => Padding(
+      // Que el teclado no tape la caja.
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(contexto).bottom,
+      ),
+      child: _EditarComentario(comentario: comentario),
+    ),
+  );
+}
+
+/// Editar un comentario propio: las mismas reglas que al comentar y una
+/// confirmación antes de guardar (SCRUM-356).
+class _EditarComentario extends ConsumerStatefulWidget {
+  const _EditarComentario({required this.comentario});
+
+  final ComentarioForo comentario;
+
+  @override
+  ConsumerState<_EditarComentario> createState() => _EditarComentarioState();
+}
+
+class _EditarComentarioState extends ConsumerState<_EditarComentario> {
+  late final _texto = TextEditingController(text: widget.comentario.contenido);
+
+  String? _error;
+  bool _guardando = false;
+
+  @override
+  void dispose() {
+    _texto.dispose();
+    super.dispose();
+  }
+
+  Future<void> _guardar() async {
+    if (_guardando) return;
+    final borrador = BorradorComentario(_texto.text);
+
+    // Primero las reglas: no tiene sentido confirmar algo que no se puede
+    // guardar.
+    final error = borrador.error;
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    if (_texto.text.trim() == widget.comentario.contenido) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Guardar los cambios?'),
+        content: const Text(
+          'El comentario quedará marcado como editado y la versión anterior '
+          'quedará guardada.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: DetallePublicacionScreen.claveConfirmarEdicionComentario,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Guardar cambios'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _guardando = true);
+    try {
+      final resultado = await ref
+          .read(edicionComentarioProvider)
+          .editar(widget.comentario, borrador);
+      if (!mounted) return;
+
+      switch (resultado) {
+        case ComentarioEditado():
+          Navigator.of(context).pop();
+          mostrarToast(context, DetallePublicacionScreen.comentarioEditado);
+        case EdicionComentarioInvalida(:final error):
+          setState(() => _error = error);
+        case EdicionComentarioNoDisponible():
+          Navigator.of(context).pop();
+          mostrarToast(context, EdicionComentario.noDisponible);
+        case EdicionComentarioNoGuardada(:final mensaje):
+          // Sin tocar lo escrito: se puede reintentar tal cual.
+          mostrarToast(context, mensaje);
+      }
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final usados = _texto.text.trim().length;
+    final error = _error;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Editar comentario',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            key: DetallePublicacionScreen.claveCajaEdicion,
+            controller: _texto,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 6,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() => _error = null),
+            decoration: InputDecoration(
+              filled: error != null,
+              fillColor: error != null ? AppColors.dangerTint : null,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  error ?? '',
+                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
+                ),
+              ),
+              Text(
+                '$usados/$maxCaracteresComentario',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: usados > maxCaracteresComentario
+                      ? AppColors.danger
+                      : AppColors.ink3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: FilledButton(
+                  key: DetallePublicacionScreen.claveGuardarEdicion,
+                  onPressed: _guardando ? null : _guardar,
+                  child: _guardando
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Guardar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

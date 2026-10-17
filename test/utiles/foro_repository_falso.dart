@@ -164,6 +164,62 @@ class ForoRepositorioFalso implements ForoRepository {
     return [...?versionesDe[publicacionId]];
   }
 
+  NuevoComentario? edicionComentarioRecibida;
+
+  /// Error que lanza solo `editarComentario`.
+  Object? errorAlEditarComentario;
+
+  /// Versiones anteriores por id de comentario, de la más reciente a la
+  /// original.
+  final Map<String, List<VersionComentario>> versionesComentarioDe = {};
+
+  @override
+  Future<ComentarioForo> editarComentario(
+    String id,
+    NuevoComentario cambios,
+  ) async {
+    edicionComentarioRecibida = cambios;
+    final error = errorAlEditarComentario ?? this.error;
+    if (error != null) throw error;
+
+    for (final lista in comentariosDe.values) {
+      final i = lista.indexWhere((c) => c.id == id);
+      if (i < 0) continue;
+      final c = lista[i];
+      // Como el trigger: la versión anterior va al historial.
+      versionesComentarioDe
+          .putIfAbsent(id, () => [])
+          .insert(
+            0,
+            VersionComentario(
+              id: 'vc-${versionesComentarioDe[id]!.length + 1}',
+              contenido: c.contenido,
+              vigenteDesde: c.fechaEdicion ?? c.fechaCreacion,
+            ),
+          );
+      return lista[i] = ComentarioForo(
+        id: c.id,
+        publicacionId: c.publicacionId,
+        autorId: c.autorId,
+        autorNombre: c.autorNombre,
+        contenido: cambios.contenido,
+        fechaCreacion: c.fechaCreacion,
+        autorEsAdmin: c.autorEsAdmin,
+        fechaEdicion: ahora ?? DateTime(2026, 10, 16, 12),
+      );
+    }
+    throw const PublicacionNoDisponibleException();
+  }
+
+  @override
+  Future<List<VersionComentario>> versionesComentario(
+    String comentarioId,
+  ) async {
+    final error = this.error;
+    if (error != null) throw error;
+    return [...?versionesComentarioDe[comentarioId]];
+  }
+
   /// Simula que la moderación retiró la publicación [id].
   void retener(String id) {
     final i = publicaciones.indexWhere((p) => p.id == id);
@@ -190,6 +246,7 @@ ComentarioForo comentarioDePrueba({
   String contenido = 'Prueba con unos de drop bajo.',
   DateTime? fecha,
   bool autorEsAdmin = false,
+  DateTime? fechaEdicion,
 }) => ComentarioForo(
   id: id,
   publicacionId: publicacionId,
@@ -198,6 +255,7 @@ ComentarioForo comentarioDePrueba({
   contenido: contenido,
   fechaCreacion: fecha ?? DateTime(2026, 10, 16, 10),
   autorEsAdmin: autorEsAdmin,
+  fechaEdicion: fechaEdicion,
 );
 
 /// Una publicación de ejemplo para las pruebas.

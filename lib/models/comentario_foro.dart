@@ -19,6 +19,7 @@ class ComentarioForo {
     required this.contenido,
     required this.fechaCreacion,
     this.autorEsAdmin = false,
+    this.fechaEdicion,
   });
 
   final String id;
@@ -31,6 +32,20 @@ class ComentarioForo {
   /// Lo escribió el administrador: lleva la insignia "Administrador".
   final bool autorEsAdmin;
 
+  /// Cuándo se editó por última vez, o null si nunca (SCRUM-356). La pone la
+  /// base al cambiar el contenido.
+  final DateTime? fechaEdicion;
+
+  /// Si se editó: se avisa junto a la fecha.
+  bool get editado => fechaEdicion != null;
+
+  /// Si [usuarioId] lo puede editar: es suyo (SCRUM-356).
+  ///
+  /// Que la publicación siga publicada lo decide quien lo muestra; la policy
+  /// de update de `comentarios_foro` exige las dos cosas.
+  bool editablePor(String? usuarioId) =>
+      usuarioId != null && usuarioId == autorId;
+
   factory ComentarioForo.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
     final publicacionId = fila['publicacion_id'];
@@ -38,13 +53,15 @@ class ComentarioForo {
     final autorNombre = fila['autor_nombre'];
     final contenido = fila['contenido'];
     final fecha = fila['fecha_creacion'];
+    final edicion = fila['fecha_edicion'];
 
     if (id is! String ||
         publicacionId is! String ||
         autorId is! String ||
         autorNombre is! String ||
         contenido is! String ||
-        fecha is! String) {
+        fecha is! String ||
+        (edicion != null && edicion is! String)) {
       throw FormatException(
         'Fila de comentarios_foro incompleta o inesperada',
         fila,
@@ -59,6 +76,9 @@ class ComentarioForo {
       contenido: contenido,
       fechaCreacion: DateTime.parse(fecha).toLocal(),
       autorEsAdmin: fila['autor_es_admin'] == true,
+      fechaEdicion: edicion is String
+          ? DateTime.parse(edicion).toLocal()
+          : null,
     );
   }
 

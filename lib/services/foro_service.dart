@@ -109,6 +109,16 @@ abstract interface class ForoRepository {
   /// Solo el administrador las lee; a cualquier otro la policy le devuelve
   /// una lista vacía.
   Future<List<VersionPublicacion>> versiones(String publicacionId);
+
+  /// Cambia el texto del comentario [id] y devuelve cómo quedó (SCRUM-356).
+  ///
+  /// Lanza [PublicacionNoDisponibleException] si no es del usuario o la
+  /// publicación ya no está publicada.
+  Future<ComentarioForo> editarComentario(String id, NuevoComentario cambios);
+
+  /// Las versiones anteriores de un comentario editado, de la más reciente a
+  /// la original (SCRUM-356). Solo el administrador las lee.
+  Future<List<VersionComentario>> versionesComentario(String comentarioId);
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -123,6 +133,7 @@ class SupabaseForoRepository implements ForoRepository {
   static const _tabla = 'publicaciones_foro';
   static const _tablaComentarios = 'comentarios_foro';
   static const _tablaVersiones = 'versiones_publicacion_foro';
+  static const _tablaVersionesComentario = 'versiones_comentario_foro';
 
   /// Las columnas de la publicación más cuántos comentarios tiene, contados
   /// por PostgREST sin traerlos.
@@ -300,5 +311,52 @@ class SupabaseForoRepository implements ForoRepository {
       }
       rethrow;
     }
+  }
+
+  @override
+  Future<ComentarioForo> editarComentario(
+    String id,
+    NuevoComentario cambios,
+  ) async {
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tablaComentarios)
+          // Solo el texto. El trigger `comentarios_foro_proteger` deja lo
+          // demás como estaba, guarda la versión anterior y marca la edición.
+          .update({'contenido': cambios.contenido})
+          .eq('id', id)
+          .select()
+          .single();
+
+      return ComentarioForo.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // Si no es suyo o la publicación ya no está publicada, la policy de
+      // update no deja tocar la fila y no vuelve ninguna.
+      if (e.code == _sinFilas || e.code == _rlsDenegado) {
+        throw const PublicacionNoDisponibleException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDePublicacionInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<VersionComentario>> versionesComentario(
+    String comentarioId,
+  ) async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaVersionesComentario)
+        .select()
+        .eq('comentario_id', comentarioId)
+        .order('reemplazada_en', ascending: false)
+        .limit(limite);
+
+    return filas.map(VersionComentario.desdeSupabase).toList();
   }
 }

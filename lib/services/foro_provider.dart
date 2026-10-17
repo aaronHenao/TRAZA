@@ -332,3 +332,86 @@ class EdicionPublicacion {
       ..invalidate(moderacionForoProvider);
   }
 }
+
+/// Las versiones anteriores de un comentario editado (SCRUM-356).
+final versionesComentarioProvider = FutureProvider.autoDispose
+    .family<List<VersionComentario>, String>(
+      (ref, comentarioId) =>
+          ref.watch(foroRepositoryProvider).versionesComentario(comentarioId),
+    );
+
+/// Cómo terminó un intento de editar un comentario (SCRUM-356).
+sealed class ResultadoEdicionComentario {
+  const ResultadoEdicionComentario();
+}
+
+/// El cambio quedó guardado.
+class ComentarioEditado extends ResultadoEdicionComentario {
+  const ComentarioEditado(this.comentario);
+
+  final ComentarioForo comentario;
+}
+
+/// El texto no pasó las reglas: no se llegó a tocar la base.
+class EdicionComentarioInvalida extends ResultadoEdicionComentario {
+  const EdicionComentarioInvalida(this.error);
+
+  final String error;
+}
+
+/// La publicación fue retenida o eliminada mientras se editaba.
+class EdicionComentarioNoDisponible extends ResultadoEdicionComentario {
+  const EdicionComentarioNoDisponible();
+}
+
+/// El guardado falló por otra razón. Lo escrito sigue en la caja.
+class EdicionComentarioNoGuardada extends ResultadoEdicionComentario {
+  const EdicionComentarioNoGuardada(this.mensaje);
+
+  final String mensaje;
+}
+
+final edicionComentarioProvider = Provider<EdicionComentario>(
+  EdicionComentario.new,
+);
+
+/// Une la validación con el guardado de un comentario editado (SCRUM-356).
+/// Las reglas son las mismas que al comentar.
+class EdicionComentario {
+  const EdicionComentario(this._ref);
+
+  final Ref _ref;
+
+  static const noDisponible = ComentarioPublicacion.noDisponible;
+  static const noSePudo =
+      'No se pudieron guardar los cambios. Inténtalo de nuevo.';
+
+  Future<ResultadoEdicionComentario> editar(
+    ComentarioForo comentario,
+    BorradorComentario borrador,
+  ) async {
+    final cambios = borrador.aNuevoComentario(comentario.publicacionId);
+    if (cambios == null) return EdicionComentarioInvalida(borrador.error!);
+
+    try {
+      final editado = await _ref
+          .read(foroRepositoryProvider)
+          .editarComentario(comentario.id, cambios);
+      _ref
+        ..invalidate(comentariosForoProvider(comentario.publicacionId))
+        ..invalidate(versionesComentarioProvider(comentario.id));
+      return ComentarioEditado(editado);
+    } on PublicacionNoDisponibleException {
+      // Como al comentar: el detalle pasa a decir que ya no está disponible.
+      _ref
+        ..invalidate(publicacionForoProvider(comentario.publicacionId))
+        ..invalidate(publicacionesForoProvider);
+      return const EdicionComentarioNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const EdicionComentarioNoGuardada(ComentarioPublicacion.sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo editar el comentario: $error');
+      return const EdicionComentarioNoGuardada(noSePudo);
+    }
+  }
+}

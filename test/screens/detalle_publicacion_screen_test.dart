@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/models/version_publicacion.dart';
 import 'package:traza/screens/foro/detalle_publicacion_screen.dart';
@@ -17,7 +18,8 @@ import 'package:traza/widgets/tarjeta_publicacion.dart';
 import '../utiles/foro_repository_falso.dart';
 
 /// El detalle de una publicación con sus comentarios (SCRUM-351) y sus
-/// validaciones (SCRUM-352), y la edición por su autor (SCRUM-355).
+/// validaciones (SCRUM-352), y la edición por su autor de publicaciones
+/// (SCRUM-355) y comentarios (SCRUM-356).
 void main() {
   final ahora = DateTime(2026, 10, 16, 18);
 
@@ -476,6 +478,155 @@ void main() {
       );
 
       expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
+    });
+  });
+
+  group('editar comentarios (SCRUM-356)', () {
+    ComentarioForo mio({DateTime? fechaEdicion}) => comentarioDePrueba(
+      id: 'com-1',
+      autorId: 'usuario-1',
+      autorNombre: 'Ana Runner',
+      contenido: 'Prueba con unos Pegasus.',
+      fechaEdicion: fechaEdicion,
+    );
+
+    Future<void> editarComentario(WidgetTester tester, String texto) async {
+      await tester.tap(
+        find.byKey(DetallePublicacionScreen.claveEditarComentario('com-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(DetallePublicacionScreen.claveCajaEdicion),
+        texto,
+      );
+      await tester.tap(
+        find.byKey(DetallePublicacionScreen.claveGuardarEdicion),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('solo el autor del comentario ve el botón de editar', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.comentariosDe['pub-1'] = [
+          mio(),
+          comentarioDePrueba(id: 'com-2', autorNombre: 'Lucía'),
+        ],
+      );
+
+      expect(
+        find.byKey(DetallePublicacionScreen.claveEditarComentario('com-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(DetallePublicacionScreen.claveEditarComentario('com-2')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('pide confirmación y al guardar queda marcado como editado', (
+      tester,
+    ) async {
+      await abrir(tester, preparar: (r) => r.comentariosDe['pub-1'] = [mio()]);
+
+      await editarComentario(tester, 'Mejor unos Novablast.');
+
+      expect(find.text('¿Guardar los cambios?'), findsOneWidget);
+      expect(repositorio.edicionComentarioRecibida, isNull);
+
+      await tester.tap(
+        find.byKey(DetallePublicacionScreen.claveConfirmarEdicionComentario),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mejor unos Novablast.'), findsOneWidget);
+      expect(find.text('Prueba con unos Pegasus.'), findsNothing);
+      expect(find.text('Hoy • Editado'), findsOneWidget);
+      expect(
+        find.text(DetallePublicacionScreen.comentarioEditado),
+        findsOneWidget,
+      );
+      // El corredor no abre el historial.
+      expect(
+        find.byKey(DetallePublicacionScreen.claveComentarioEditado('com-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('si cancela la confirmación no cambia nada', (tester) async {
+      await abrir(tester, preparar: (r) => r.comentariosDe['pub-1'] = [mio()]);
+
+      await editarComentario(tester, 'Mejor unos Novablast.');
+      await tester.tap(find.text('Cancelar').last);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.edicionComentarioRecibida, isNull);
+    });
+
+    testWidgets('vacío no pregunta y dice que no puede estar vacío', (
+      tester,
+    ) async {
+      await abrir(tester, preparar: (r) => r.comentariosDe['pub-1'] = [mio()]);
+
+      await editarComentario(tester, '   ');
+
+      expect(find.text('¿Guardar los cambios?'), findsNothing);
+      expect(find.text('El comentario no puede estar vacío.'), findsOneWidget);
+      expect(repositorio.edicionComentarioRecibida, isNull);
+    });
+
+    testWidgets('en una publicación retenida no se ofrece editar', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        vistaModeracion: true,
+        publicaciones: [
+          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.retenida),
+        ],
+        preparar: (r) => r.comentariosDe['pub-1'] = [mio()],
+      );
+
+      expect(
+        find.byKey(DetallePublicacionScreen.claveEditarComentario('com-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('el administrador abre el historial del comentario en un '
+        'modal', (tester) async {
+      await abrir(
+        tester,
+        vistaModeracion: true,
+        usuario: 'admin-1',
+        preparar: (r) => r
+          ..comentariosDe['pub-1'] = [
+            comentarioDePrueba(
+              id: 'com-1',
+              contenido: 'Mejor unos Novablast.',
+              fechaEdicion: DateTime(2026, 10, 16, 12),
+            ),
+          ]
+          ..versionesComentarioDe['com-1'] = [
+            VersionComentario(
+              id: 'vc-1',
+              contenido: 'Prueba con unos Pegasus.',
+              vigenteDesde: DateTime(2026, 10, 16, 10),
+            ),
+          ],
+      );
+
+      await tester.tap(
+        find.byKey(DetallePublicacionScreen.claveComentarioEditado('com-1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.text(HistorialVersiones.titulo), findsOneWidget);
+      expect(find.textContaining('Versión 1 · original'), findsOneWidget);
+      expect(find.text('Prueba con unos Pegasus.'), findsOneWidget);
     });
   });
 }

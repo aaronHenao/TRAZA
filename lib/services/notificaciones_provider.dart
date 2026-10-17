@@ -1,7 +1,11 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/notificacion.dart';
+import 'cambios_notificaciones.dart';
+import 'foro_service.dart' show usuarioActualProvider;
 import 'notificaciones_service.dart';
 
 /// Las notificaciones del usuario, para la bandeja.
@@ -32,6 +36,46 @@ final notificacionesSinLeerProvider = FutureProvider.autoDispose<int>((
     debugPrint('No se pudo contar las notificaciones sin leer: $error');
     return 0;
   }
+});
+
+/// Cuánto se espera después de un aviso antes de recargar: si llegan varios
+/// seguidos, se resuelven con una sola consulta.
+const esperaCambiosNotificaciones = Duration(milliseconds: 500);
+
+/// Escucha las notificaciones que le llegan al usuario mientras haya una
+/// pantalla que las mire: la campana de la portada o la bandeja.
+///
+/// Lo que llega solo avisa: se vuelve a consultar, así lo que se muestra pasa
+/// por las policies de select. También recarga al volver la app a primer
+/// plano, por si se aprobó una ruta mientras estaba detrás.
+final notificacionesEnVivoProvider = Provider.autoDispose<void>((ref) {
+  final usuario = ref.read(usuarioActualProvider)();
+  if (usuario == null) return;
+
+  Timer? espera;
+  void recargar() {
+    espera?.cancel();
+    // Por el contenedor y no por `ref`: así solo se recarga lo que alguien
+    // está mirando. `ref.invalidate` montaría el otro provider en modo debug
+    // y lo consultaría sin que nadie lo mire.
+    espera = Timer(esperaCambiosNotificaciones, () {
+      ref.container
+        ..invalidate(notificacionesSinLeerProvider)
+        ..invalidate(misNotificacionesProvider);
+    });
+  }
+
+  final suscripcion = ref
+      .read(fuenteCambiosNotificacionesProvider)
+      .de(usuario)
+      .listen((_) => recargar());
+  final ciclo = AppLifecycleListener(onResume: recargar);
+
+  ref.onDispose(() {
+    espera?.cancel();
+    suscripcion.cancel();
+    ciclo.dispose();
+  });
 });
 
 /// Marcar la bandeja como vista.

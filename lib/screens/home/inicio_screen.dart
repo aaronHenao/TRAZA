@@ -117,6 +117,9 @@ class _Campana extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Mientras la portada esté a la vista, la campana escucha: un aviso
+    // llega cuando el usuario no lo está pidiendo.
+    ref.watch(notificacionesEnVivoProvider);
     final sinLeer = ref.watch(notificacionesSinLeerProvider).valueOrNull ?? 0;
 
     return IconButton(

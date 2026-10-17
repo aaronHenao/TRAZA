@@ -51,6 +51,11 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Con la bandeja abierta, lo que llegue entra solo. Recargar la lista
+    // apaga de paso el resaltado de lo que estaba sin leer, que es el precio
+    // de enseñar lo que hay ahora mismo.
+    ref.watch(notificacionesEnVivoProvider);
+
     ref.listen(misNotificacionesProvider, (_, siguiente) {
       if (siguiente is AsyncData) _darPorVistas();
     });

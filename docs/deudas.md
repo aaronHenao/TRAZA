@@ -117,3 +117,22 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 - **Probarlo contra Supabase de verdad.** `SupabaseCambiosForo` no tiene pruebas automáticas: necesita el WebSocket real. Validar con dos dispositivos y revisar en Realtime → Reports que las conexiones se cierran al salir del foro.
 - **Pasar a Broadcast desde la base cuando haya moderación o más usuarios.** Postgres Changes hace una lectura de RLS por cada suscriptor en cada cambio y no avisa a quien deja de ver una fila: si una publicación pasa a `retenida`, quien la tiene abierta no recibe el evento (se entera en su siguiente acción). Con `realtime.broadcast_changes` en un trigger y un canal privado, un cambio es un solo mensaje y se puede avisar también lo que se retira. La app no cambia: solo `SupabaseCambiosForo`.
+
+## SCRUM-322: moderación del foro con IA (Nemotron 3.5 Content Safety)
+
+**Qué quedó hecho:**
+
+- `0029_foro_moderacion_ia.sql`: lo que escribe un corredor (publicación, comentario o edición) queda `en_revision` y se anota en `moderaciones_foro`, que es a la vez la cola, el historial de auditoría y las faltas de cada usuario. Un trigger avisa a la Edge Function con pg_net. Las ediciones van por `editar_publicacion_foro` / `editar_comentario_foro` y no tocan lo publicado hasta que se aprueban. El administrador decide con `decidir_moderacion`. Lo del administrador no pasa por la IA.
+- Edge Function `supabase/functions/moderar-foro/`: doble pasada con Nemotron (taxonomía estándar + política de TRAZA en `politica_traza.ts`) y señales de spam sin IA. Si coinciden rechaza, si no coinciden deja pendiente para el administrador, y si NVIDIA falla también deja pendiente. Pruebas: `node --test` (o `deno test`) dentro de la carpeta; CI no las corre.
+- App: "En revisión" para el autor, pestañas de moderación con responsable, fecha exacta y motivo, "Mis rechazados" con faltas, contador en el foro y aviso en vivo del rechazo.
+
+**Qué falta:**
+
+- **Infraestructura, en este orden** (nada de esto va al repositorio):
+  1. API key en build.nvidia.com. Probar con `curl` contra `https://integrate.api.nvidia.com/v1/chat/completions` que el id `nvidia/nemotron-3.5-content-safety` existe y que acepta `chat_template_kwargs` (`request_categories`, `custom_policy`, `enable_thinking`). Si el id es otro, se cambia con el secreto `NVIDIA_MODELO`, sin tocar código.
+  2. Supabase CLI: `npm i -g supabase`, `supabase login`, `supabase link --project-ref prrumhnwizdirntqvynk` (requiere acceso al proyecto compartido). Si pide `supabase/config.toml`, crearlo con `supabase init` y revisar el diff antes de subirlo.
+  3. `supabase secrets set NVIDIA_API_KEY=... MODERACION_WEBHOOK_SECRET=...`
+  4. SQL Editor: `select vault.create_secret('<el mismo secreto>', 'moderacion_webhook_secret');` y aplicar la 0029. Al final trae un script de verificación.
+  5. `supabase functions deploy moderar-foro --no-verify-jwt`
+- **Probar en el dispositivo** los 7 casos: normal, insulto, spam con enlace, algo ambiguo, edición ofensiva, comentario ofensivo y la key de NVIDIA apagada. Calibrar la heurística de spam (`spam.ts`) y la política con publicaciones reales en español coloquial: puede marcar de más.
+- **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.

@@ -49,6 +49,11 @@ void main() {
       initialLocation: ForoScreen.ruta,
       routes: [
         GoRoute(
+          path: '/rutas/:rutaId',
+          builder: (_, _) =>
+              const Scaffold(body: Text('Pantalla Detalle de ruta')),
+        ),
+        GoRoute(
           path: ForoScreen.ruta,
           builder: (_, _) => const ForoScreen(),
           routes: [
@@ -318,6 +323,16 @@ void main() {
       expect(find.text('Por Ana · Hoy'), findsOneWidget);
       expect(find.text('Por Luis · Hoy'), findsOneWidget);
       expect(find.text('5.23 km'), findsNWidgets(2));
+    });
+
+    testWidgets('tocar una ruta abre su detalle (SCRUM-240)', (tester) async {
+      await abrirForo(tester, rutasPublicadas: [ruta()]);
+
+      await verRutas(tester);
+      await tester.tap(find.byType(TarjetaRuta));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Detalle de ruta'), findsOneWidget);
     });
 
     testWidgets('una ruta sin distancia registrada lo dice (SCRUM-240)', (

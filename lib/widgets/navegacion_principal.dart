@@ -13,6 +13,8 @@ enum SeccionPrincipal {
     ruta: '/progreso',
   ),
   retos(etiqueta: 'Retos', icono: Icons.flag_outlined, ruta: '/retos'),
+  // El foro de la comunidad (SCRUM-323).
+  foro(etiqueta: 'Foro', icono: Icons.forum_outlined, ruta: '/foro'),
   historial(
     etiqueta: 'Historial',
     icono: Icons.schedule_outlined,
@@ -150,12 +152,19 @@ class _Item extends StatelessWidget {
             children: [
               Icon(destino.icono, size: 23, color: color),
               const SizedBox(height: 4),
-              Text(
-                destino.etiqueta,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: color,
+              // Con seis secciones, en la pantalla más estrecha una etiqueta
+              // larga partiría en dos líneas y desbordaría la barra: se
+              // encoge antes que partirse.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  destino.etiqueta,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
                 ),
               ),
             ],

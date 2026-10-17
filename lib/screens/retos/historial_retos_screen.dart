@@ -7,6 +7,7 @@ import '../../services/reloj_provider.dart';
 import '../../services/retos_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../utils/fecha_relativa.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
@@ -149,44 +150,13 @@ class _Seccion extends StatelessWidget {
 
     final grupos = <String, List<RetoDelUsuario>>{};
     for (final reto in ordenados) {
-      final dia = _cuando(reto.fechaCompletado ?? reto.fechaActivacion, ahora);
+      final dia = fechaRelativa(
+        reto.fechaCompletado ?? reto.fechaActivacion,
+        ahora,
+      );
       grupos.putIfAbsent(dia, () => []).add(reto);
     }
     return grupos.entries.toList();
-  }
-
-  static const _meses = [
-    'ene',
-    'feb',
-    'mar',
-    'abr',
-    'may',
-    'jun',
-    'jul',
-    'ago',
-    'sep',
-    'oct',
-    'nov',
-    'dic',
-  ];
-
-  /// `Hoy`, `Ayer` o `14 sep`, con el mismo criterio que el historial de
-  /// entrenamientos.
-  static String _cuando(DateTime fecha, DateTime ahora) {
-    final dia = fecha.toLocal();
-    final hoy = ahora.toLocal();
-    // Días de calendario, en UTC para que un cambio de horario no convierta
-    // un día en 23 horas.
-    final dias = DateTime.utc(
-      hoy.year,
-      hoy.month,
-      hoy.day,
-    ).difference(DateTime.utc(dia.year, dia.month, dia.day)).inDays;
-
-    if (dias == 0) return 'Hoy';
-    if (dias == 1) return 'Ayer';
-    final texto = '${dia.day} ${_meses[dia.month - 1]}';
-    return dia.year == hoy.year ? texto : '$texto ${dia.year}';
   }
 }
 

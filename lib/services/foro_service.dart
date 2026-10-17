@@ -105,6 +105,9 @@ abstract interface class ForoRepository {
 
   /// Las versiones anteriores de una publicación editada, de la más reciente
   /// a la original (SCRUM-355). La actual no está: es la publicación misma.
+  ///
+  /// Solo el administrador las lee; a cualquier otro la policy le devuelve
+  /// una lista vacía.
   Future<List<VersionPublicacion>> versiones(String publicacionId);
 }
 

@@ -136,7 +136,7 @@ class _NuevaPublicacionScreenState
         title: const Text('¿Guardar los cambios?'),
         content: const Text(
           'La publicación quedará marcada como editada y la versión anterior '
-          'se verá en su historial.',
+          'quedará guardada.',
         ),
         actions: [
           TextButton(

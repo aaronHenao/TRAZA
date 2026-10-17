@@ -33,6 +33,9 @@ Future<void> mostrarHistorialVersiones(
 
 /// Cómo se ha leído una publicación editada: la versión de ahora arriba y
 /// debajo las anteriores, hasta la original (SCRUM-355).
+///
+/// Solo para el administrador: la policy de `versiones_publicacion_foro` no
+/// le deja leerlo a nadie más.
 class HistorialVersiones extends ConsumerWidget {
   const HistorialVersiones({
     required this.publicacion,

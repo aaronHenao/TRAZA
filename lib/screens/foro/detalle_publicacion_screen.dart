@@ -161,7 +161,7 @@ class _Conversacion extends ConsumerWidget {
         _Publicacion(
           publicacion: publicacion,
           ahora: ahora,
-          conEstado: vistaModeracion,
+          vistaModeracion: vistaModeracion,
         ),
         const SizedBox(height: AppSpacing.lg),
         switch (comentarios) {
@@ -189,15 +189,23 @@ class _Publicacion extends StatelessWidget {
   const _Publicacion({
     required this.publicacion,
     required this.ahora,
-    required this.conEstado,
+    required this.vistaModeracion,
   });
 
   final PublicacionForo publicacion;
   final DateTime ahora;
-  final bool conEstado;
+
+  /// El administrador ve además el estado, el motivo y el historial de
+  /// versiones.
+  final bool vistaModeracion;
 
   @override
   Widget build(BuildContext context) {
+    final fecha = fechaRelativa(publicacion.fechaCreacion, ahora);
+    // SCRUM-355: todos ven que se editó; solo el administrador abre el
+    // historial, y solo a él se lo deja leer la base.
+    final conHistorial = publicacion.editada && vistaModeracion;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -208,18 +216,20 @@ class _Publicacion extends StatelessWidget {
             Expanded(
               child: _AutorYFecha(
                 autor: publicacion.autorNombre,
-                fecha: fechaRelativa(publicacion.fechaCreacion, ahora),
+                fecha: publicacion.editada && !conHistorial
+                    ? '$fecha • Editada'
+                    : fecha,
                 insignias: [
                   if (publicacion.autorEsAdmin)
                     const InsigniaForo.administrador(),
                 ],
-                // SCRUM-355: "Editada" abre cómo se leía antes.
-                onEditada: publicacion.editada
+                onEditada: conHistorial
                     ? () => mostrarHistorialVersiones(context, publicacion)
                     : null,
               ),
             ),
-            if (conEstado) EstadoPublicacionChip(estado: publicacion.estado),
+            if (vistaModeracion)
+              EstadoPublicacionChip(estado: publicacion.estado),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
@@ -242,7 +252,7 @@ class _Publicacion extends StatelessWidget {
             height: 1.5,
           ),
         ),
-        if (conEstado && publicacion.motivoModeracion != null) ...[
+        if (vistaModeracion && publicacion.motivoModeracion != null) ...[
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Motivo: ${publicacion.motivoModeracion}',
@@ -386,8 +396,8 @@ class _AutorYFecha extends StatelessWidget {
   final String autor;
   final String fecha;
 
-  /// Si la publicación se editó, junto a la fecha va "Editada" y al tocarlo
-  /// se abre su historial.
+  /// Para el administrador, si la publicación se editó: junto a la fecha va
+  /// "Editada" y al tocarlo se abre su historial.
   final VoidCallback? onEditada;
 
   /// Van pegadas al nombre: "Administrador", "Autor".

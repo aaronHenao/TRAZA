@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/version_publicacion.dart';
 import 'package:traza/screens/foro/detalle_publicacion_screen.dart';
 import 'package:traza/screens/foro/editar_publicacion_screen.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
@@ -361,22 +362,45 @@ void main() {
       expect(find.text(NuevaPublicacionScreen.editada), findsOneWidget);
     });
 
-    testWidgets('editada, lo dice y su historial guarda cómo se leía', (
+    testWidgets('editada, todos ven que se editó pero no su historial', (
       tester,
     ) async {
       await abrir(tester, usuario: autor);
-      expect(find.byKey(DetallePublicacionScreen.claveEditada), findsNothing);
+      expect(find.text('Hoy • Editada'), findsNothing);
 
       await editar(tester, titulo: 'Tenis para asfalto y trail');
       await tester.tap(
         find.byKey(NuevaPublicacionScreen.claveConfirmarEdicion),
       );
       await tester.pumpAndSettle();
-      // Que se cierre el aviso de "Publicación actualizada".
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
 
-      expect(find.text('Editada'), findsOneWidget);
+      expect(find.text('Hoy • Editada'), findsOneWidget);
+      expect(find.byKey(DetallePublicacionScreen.claveEditada), findsNothing);
+    });
+
+    testWidgets('el administrador abre el historial y ve cómo se leía', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        vistaModeracion: true,
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            titulo: 'Tenis para asfalto y trail',
+            fechaEdicion: DateTime(2026, 10, 16, 12),
+          ),
+        ],
+        preparar: (r) => r.versionesDe['pub-1'] = [
+          VersionPublicacion(
+            id: 'ver-1',
+            titulo: '¿Qué tenis para asfalto?',
+            contenido: 'Busco recomendaciones para correr 10 km.',
+            vigenteDesde: DateTime(2026, 10, 16, 8),
+          ),
+        ],
+      );
+
       await tester.tap(find.byKey(DetallePublicacionScreen.claveEditada));
       await tester.pumpAndSettle();
 

@@ -35,6 +35,35 @@ void main() {
     }
   });
 
+  group('cómo funciona', () {
+    test('son tres pasos, numerados en orden', () {
+      // Tres: con más deja de leerse de un vistazo.
+      expect(PasoTraza.values, hasLength(3));
+      expect(PasoTraza.values.map((paso) => paso.numero), [1, 2, 3]);
+    });
+
+    test('cuentan el ciclo entero: correr, experiencia y progresión', () {
+      final ciclo = PasoTraza.values
+          .map((paso) => paso.texto.toLowerCase())
+          .join(' ');
+
+      expect(ciclo, contains('correr'));
+      expect(ciclo, contains('experiencia'));
+      expect(ciclo, contains('nivel'));
+    });
+
+    test('cada paso es una frase corta', () {
+      for (final paso in PasoTraza.values) {
+        expect(paso.texto.trim(), isNotEmpty, reason: paso.name);
+        expect(
+          paso.texto.length,
+          lessThanOrEqualTo(70),
+          reason: 'paso largo en ${paso.name}',
+        );
+      }
+    });
+  });
+
   test('los textos caben en una tarjeta', () {
     // El título va en una línea y el detalle en dos: más largo se corta en un
     // teléfono estrecho.

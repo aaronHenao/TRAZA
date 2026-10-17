@@ -1,9 +1,7 @@
 /// Lo que se le cuenta a quien todavía no conoce la app (SCRUM-278).
 ///
-/// Vive en un modelo y no dentro de la pantalla por dos razones: la
-/// presentación se abre desde dos sitios —el login y el perfil (SCRUM-277)— y
-/// así los dos dicen exactamente lo mismo; y porque el texto se revisa con el
-/// equipo, que no tiene por qué leer código de interfaz para cambiar una
+/// Vive en un modelo y no dentro de la pantalla porque el texto se revisa con
+/// el equipo, que no tiene por qué leer código de interfaz para cambiar una
 /// palabra.
 ///
 /// El contenido sale del prototipo (identidad del splash y su lema) y de lo
@@ -24,6 +22,33 @@ abstract final class PresentacionTraza {
   /// mirar no lo obliga a registrarse.
   static const invitacion =
       'Mira lo que puedes hacer antes de crear tu cuenta.';
+
+  /// Encabeza los pasos: de un vistazo, cómo se juega.
+  static const comoFunciona = 'Cómo funciona';
+}
+
+/// El ciclo de la app en tres pasos (SCRUM-278).
+///
+/// Las funciones dicen *qué* se puede hacer; esto dice *cómo encajan*: correr
+/// da experiencia, y la experiencia da niveles e insignias. Es lo que explica
+/// la gamificación sin que nadie tenga que deducirla de una lista.
+///
+/// Son tres a propósito: con más deja de leerse de un vistazo.
+enum PasoTraza {
+  corres(numero: 1, texto: 'Sales a correr y TRAZA registra tu recorrido.'),
+  ganas(numero: 2, texto: 'Cada actividad y cada reto te dan experiencia.'),
+  avanzas(
+    numero: 3,
+    texto: 'La experiencia te sube de nivel y te da insignias.',
+  );
+
+  const PasoTraza({required this.numero, required this.texto});
+
+  /// Qué puesto ocupa en el ciclo. Empieza en 1, como se le muestra.
+  final int numero;
+
+  /// El paso, en una frase.
+  final String texto;
 }
 
 /// Las funciones principales que se le muestran al usuario (criterio 3 de

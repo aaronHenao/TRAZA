@@ -185,6 +185,30 @@ void main() {
     });
   });
 
+  group('publicadas', () {
+    test('pide solo las publicadas, de la ultima, sin trazado', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      final rutas = await supabase.repositorio.publicadas();
+
+      expect(rutas.single.id, 'ruta-1');
+
+      final peticion = supabase.peticiones.single;
+      // El filtro va aunque RLS ya oculte lo ajeno en revision: al autor le
+      // devolveria tambien lo suyo sin aprobar, y eso no es la comunidad.
+      expect(peticion.url.queryParameters['estado'], 'eq.publicada');
+      expect(
+        peticion.url.queryParameters['order'],
+        startsWith('fecha_publicacion.desc'),
+      );
+      expect(
+        peticion.url.queryParameters['select'],
+        isNot(contains('trazado')),
+      );
+    });
+  });
+
   group('ruta', () {
     test('pide la ruta con su trazado', () async {
       final supabase = _SupabaseFalso(filas: [fila]);

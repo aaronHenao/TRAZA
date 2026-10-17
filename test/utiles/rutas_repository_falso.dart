@@ -42,6 +42,13 @@ class RutasRepositorioFalso implements RutasRepository {
   Future<List<Ruta>> misRutas() async => rutas;
 
   @override
+  Future<List<Ruta>> publicadas() async {
+    final error = this.error;
+    if (error != null) throw error;
+    return rutas.where((ruta) => ruta.publicada).toList();
+  }
+
+  @override
   Future<Ruta?> ruta(String id) async =>
       rutas.where((ruta) => ruta.id == id).firstOrNull;
 

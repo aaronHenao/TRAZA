@@ -4,15 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/borrador_publicacion.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
 import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/cambios_foro.dart';
 import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/rutas_service.dart';
+import 'package:traza/widgets/tarjeta_ruta.dart';
 
 import '../utiles/foro_repository_falso.dart';
 import '../utiles/fuente_cambios_foro_falsa.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 /// El foro (SCRUM-346) y el formulario para publicar en él (SCRUM-344 y
 /// SCRUM-345).
@@ -22,10 +26,13 @@ void main() {
 
   late ForoRepositorioFalso repositorio;
   late FuenteCambiosForoFalsa cambios;
+  late RutasRepositorioFalso rutas;
 
   Future<void> abrirForo(
     WidgetTester tester, {
     List<PublicacionForo> publicaciones = const [],
+    List<Ruta> rutasPublicadas = const [],
+    Object? errorDeRutas,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 900 * 3);
     tester.view.devicePixelRatio = 3;
@@ -37,6 +44,7 @@ void main() {
       ahora: ahora,
     );
     cambios = FuenteCambiosForoFalsa();
+    rutas = RutasRepositorioFalso(rutas: rutasPublicadas, error: errorDeRutas);
     final router = GoRouter(
       initialLocation: ForoScreen.ruta,
       routes: [
@@ -60,6 +68,7 @@ void main() {
           relojProvider.overrideWithValue(() => ahora),
           usuarioActualProvider.overrideWithValue(() => 'usuario-1'),
           fuenteCambiosForoProvider.overrideWithValue(cambios),
+          rutasRepositoryProvider.overrideWithValue(rutas),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -264,6 +273,124 @@ void main() {
         find.text('No se pudo publicar. Inténtalo de nuevo.'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('apartado de rutas (SCRUM-241)', () {
+    Ruta ruta({
+      String id = 'ruta-1',
+      String nombre = 'Vuelta al Parque Norte',
+      String autor = 'Ana',
+      double? distanciaKm = 5.23,
+      DateTime? publicada,
+    }) => Ruta(
+      id: id,
+      autorId: 'usuario-9',
+      autorNombre: autor,
+      nombre: nombre,
+      estado: EstadoRuta.publicada,
+      distanciaKm: distanciaKm,
+      fechaCreacion: DateTime(2026, 10, 15),
+      fechaPublicacion: publicada ?? DateTime(2026, 10, 16, 9),
+    );
+
+    Future<void> verRutas(WidgetTester tester) async {
+      await tester.tap(find.byKey(ForoScreen.claveSeccion(SeccionForo.rutas)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('muestra cada ruta con su autor, su fecha y su distancia', (
+      tester,
+    ) async {
+      await abrirForo(
+        tester,
+        rutasPublicadas: [
+          ruta(),
+          ruta(id: 'ruta-2', nombre: 'Cerro', autor: 'Luis'),
+        ],
+      );
+
+      await verRutas(tester);
+
+      expect(find.byType(TarjetaRuta), findsNWidgets(2));
+      expect(find.text('Vuelta al Parque Norte'), findsOneWidget);
+      // El criterio 4: de quien es y de cuando.
+      expect(find.text('Por Ana · Hoy'), findsOneWidget);
+      expect(find.text('Por Luis · Hoy'), findsOneWidget);
+      expect(find.text('5.23 km'), findsNWidgets(2));
+    });
+
+    testWidgets('una ruta sin distancia registrada lo dice (SCRUM-240)', (
+      tester,
+    ) async {
+      await abrirForo(tester, rutasPublicadas: [ruta(distanciaKm: null)]);
+
+      await verRutas(tester);
+
+      expect(find.text(TarjetaRuta.sinDistancia), findsOneWidget);
+    });
+
+    testWidgets('sin rutas explica de donde salen', (tester) async {
+      await abrirForo(tester);
+
+      await verRutas(tester);
+
+      expect(find.text('Todavía no hay rutas publicadas'), findsOneWidget);
+      expect(
+        find.textContaining('publica su recorrido desde el resumen'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('ahi no se ofrece redactar un tema', (tester) async {
+      // Una ruta no se escribe en el foro: se publica desde el resumen del
+      // entrenamiento que la grabo.
+      await abrirForo(tester, rutasPublicadas: [ruta()]);
+
+      expect(find.byKey(ForoScreen.claveNueva), findsOneWidget);
+      await verRutas(tester);
+      expect(find.byKey(ForoScreen.claveNueva), findsNothing);
+    });
+
+    testWidgets('si no cargan, deja reintentar', (tester) async {
+      await abrirForo(tester, errorDeRutas: StateError('sin red'));
+
+      await verRutas(tester);
+
+      expect(find.text('No pudimos cargar las rutas'), findsOneWidget);
+
+      rutas.error = null;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Reintentar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Todavía no hay rutas publicadas'), findsOneWidget);
+    });
+
+    testWidgets('los temas siguen estando a un chip', (tester) async {
+      await abrirForo(
+        tester,
+        publicaciones: [
+          PublicacionForo(
+            id: 'pub-1',
+            autorId: 'usuario-2',
+            autorNombre: 'Camila',
+            titulo: 'Zapatillas para trail',
+            contenido: '¿Cuáles usan?',
+            estado: EstadoPublicacion.publicada,
+            fechaCreacion: DateTime(2026, 10, 16, 16),
+          ),
+        ],
+        rutasPublicadas: [ruta()],
+      );
+
+      await verRutas(tester);
+      expect(find.text('Zapatillas para trail'), findsNothing);
+
+      await tester.tap(find.byKey(ForoScreen.claveSeccion(SeccionForo.temas)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Zapatillas para trail'), findsOneWidget);
+      expect(find.byType(TarjetaRuta), findsNothing);
     });
   });
 

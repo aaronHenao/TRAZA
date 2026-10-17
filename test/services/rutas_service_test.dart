@@ -32,7 +32,7 @@ void main() {
     'fecha_publicacion': null,
   };
 
-  final nueva = NuevaRuta.desdeRecorrido(
+  final nueva = BorradorRuta(
     entrenamientoId: 'entrenamiento-1',
     nombre: 'Vuelta al estadio',
     puntos: [
@@ -47,7 +47,7 @@ void main() {
         capturadoEn: DateTime(2026, 10, 17, 7, 1),
       ),
     ],
-  );
+  ).aNuevaRuta()!;
 
   group('crear', () {
     test(
@@ -113,6 +113,18 @@ void main() {
       );
     });
 
+    test('el mismo entrenamiento dos veces no pasa dos veces', () async {
+      // 23505: el índice único de 0031. Pasa por un doble toque o por
+      // reintentar un envío que en realidad había funcionado.
+      final supabase = _SupabaseFalso(codigoPostgres: '23505');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.crear(nueva),
+        throwsA(isA<EntrenamientoYaPublicadoException>()),
+      );
+    });
+
     test('una restriccion incumplida habla de los datos de la ruta', () async {
       // 23514: el nombre, el trazado o el trigger que lo revisa.
       final supabase = _SupabaseFalso(codigoPostgres: '23514');
@@ -147,6 +159,29 @@ void main() {
         peticion.url.queryParameters['select'],
         isNot(contains('trazado')),
       );
+    });
+  });
+
+  group('rutaDeEntrenamiento', () {
+    test('busca la del autor y no cuenta las rechazadas', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      final ruta = await supabase.repositorio.rutaDeEntrenamiento(
+        'entrenamiento-1',
+      );
+
+      expect(ruta?.id, 'ruta-1');
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.url.queryParameters['autor_id'], 'eq.usuario-1');
+      expect(
+        peticion.url.queryParameters['entrenamiento_id'],
+        'eq.entrenamiento-1',
+      );
+      // Una rechazada se puede corregir y volver a mandar, así que no
+      // cuenta como "ya la publicaste".
+      expect(peticion.url.queryParameters['estado'], 'neq.rechazada');
     });
   });
 

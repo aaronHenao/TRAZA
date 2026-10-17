@@ -2,13 +2,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/ruta.dart';
 
-/// Conversión del recorrido de un entrenamiento en el trazado de una ruta
-/// (SCRUM-241) y lectura de las filas de `rutas`.
+/// Validación de una ruta antes de enviarla (criterio 3 de SCRUM-241),
+/// conversión del recorrido de un entrenamiento en su trazado y lectura de
+/// las filas de `rutas`.
 void main() {
   PuntoGps punto(double lat, double lng) => PuntoGps(
     latitud: lat,
     longitud: lng,
     capturadoEn: DateTime(2026, 10, 17, 7),
+  );
+
+  final recorrido = [punto(6.2442, -75.5812), punto(6.2450, -75.5800)];
+
+  BorradorRuta borrador({
+    String nombre = 'Vuelta al estadio',
+    String descripcion = '',
+    List<PuntoGps>? puntos,
+  }) => BorradorRuta(
+    entrenamientoId: 'entrenamiento-1',
+    puntos: puntos ?? recorrido,
+    nombre: nombre,
+    descripcion: descripcion,
   );
 
   Map<String, dynamic> fila({
@@ -34,13 +48,75 @@ void main() {
     'fecha_publicacion': fechaPublicacion,
   };
 
-  group('NuevaRuta.desdeRecorrido', () {
-    test('convierte los puntos del entrenamiento en trazado, en orden', () {
-      final nueva = NuevaRuta.desdeRecorrido(
-        entrenamientoId: 'entrenamiento-1',
-        nombre: 'Vuelta al estadio',
-        puntos: [punto(6.2442, -75.5812), punto(6.2450, -75.5800)],
+  group('BorradorRuta.errores', () {
+    test('con nombre y recorrido no tiene nada que corregir', () {
+      expect(borrador().errores, isEmpty);
+      expect(borrador().esValido, isTrue);
+    });
+
+    test('sin nombre lo señala y no deja crear la ruta', () {
+      final sinNombre = borrador(nombre: '   ');
+
+      expect(sinNombre.errores, {
+        CampoRuta.nombre: 'Ponle un nombre a tu ruta.',
+      });
+      expect(sinNombre.aNuevaRuta(), isNull);
+    });
+
+    test('acepta el nombre justo en el limite y rechaza uno mas', () {
+      final justo = borrador(nombre: 'a' * maxCaracteresNombreRuta);
+      final pasado = borrador(nombre: 'a' * (maxCaracteresNombreRuta + 1));
+
+      expect(justo.errores, isEmpty);
+      expect(pasado.errores.keys, [CampoRuta.nombre]);
+    });
+
+    test('una descripcion demasiado larga se señala aparte', () {
+      final largo = borrador(
+        descripcion: 'a' * (maxCaracteresDescripcionRuta + 1),
       );
+
+      expect(largo.errores.keys, [CampoRuta.descripcion]);
+    });
+
+    test('un entrenamiento sin recorrido no se puede publicar', () {
+      final sinPuntos = borrador(puntos: const []);
+      final unPunto = borrador(puntos: [punto(6.2442, -75.5812)]);
+
+      expect(sinPuntos.errores, {
+        CampoRuta.trazado:
+            'Este entrenamiento no tiene un recorrido que publicar.',
+      });
+      expect(unPunto.errores.keys, [CampoRuta.trazado]);
+    });
+
+    test('un entrenamiento quieto tampoco es un recorrido', () {
+      // El GPS encendido con el corredor sin moverse: hay puntos, pero
+      // todos en la misma coordenada.
+      final quieto = borrador(
+        puntos: [
+          punto(6.2442, -75.5812),
+          punto(6.2442, -75.5812),
+          punto(6.2442, -75.5812),
+        ],
+      );
+
+      expect(quieto.errores.keys, [CampoRuta.trazado]);
+    });
+
+    test('señala a la vez todo lo que falta', () {
+      final vacio = borrador(nombre: '', puntos: const []);
+
+      expect(
+        vacio.errores.keys,
+        containsAll([CampoRuta.nombre, CampoRuta.trazado]),
+      );
+    });
+  });
+
+  group('BorradorRuta.aNuevaRuta', () {
+    test('convierte los puntos del entrenamiento en trazado, en orden', () {
+      final nueva = borrador().aNuevaRuta()!;
 
       expect(nueva.trazado, [
         const PuntoRuta(latitud: 6.2442, longitud: -75.5812),
@@ -48,17 +124,35 @@ void main() {
       ]);
     });
 
-    test('un recorrido corto se guarda entero', () {
-      final puntos = [
-        for (var i = 0; i < maxPuntosTrazadoRuta; i++)
-          punto(6.24 + i / 10000, -75.58),
-      ];
+    test('manda lo del cliente y nada de lo que pone la base', () {
+      final nueva = borrador(
+        descripcion: '  Plana y con sombra  ',
+      ).aNuevaRuta()!;
 
-      final nueva = NuevaRuta.desdeRecorrido(
-        entrenamientoId: 'entrenamiento-1',
-        nombre: 'Justo en el límite',
-        puntos: puntos,
-      );
+      expect(nueva.aSupabase(), {
+        'entrenamiento_id': 'entrenamiento-1',
+        'nombre': 'Vuelta al estadio',
+        'descripcion': 'Plana y con sombra',
+        'trazado': [
+          {'lat': 6.2442, 'lng': -75.5812},
+          {'lat': 6.2450, 'lng': -75.5800},
+        ],
+      });
+    });
+
+    test('sin descripcion no se manda la clave', () {
+      final nueva = borrador(descripcion: '   ').aNuevaRuta()!;
+
+      expect(nueva.aSupabase().containsKey('descripcion'), isFalse);
+    });
+
+    test('un recorrido corto se guarda entero', () {
+      final nueva = borrador(
+        puntos: [
+          for (var i = 0; i < maxPuntosTrazadoRuta; i++)
+            punto(6.24 + i / 10000, -75.58),
+        ],
+      ).aNuevaRuta()!;
 
       expect(nueva.trazado.length, maxPuntosTrazadoRuta);
     });
@@ -70,11 +164,7 @@ void main() {
         for (var i = 0; i < 3000; i++) punto(6.24 + i / 10000, -75.58),
       ];
 
-      final nueva = NuevaRuta.desdeRecorrido(
-        entrenamientoId: 'entrenamiento-1',
-        nombre: 'Maratón',
-        puntos: puntos,
-      );
+      final nueva = borrador(puntos: puntos).aNuevaRuta()!;
 
       expect(nueva.trazado.length, maxPuntosTrazadoRuta);
       // El primero importa: es el que la base guarda como inicio de la ruta.
@@ -92,38 +182,6 @@ void main() {
       expect(trazado.last.latitud, 99);
       // Repartidos, no los diez primeros.
       expect(trazado[1].latitud, greaterThan(5));
-    });
-  });
-
-  group('NuevaRuta.aSupabase', () {
-    test('manda lo del cliente y nada de lo que pone la base', () {
-      final nueva = NuevaRuta.desdeRecorrido(
-        entrenamientoId: 'entrenamiento-1',
-        nombre: 'Vuelta al estadio',
-        descripcion: '  Plana y con sombra  ',
-        puntos: [punto(6.2442, -75.5812), punto(6.2450, -75.5800)],
-      );
-
-      expect(nueva.aSupabase(), {
-        'entrenamiento_id': 'entrenamiento-1',
-        'nombre': 'Vuelta al estadio',
-        'descripcion': 'Plana y con sombra',
-        'trazado': [
-          {'lat': 6.2442, 'lng': -75.5812},
-          {'lat': 6.2450, 'lng': -75.5800},
-        ],
-      });
-    });
-
-    test('una descripcion en blanco no se manda', () {
-      final nueva = NuevaRuta.desdeRecorrido(
-        entrenamientoId: 'entrenamiento-1',
-        nombre: 'Sin descripción',
-        descripcion: '   ',
-        puntos: [punto(6.2442, -75.5812), punto(6.2450, -75.5800)],
-      );
-
-      expect(nueva.aSupabase().containsKey('descripcion'), isFalse);
     });
   });
 

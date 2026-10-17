@@ -11,6 +11,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
 import '../../widgets/mapa_trayecto.dart';
+import '../rutas/publicar_ruta_screen.dart';
 import '../../widgets/seccion_experiencia.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
@@ -45,6 +46,9 @@ class ResumenScreen extends ConsumerWidget {
   static String rutaPara(String? entrenamientoId) => entrenamientoId == null
       ? '/resumen'
       : '/resumen/${Uri.encodeComponent(entrenamientoId)}';
+
+  /// Botón para publicar el recorrido como ruta (SCRUM-241).
+  static const clavePublicarRuta = Key('resumen-publicar-ruta');
 
   /// Entrenamiento que pide la navegación, o null si no hay sesión.
   final String? entrenamientoId;
@@ -192,6 +196,20 @@ class _ContenidoResumen extends ConsumerWidget {
                 ),
               const SizedBox(height: 18),
               _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),
+              // Publicar el recorrido como ruta de la comunidad (SCRUM-241).
+              // Va justo debajo del trazado, que es lo que se publica, y
+              // solo si el entrenamiento quedó guardado y tiene recorrido:
+              // sin eso el formulario no tendría nada que ofrecer.
+              if (entrenamientoId != null && resumen.puntos.length >= 2) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: ResumenScreen.clavePublicarRuta,
+                  onPressed: () =>
+                      context.push(PublicarRutaScreen.ruta, extra: resumen),
+                  icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                  label: const Text('Publicar como ruta'),
+                ),
+              ],
               const SizedBox(height: 18),
               // El entrenamiento ya quedó guardado al tocar "Finalizar"
               // (SCRUM-121), así que este botón solo cierra el resumen.

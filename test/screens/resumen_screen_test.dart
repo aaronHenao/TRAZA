@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/experiencia_ganada.dart';
 import 'package:traza/models/nivel.dart';
+import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/regla_experiencia.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
@@ -433,6 +434,61 @@ void main() {
       );
 
       expect(find.byType(SeccionExperiencia), findsNothing);
+    });
+  });
+
+  group('publicar como ruta (SCRUM-241)', () {
+    final conRecorrido = ResumenEntrenamiento(
+      entrenamientoId: 'e-123',
+      nombreActividad: 'Trote',
+      fechaFin: DateTime(2026, 1, 1, 8, 32),
+      duracion: const Duration(minutes: 32),
+      distanciaMetros: 5230.5,
+      puntos: [
+        PuntoGps(
+          latitud: 6.2442,
+          longitud: -75.5812,
+          capturadoEn: DateTime(2026, 1, 1, 8),
+        ),
+        PuntoGps(
+          latitud: 6.2450,
+          longitud: -75.5800,
+          capturadoEn: DateTime(2026, 1, 1, 8, 1),
+        ),
+      ],
+    );
+
+    testWidgets('ofrece publicar el recorrido de la comunidad', (tester) async {
+      await _montar(tester, resumen: conRecorrido);
+
+      expect(find.byKey(ResumenScreen.clavePublicarRuta), findsOneWidget);
+      expect(find.text('Publicar como ruta'), findsOneWidget);
+    });
+
+    testWidgets('sin recorrido no lo ofrece', (tester) async {
+      // Sin puntos no hay trazado que publicar, así que el botón llevaría a
+      // un formulario que solo sabría decir que no.
+      await _montar(tester, resumen: resumen);
+
+      expect(find.byKey(ResumenScreen.clavePublicarRuta), findsNothing);
+    });
+
+    testWidgets('sin sesion tampoco: no hay entrenamiento guardado', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        ruta: '/resumen',
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: null,
+          nombreActividad: 'Trote',
+          fechaFin: DateTime(2026, 1, 1, 8, 32),
+          duracion: const Duration(minutes: 32),
+          puntos: conRecorrido.puntos,
+        ),
+      );
+
+      expect(find.byKey(ResumenScreen.clavePublicarRuta), findsNothing);
     });
   });
 

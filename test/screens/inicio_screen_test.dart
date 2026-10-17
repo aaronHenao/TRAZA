@@ -10,9 +10,16 @@ import 'package:traza/screens/home/inicio_screen.dart';
 import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/inicio_provider.dart';
+import 'package:traza/services/cambios_notificaciones.dart';
+import 'package:traza/services/foro_service.dart' show usuarioActualProvider;
+import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
+
+import '../utiles/fuente_cambios_notificaciones_falsa.dart';
+import '../utiles/notificaciones_falso.dart';
 
 /// Historial de mentira: responde lo que la prueba le indique.
 class _HistorialFalso implements HistorialRepository {
@@ -75,17 +82,24 @@ void main() {
     ),
   ];
 
+  late NotificacionesFalso avisos;
+  late FuenteCambiosNotificacionesFalsa cambiosAvisos;
+
   Future<void> abrirPortada(
     WidgetTester tester, {
     Future<List<ResumenEntrenamiento>> Function()? historial,
     Future<Map<TipoObjetivo, num>> Function()? objetivos,
     String? nombre = 'Ana',
     bool esperar = true,
+    int sinLeer = 0,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    avisos = NotificacionesFalso(sinLeer: sinLeer);
+    cambiosAvisos = FuenteCambiosNotificacionesFalsa();
 
     final router = GoRouter(
       initialLocation: '/inicio',
@@ -102,6 +116,11 @@ void main() {
         GoRoute(
           path: '/perfil',
           builder: (_, _) => const Scaffold(body: Text('Pantalla Perfil')),
+        ),
+        GoRoute(
+          path: NotificacionesScreen.ruta,
+          builder: (_, _) =>
+              const Scaffold(body: Text('Pantalla Notificaciones')),
         ),
         GoRoute(
           path: ProgresionScreen.ruta,
@@ -121,6 +140,9 @@ void main() {
               objetivos ?? () async => {TipoObjetivo.distancia: 15},
             ),
           ),
+          notificacionesRepositoryProvider.overrideWithValue(avisos),
+          fuenteCambiosNotificacionesProvider.overrideWithValue(cambiosAvisos),
+          usuarioActualProvider.overrideWithValue(() => 'usuario-1'),
           // El nombre sale de la sesión de Supabase, que en las pruebas no
           // existe.
           nombreUsuarioProvider.overrideWithValue(nombre),
@@ -252,6 +274,77 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Historial'), findsOneWidget);
+    });
+  });
+
+  group('notificaciones (SCRUM-241)', () {
+    testWidgets('sin avisos sin leer la campana no lleva numero', (
+      tester,
+    ) async {
+      await abrirPortada(tester);
+
+      expect(find.byKey(InicioScreen.claveNotificaciones), findsOneWidget);
+      expect(find.text('0'), findsNothing);
+    });
+
+    testWidgets('un nombre largo no desborda al lado de la campana', (
+      tester,
+    ) async {
+      await abrirPortada(
+        tester,
+        nombre: 'Maria Fernanda de los Angeles Restrepo Echavarria',
+        sinLeer: 3,
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('muestra cuantos avisos lleva sin leer', (tester) async {
+      await abrirPortada(tester, sinLeer: 3);
+
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('pasado de nueve no dice el numero exacto', (tester) async {
+      // El numero exacto no le dice nada a nadie, y el globo no da para mas.
+      await abrirPortada(tester, sinLeer: 12);
+
+      expect(find.text('9+'), findsOneWidget);
+    });
+
+    testWidgets('un aviso que llega enciende la campana sola', (tester) async {
+      // Sin esto habria que volver a la portada o tirar para refrescar para
+      // enterarse de que aprobaron la ruta.
+      await abrirPortada(tester);
+      expect(find.text('1'), findsNothing);
+      expect(cambiosAvisos.escuchando, isTrue);
+
+      avisos.llegaron(1);
+      cambiosAvisos.emitir('usuario-1');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1'), findsOneWidget);
+    });
+
+    testWidgets('al salir de la portada deja de escuchar', (tester) async {
+      // La conexión solo existe mientras hay algo que la mire.
+      await abrirPortada(tester, sinLeer: 1);
+      expect(cambiosAvisos.escuchando, isTrue);
+
+      await tester.tap(find.text('Perfil'));
+      await tester.pumpAndSettle();
+
+      expect(cambiosAvisos.escuchando, isFalse);
+    });
+
+    testWidgets('la campana abre la bandeja', (tester) async {
+      await abrirPortada(tester, sinLeer: 1);
+
+      await tester.tap(find.byKey(InicioScreen.claveNotificaciones));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Notificaciones'), findsOneWidget);
     });
   });
 

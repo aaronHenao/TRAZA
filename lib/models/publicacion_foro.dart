@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 /// En qué situación está una publicación o un comentario del foro.
 ///
 /// Los valores coinciden con la restricción `estado in (...)` de
-/// `publicaciones_foro` y `comentarios_foro` (`0029_foro_moderacion_ia.sql`).
+/// `publicaciones_foro` y `comentarios_foro` (`0035_foro_moderacion_ia.sql`).
 enum EstadoPublicacion {
   /// Recién escrita: la IA la está analizando (SCRUM-322). Solo la ven su
   /// autor y el administrador.

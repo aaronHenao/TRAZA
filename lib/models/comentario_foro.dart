@@ -68,7 +68,7 @@ class ComentarioForo {
     final contenido = fila['contenido'];
     final fecha = fila['fecha_creacion'];
     final edicion = fila['fecha_edicion'];
-    // Antes de 0029 la columna no existía: todo estaba publicado.
+    // Antes de 0035 la columna no existía: todo estaba publicado.
     final estado = EstadoPublicacion.desdeDb(
       fila['estado'] as String? ?? EstadoPublicacion.publicada.valorDb,
     );

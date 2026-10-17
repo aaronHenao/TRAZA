@@ -1,6 +1,6 @@
 // Edge Function `moderar-foro` (SCRUM-322 / SCRUM-335).
 //
-// La llama el trigger `moderaciones_foro_avisar` (0029) cada vez que algo
+// La llama el trigger `moderaciones_foro_avisar` (0035) cada vez que algo
 // del foro queda en revisión. Lee la fila, le pregunta a Nemotron con la
 // doble pasada, suma las señales de spam y devuelve el veredicto con
 // `aplicar_veredicto_ia`.

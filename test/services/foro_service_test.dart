@@ -231,7 +231,7 @@ void main() {
       final supabase = _SupabaseFalso(
         filas: [
           {...filaComentario, 'estado': 'en_revision'},
-          // Antes de 0029 la columna no existía: estaba publicado.
+          // Antes de 0035 la columna no existía: estaba publicado.
           {...filaComentario, 'id': 'com-2'},
         ],
       );

@@ -1,0 +1,65 @@
+-- =============================================================
+-- TRAZA — Sprint 3 · SCRUM-241: una ruta por entrenamiento
+--
+-- Nadie quiere publicar dos veces el mismo recorrido; pasa por
+-- accidente, y lo produce la app:
+--
+--   · doble toque en "Publicar" con la red lenta,
+--   · reintento después de un error que en realidad funcionó
+--     (la petición llegó, la respuesta no),
+--   · volver al entrenamiento días después sin acordarse. Y como
+--     publicar manda a revisión, su ruta no está en el catálogo:
+--     es fácil pensar que no quedó.
+--
+-- El perjudicado es el Runner Experto, que recibe dos rutas
+-- idénticas que revisar, y la comunidad si aprueba las dos.
+--
+-- Las rechazadas quedan fuera del índice a propósito: ahí sí hay
+-- una razón para volver a publicar el mismo entrenamiento —
+-- corregir el nombre o la descripción y mandarlo de nuevo— y
+-- esta regla no puede ser la que lo impida.
+--
+-- `entrenamiento_id` admite nulo (el `on delete set null` de
+-- 0029) y en Postgres los nulos no chocan entre sí, así que las
+-- rutas que se quedaron sin su entrenamiento no se estorban.
+--
+-- El índice es por entrenamiento, no por (autor, entrenamiento):
+-- un entrenamiento es de una sola persona, así que el autor no
+-- añade nada.
+--
+-- Corre esto DESPUÉS de 0029_rutas.sql.
+-- =============================================================
+
+create unique index rutas_una_por_entrenamiento
+  on rutas (entrenamiento_id)
+  where estado <> 'rechazada';
+
+-- -------------------------------------------------------------
+-- Comprobación (correr después, en el SQL Editor)
+--
+-- 1. La segunda no entra. Con un entrenamiento finalizado tuyo:
+--
+--   insert into rutas (autor_id, entrenamiento_id, nombre, trazado)
+--   values (
+--     (select usuario_id from entrenamientos where id = '<ENTRENAMIENTO>'),
+--     '<ENTRENAMIENTO>',
+--     'Primera',
+--     '[{"lat": 6.2442, "lng": -75.5812},
+--       {"lat": 6.2450, "lng": -75.5800}]'::jsonb
+--   );
+--
+--   Repite el mismo insert con nombre 'Segunda': debe fallar con
+--   "duplicate key value violates unique constraint
+--   rutas_una_por_entrenamiento" (23505).
+--
+-- 2. Rechazada, sí se puede volver a publicar:
+--
+--   update rutas set estado = 'rechazada', motivo_rechazo = 'prueba'
+--   where nombre = 'Primera';
+--
+--   Ahora el insert de 'Segunda' tiene que pasar.
+--
+-- Para dejar la base limpia:
+--
+--   delete from rutas where nombre in ('Primera', 'Segunda');
+-- -------------------------------------------------------------

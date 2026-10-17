@@ -122,11 +122,11 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 **Qué quedó hecho:**
 
-- `0029_foro_moderacion_ia.sql`: lo que escribe un corredor (publicación, comentario o edición) queda `en_revision` y se anota en `moderaciones_foro`, que es a la vez la cola, el historial de auditoría y las faltas de cada usuario. Un trigger avisa a la Edge Function con pg_net. Las ediciones van por `editar_publicacion_foro` / `editar_comentario_foro` y no tocan lo publicado hasta que se aprueban. El administrador decide con `decidir_moderacion`. Lo del administrador no pasa por la IA.
+- `0035_foro_moderacion_ia.sql`: lo que escribe un corredor (publicación, comentario o edición) queda `en_revision` y se anota en `moderaciones_foro`, que es a la vez la cola, el historial de auditoría y las faltas de cada usuario. Un trigger avisa a la Edge Function con pg_net. Las ediciones van por `editar_publicacion_foro` / `editar_comentario_foro` y no tocan lo publicado hasta que se aprueban. El administrador decide con `decidir_moderacion`. Lo del administrador no pasa por la IA.
 - Edge Function `supabase/functions/moderar-foro/`: doble pasada con Nemotron (taxonomía estándar + política de TRAZA en `politica_traza.ts`) y señales de spam sin IA. Si coinciden rechaza, si no coinciden deja pendiente para el administrador, y si NVIDIA falla también deja pendiente. Pruebas: `node --test` (o `deno test`) dentro de la carpeta; CI no las corre.
 - App: "En revisión" para el autor, pestañas de moderación con responsable, fecha exacta y motivo, "Mis rechazados" con faltas, contador en el foro y aviso en vivo del rechazo.
 
-- Activa en el proyecto compartido desde el 2026-10-17: 0029 aplicada, secreto en Vault, función desplegada y secretos `NVIDIA_API_KEY` y `MODERACION_WEBHOOK_SECRET` guardados. Una vez listo todo, se vio que "Odio a los peruanos" sale rechazada como discurso de odio en menos de 5 s.
+- Activa en el proyecto compartido desde el 2026-10-17: 0035 aplicada (se aplicó cuando todavía se llamaba 0029, antes de traer las rutas de develop), secreto en Vault, función desplegada y secretos `NVIDIA_API_KEY` y `MODERACION_WEBHOOK_SECRET` guardados. Una vez listo todo, se vio que "Odio a los peruanos" sale rechazada como discurso de odio en menos de 5 s.
 
 **Cómo se opera:**
 

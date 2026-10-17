@@ -19,7 +19,7 @@ enum AccionModeracion {
 }
 
 /// En qué va la moderación. Coincide con la restricción de
-/// `moderaciones_foro` (`0029_foro_moderacion_ia.sql`).
+/// `moderaciones_foro` (`0035_foro_moderacion_ia.sql`).
 enum EstadoModeracion {
   /// La IA la está analizando.
   enRevision('en_revision'),

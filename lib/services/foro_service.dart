@@ -222,7 +222,7 @@ class SupabaseForoRepository implements ForoRepository {
   static const _sinReferencia = '23503';
 
   /// Ya hay una edición en revisión, o la moderación ya se resolvió
-  /// (`0029_foro_moderacion_ia.sql`).
+  /// (`0035_foro_moderacion_ia.sql`).
   static const _yaEnCurso = 'TZ409';
 
   final SupabaseClient? _clienteInyectado;

@@ -26,6 +26,8 @@ import 'screens/retos/detalle_reto_screen.dart';
 import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
 import 'models/reto.dart';
+import 'models/resumen_entrenamiento.dart';
+import 'screens/rutas/publicar_ruta_screen.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
@@ -230,6 +232,16 @@ final _navegacion = GoRouter(
           ],
         ),
       ],
+    ),
+    // Publicar como ruta el recorrido de un entrenamiento (SCRUM-241). Se
+    // abre con `push` desde el resumen, que ya tiene el entrenamiento
+    // cargado y lo manda por `extra`: pedirlo otra vez por id seria
+    // consultar dos veces lo mismo. Sin él no hay recorrido que publicar, y
+    // la pantalla lo dice en vez de reventar.
+    GoRoute(
+      path: PublicarRutaScreen.ruta,
+      builder: (context, state) =>
+          PublicarRutaScreen(resumen: state.extra as ResumenEntrenamiento?),
     ),
     // Lo que el administrador ve del foro. Tras SoloAdministrador como los
     // niveles; la barrera de verdad es la policy de select de la tabla.

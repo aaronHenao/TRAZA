@@ -1,10 +1,13 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
 import '../models/publicacion_foro.dart';
 import '../models/version_publicacion.dart';
+import 'cambios_foro.dart';
 import 'foro_service.dart';
 
 /// Cómo terminó un intento de publicar en el foro (SCRUM-323).
@@ -415,3 +418,108 @@ class EdicionComentario {
     }
   }
 }
+
+/// Cuánto se espera después de un aviso antes de recargar (SCRUM-357): una
+/// ráfaga de cambios se resuelve con una sola consulta.
+const esperaCambiosForo = Duration(milliseconds: 500);
+
+/// Publicaciones de otros que llegaron en vivo y el foro todavía no muestra
+/// (SCRUM-357).
+///
+/// Se guardan aparte para no mover la lista mientras se lee: el foro avisa
+/// "N publicaciones nuevas" y las muestra cuando el usuario lo pide.
+final publicacionesNuevasProvider = StateProvider.autoDispose<Set<String>>(
+  (ref) => const {},
+);
+
+/// Escucha los cambios de todo el foro mientras el foro o la moderación están
+/// abiertos (SCRUM-357).
+///
+/// Lo que llega solo avisa: se recargan los listados, que vuelven a pasar
+/// por las policies. También recarga al volver la app a primer plano, por si
+/// se perdió algo mientras estuvo en segundo plano.
+final foroEnVivoProvider = Provider.autoDispose<void>((ref) {
+  final usuario = ref.read(usuarioActualProvider)();
+
+  Timer? espera;
+  void recargar() {
+    espera?.cancel();
+    // Por el contenedor y no por `ref`: así solo se recarga el listado que
+    // está en pantalla. `ref.invalidate` monta el otro en modo debug y lo
+    // consulta sin que nadie lo mire.
+    espera = Timer(esperaCambiosForo, () {
+      ref.container
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(moderacionForoProvider);
+    });
+  }
+
+  final suscripcion = ref.read(fuenteCambiosForoProvider).delForo().listen((
+    cambio,
+  ) {
+    final id = cambio.id;
+    // Lo que publica uno mismo ya aparece al volver del formulario.
+    if (cambio.esPublicacionNueva && id != null && cambio.autorId != usuario) {
+      final nuevas = ref.read(publicacionesNuevasProvider.notifier);
+      nuevas.state = {...nuevas.state, id};
+    }
+    recargar();
+  });
+  final ciclo = AppLifecycleListener(onResume: recargar);
+
+  ref.onDispose(() {
+    espera?.cancel();
+    suscripcion.cancel();
+    ciclo.dispose();
+  });
+});
+
+/// Escucha una publicación y sus comentarios mientras su detalle está abierto
+/// (SCRUM-357).
+final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
+  ref,
+  publicacionId,
+) {
+  Timer? esperaComentarios;
+  Timer? esperaPublicacion;
+
+  void recargarComentarios() {
+    esperaComentarios?.cancel();
+    esperaComentarios = Timer(
+      esperaCambiosForo,
+      () => ref.invalidate(comentariosForoProvider(publicacionId)),
+    );
+  }
+
+  void recargarPublicacion() {
+    esperaPublicacion?.cancel();
+    esperaPublicacion = Timer(
+      esperaCambiosForo,
+      () => ref.invalidate(publicacionForoProvider(publicacionId)),
+    );
+  }
+
+  void recargarTodo() {
+    recargarComentarios();
+    recargarPublicacion();
+  }
+
+  final suscripcion = ref
+      .read(fuenteCambiosForoProvider)
+      .deLaPublicacion(publicacionId)
+      .listen(
+        (cambio) => switch (cambio.tabla) {
+          TablaForo.comentarios => recargarComentarios(),
+          TablaForo.publicaciones => recargarPublicacion(),
+          null => recargarTodo(),
+        },
+      );
+  final ciclo = AppLifecycleListener(onResume: recargarTodo);
+
+  ref.onDispose(() {
+    esperaComentarios?.cancel();
+    esperaPublicacion?.cancel();
+    suscripcion.cancel();
+    ciclo.dispose();
+  });
+});

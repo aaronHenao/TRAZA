@@ -63,6 +63,8 @@ class DetallePublicacionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // SCRUM-357: comentarios y ediciones aparecen sin refrescar.
+    ref.watch(publicacionEnVivoProvider(publicacionId));
     final publicacion = ref.watch(publicacionForoProvider(publicacionId));
     // Ni el administrador comenta lo retenido o eliminado: la policy de
     // insert de `comentarios_foro` lo rechazaría igual.

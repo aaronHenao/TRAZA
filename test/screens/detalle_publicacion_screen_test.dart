@@ -10,12 +10,14 @@ import 'package:traza/screens/foro/editar_publicacion_screen.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
 import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/foro_provider.dart';
+import 'package:traza/services/cambios_foro.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/widgets/historial_versiones.dart';
 import 'package:traza/widgets/tarjeta_publicacion.dart';
 
 import '../utiles/foro_repository_falso.dart';
+import '../utiles/fuente_cambios_foro_falsa.dart';
 
 /// El detalle de una publicación con sus comentarios (SCRUM-351) y sus
 /// validaciones (SCRUM-352), y la edición por su autor de publicaciones
@@ -24,6 +26,7 @@ void main() {
   final ahora = DateTime(2026, 10, 16, 18);
 
   late ForoRepositorioFalso repositorio;
+  late FuenteCambiosForoFalsa cambios;
 
   Future<void> abrir(
     WidgetTester tester, {
@@ -42,6 +45,7 @@ void main() {
       ahora: ahora,
     );
     preparar?.call(repositorio);
+    cambios = FuenteCambiosForoFalsa();
 
     final router = GoRouter(
       initialLocation: ForoScreen.ruta,
@@ -76,6 +80,7 @@ void main() {
           foroRepositoryProvider.overrideWithValue(repositorio),
           relojProvider.overrideWithValue(() => ahora),
           usuarioActualProvider.overrideWithValue(() => usuario),
+          fuenteCambiosForoProvider.overrideWithValue(cambios),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -627,6 +632,68 @@ void main() {
       expect(find.text(HistorialVersiones.titulo), findsOneWidget);
       expect(find.textContaining('Versión 1 · original'), findsOneWidget);
       expect(find.text('Prueba con unos Pegasus.'), findsOneWidget);
+    });
+  });
+
+  group('en vivo (SCRUM-357)', () {
+    testWidgets('el comentario de otro aparece solo y no borra lo que se '
+        'está escribiendo', (tester) async {
+      await abrir(tester);
+      await tester.enterText(
+        find.byKey(DetallePublicacionScreen.claveCaja),
+        'Yo uso unos',
+      );
+
+      repositorio.comentariosDe['pub-1'] = [
+        comentarioDePrueba(autorNombre: 'Lucía', contenido: 'Prueba Pegasus.'),
+      ];
+      cambios.emitirPublicacion(
+        'pub-1',
+        const CambioForo(
+          tipo: TipoCambioForo.nuevo,
+          tabla: TablaForo.comentarios,
+          id: 'com-1',
+          publicacionId: 'pub-1',
+        ),
+      );
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Prueba Pegasus.'), findsOneWidget);
+      expect(find.text('COMENTARIOS (1)'), findsOneWidget);
+      final caja = tester.widget<TextField>(
+        find.byKey(DetallePublicacionScreen.claveCaja),
+      );
+      expect(caja.controller!.text, 'Yo uso unos');
+    });
+
+    testWidgets('si la retienen, el detalle se entera sin refrescar', (
+      tester,
+    ) async {
+      await abrir(tester);
+
+      repositorio.retener('pub-1');
+      cambios.emitirPublicacion(
+        'pub-1',
+        const CambioForo(tipo: TipoCambioForo.reconectado),
+      );
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(find.text(DetallePublicacionScreen.noDisponible), findsOneWidget);
+      expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
+    });
+
+    testWidgets('escucha solo mientras el detalle está abierto', (
+      tester,
+    ) async {
+      await abrir(tester);
+      expect(cambios.escuchandoPublicacion, isTrue);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(cambios.escuchandoPublicacion, isFalse);
     });
   });
 }

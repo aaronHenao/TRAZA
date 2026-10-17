@@ -31,6 +31,8 @@ class ModeracionForoScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // SCRUM-357: lo nuevo y lo editado aparece sin refrescar.
+    ref.watch(foroEnVivoProvider);
     final todas = ref.watch(moderacionForoProvider);
     final filtradas = ref.watch(moderacionForoFiltradaProvider);
     final vista = ref.watch(vistaModeracionForoProvider);

@@ -104,3 +104,16 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
   - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
   - la confirmación: es destructiva de verdad, así que el diálogo debe decir que también se van los comentarios.
 - Cuando se haga, el botón va junto al de editar en `DetallePublicacionScreen` y se ofrece con la misma regla (`PublicacionForo.editablePor`).
+
+## SCRUM-357: foro en tiempo real con Postgres Changes
+
+**Qué quedó hecho:**
+
+- `0028_foro_tiempo_real.sql` publica `publicaciones_foro` y `comentarios_foro` en Supabase Realtime.
+- `SupabaseCambiosForo` (`lib/services/cambios_foro.dart`) escucha con Postgres Changes. `foroEnVivoProvider` y `publicacionEnVivoProvider` no pintan lo que llega: esperan 500 ms y recargan las consultas de siempre, que pasan por RLS.
+- El foro avisa "N publicaciones nuevas · Ver" en vez de mover la lista. La conexión solo existe mientras hay una pantalla del foro abierta.
+
+**Qué falta:**
+
+- **Probarlo contra Supabase de verdad.** `SupabaseCambiosForo` no tiene pruebas automáticas: necesita el WebSocket real. Validar con dos dispositivos y revisar en Realtime → Reports que las conexiones se cierran al salir del foro.
+- **Pasar a Broadcast desde la base cuando haya moderación o más usuarios.** Postgres Changes hace una lectura de RLS por cada suscriptor en cada cambio y no avisa a quien deja de ver una fila: si una publicación pasa a `retenida`, quien la tiene abierta no recibe el evento (se entera en su siguiente acción). Con `realtime.broadcast_changes` en un trigger y un canal privado, un cambio es un solo mensaje y se puede avisar también lo que se retira. La app no cambia: solo `SupabaseCambiosForo`.

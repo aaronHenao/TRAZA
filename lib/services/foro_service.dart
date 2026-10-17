@@ -11,6 +11,15 @@ final foroRepositoryProvider = Provider<ForoRepository>(
   (ref) => SupabaseForoRepository(),
 );
 
+/// Quién usa el foro: el id del usuario con la sesión abierta, o null.
+///
+/// Es una función y no un valor para que siempre diga la sesión de ahora, no
+/// la que había cuando se creó el provider. Las pruebas la sustituyen.
+final usuarioActualProvider = Provider<String? Function()>(
+  (ref) =>
+      () => Supabase.instance.client.auth.currentUser?.id,
+);
+
 /// Se lanza cuando se intenta usar el foro sin una sesión abierta.
 class SesionRequeridaParaForoException implements Exception {
   const SesionRequeridaParaForoException();
@@ -33,12 +42,12 @@ class DatosDePublicacionInvalidosException implements Exception {
   String toString() => 'DatosDePublicacionInvalidosException: $detalle';
 }
 
-/// Se lanza al comentar una publicación que fue eliminada o retenida por la
-/// moderación (criterio 3 de SCRUM-324).
+/// Se lanza al comentar o editar una publicación que fue eliminada o retenida
+/// por la moderación (criterio 3 de SCRUM-324, SCRUM-355).
 ///
-/// Quien lo impide es la policy de insert de `comentarios_foro`, que exige
-/// que la publicación esté publicada en ese momento: la app puede tener en
-/// pantalla una versión vieja.
+/// Quienes lo impiden son las policies de `comentarios_foro` y
+/// `publicaciones_foro`, que exigen que la publicación esté publicada en ese
+/// momento: la app puede tener en pantalla una versión vieja.
 class PublicacionNoDisponibleException implements Exception {
   const PublicacionNoDisponibleException();
 
@@ -85,6 +94,13 @@ abstract interface class ForoRepository {
   /// Lanza [PublicacionNoDisponibleException] si la publicación ya no está
   /// publicada.
   Future<ComentarioForo> comentar(NuevoComentario comentario);
+
+  /// Cambia el título y el contenido de la publicación [id] y devuelve cómo
+  /// quedó (SCRUM-355).
+  ///
+  /// Lanza [PublicacionNoDisponibleException] si no es del usuario o ya no
+  /// está publicada.
+  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios);
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -109,6 +125,10 @@ class SupabaseForoRepository implements ForoRepository {
 
   static const _restriccionIncumplida = '23514';
   static const _rlsDenegado = '42501';
+
+  /// La consulta pidió una fila y no vino ninguna: en un update, la policy
+  /// no dejó tocar la fila.
+  static const _sinFilas = 'PGRST116';
 
   /// La publicación ya no existe: la clave foránea no encuentra a quién
   /// apuntar.
@@ -221,6 +241,34 @@ class SupabaseForoRepository implements ForoRepository {
       // La policy de insert exige que la publicación siga publicada; si fue
       // retenida o eliminada, la fila viola la seguridad a nivel de fila.
       if (e.code == _rlsDenegado || e.code == _sinReferencia) {
+        throw const PublicacionNoDisponibleException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDePublicacionInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios) async {
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tabla)
+          // Solo el texto. Lo demás, aunque se mandara, lo deja igual el
+          // trigger `publicaciones_foro_proteger`.
+          .update(cambios.aSupabase())
+          .eq('id', id)
+          .select(_columnas)
+          .single();
+
+      return PublicacionForo.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // Si no es suya o ya no está publicada, la policy de update no deja ver
+      // la fila: el update no toca nada y no vuelve ninguna.
+      if (e.code == _sinFilas || e.code == _rlsDenegado) {
         throw const PublicacionNoDisponibleException();
       }
       if (e.code == _restriccionIncumplida) {

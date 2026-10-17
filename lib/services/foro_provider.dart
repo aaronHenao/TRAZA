@@ -237,3 +237,88 @@ class ComentarioPublicacion {
     }
   }
 }
+
+/// Cómo terminó un intento de editar una publicación (SCRUM-355).
+sealed class ResultadoEdicion {
+  const ResultadoEdicion();
+}
+
+/// Los cambios quedaron guardados.
+class PublicacionEditada extends ResultadoEdicion {
+  const PublicacionEditada(this.publicacion);
+
+  final PublicacionForo publicacion;
+}
+
+/// El borrador no pasó las reglas: no se llegó a tocar la base.
+class EdicionConErrores extends ResultadoEdicion {
+  const EdicionConErrores(this.errores);
+
+  final Map<CampoPublicacion, String> errores;
+}
+
+/// La publicación fue retenida o eliminada mientras se editaba.
+class EdicionNoDisponible extends ResultadoEdicion {
+  const EdicionNoDisponible();
+}
+
+/// El guardado falló por otra razón. Lo escrito sigue en el formulario.
+class EdicionNoGuardada extends ResultadoEdicion {
+  const EdicionNoGuardada(this.mensaje);
+
+  final String mensaje;
+}
+
+final edicionPublicacionProvider = Provider<EdicionPublicacion>(
+  EdicionPublicacion.new,
+);
+
+/// Une la validación con el guardado de los cambios (SCRUM-355). Las reglas
+/// son las mismas que al publicar.
+class EdicionPublicacion {
+  const EdicionPublicacion(this._ref);
+
+  final Ref _ref;
+
+  static const noDisponible = 'La publicación ya no se encuentra disponible.';
+  static const sinSesion = 'Inicia sesión para editar tu publicación.';
+  static const noSePudo =
+      'No se pudieron guardar los cambios. Inténtalo de '
+      'nuevo.';
+  static const datosRechazados = CreacionPublicacion.datosRechazados;
+
+  Future<ResultadoEdicion> editar(
+    String publicacionId,
+    BorradorPublicacion borrador,
+  ) async {
+    final cambios = borrador.aNuevaPublicacion();
+    if (cambios == null) return EdicionConErrores(borrador.errores);
+
+    try {
+      final editada = await _ref
+          .read(foroRepositoryProvider)
+          .editar(publicacionId, cambios);
+      _refrescar(publicacionId);
+      return PublicacionEditada(editada);
+    } on PublicacionNoDisponibleException {
+      _refrescar(publicacionId);
+      return const EdicionNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const EdicionNoGuardada(sinSesion);
+    } on DatosDePublicacionInvalidosException catch (error) {
+      debugPrint('La base rechazó la edición: $error');
+      return const EdicionNoGuardada(datosRechazados);
+    } catch (error) {
+      debugPrint('No se pudo editar: $error');
+      return const EdicionNoGuardada(noSePudo);
+    }
+  }
+
+  /// El detalle y los dos listados muestran el título y el contenido.
+  void _refrescar(String publicacionId) {
+    _ref
+      ..invalidate(publicacionForoProvider(publicacionId))
+      ..invalidate(publicacionesForoProvider)
+      ..invalidate(moderacionForoProvider);
+  }
+}

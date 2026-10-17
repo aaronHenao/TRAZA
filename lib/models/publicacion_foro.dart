@@ -68,6 +68,15 @@ class PublicacionForo {
   /// Si se le puede comentar: solo a lo publicado (criterio 3 de SCRUM-324).
   bool get admiteComentarios => estado == EstadoPublicacion.publicada;
 
+  /// Si [usuarioId] la puede editar: es suya y sigue publicada (SCRUM-355).
+  ///
+  /// Lo mismo exige la policy de update de `publicaciones_foro`; aquí solo
+  /// decide si se ofrece el botón.
+  bool editablePor(String? usuarioId) =>
+      usuarioId != null &&
+      usuarioId == autorId &&
+      estado == EstadoPublicacion.publicada;
+
   factory PublicacionForo.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
     final autorId = fila['autor_id'];

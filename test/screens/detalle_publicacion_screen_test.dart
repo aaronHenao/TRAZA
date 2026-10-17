@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/screens/foro/detalle_publicacion_screen.dart';
+import 'package:traza/screens/foro/editar_publicacion_screen.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
+import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
@@ -13,7 +15,7 @@ import 'package:traza/widgets/tarjeta_publicacion.dart';
 import '../utiles/foro_repository_falso.dart';
 
 /// El detalle de una publicación con sus comentarios (SCRUM-351) y sus
-/// validaciones (SCRUM-352).
+/// validaciones (SCRUM-352), y la edición por su autor (SCRUM-355).
 void main() {
   final ahora = DateTime(2026, 10, 16, 18);
 
@@ -23,6 +25,7 @@ void main() {
     WidgetTester tester, {
     List<PublicacionForo>? publicaciones,
     bool vistaModeracion = false,
+    String usuario = 'usuario-1',
     void Function(ForoRepositorioFalso)? preparar,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 900 * 3);
@@ -49,6 +52,14 @@ void main() {
                 publicacionId: state.pathParameters['publicacionId']!,
                 vistaModeracion: vistaModeracion,
               ),
+              routes: [
+                GoRoute(
+                  path: 'editar',
+                  builder: (_, state) => EditarPublicacionScreen(
+                    publicacionId: state.pathParameters['publicacionId']!,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -60,6 +71,7 @@ void main() {
         overrides: [
           foroRepositoryProvider.overrideWithValue(repositorio),
           relojProvider.overrideWithValue(() => ahora),
+          usuarioActualProvider.overrideWithValue(() => usuario),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -282,5 +294,136 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DetallePublicacionScreen), findsOneWidget);
+  });
+
+  group('editar (SCRUM-355)', () {
+    // `publicacionDePrueba(id: 'pub-1')` la escribió 'autor-pub-1'.
+    const autor = 'autor-pub-1';
+
+    Future<void> editar(
+      WidgetTester tester, {
+      String? titulo,
+      String? contenido,
+    }) async {
+      await tester.tap(find.byKey(DetallePublicacionScreen.claveEditar));
+      await tester.pumpAndSettle();
+      if (titulo != null) {
+        await tester.enterText(
+          find.byKey(NuevaPublicacionScreen.claveTitulo),
+          titulo,
+        );
+      }
+      if (contenido != null) {
+        await tester.enterText(
+          find.byKey(NuevaPublicacionScreen.claveContenido),
+          contenido,
+        );
+      }
+      await tester.tap(find.byKey(NuevaPublicacionScreen.clavePublicar));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('solo el autor ve el botón de editar', (tester) async {
+      await abrir(tester);
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
+    });
+
+    testWidgets('el autor abre el formulario con lo que había escrito', (
+      tester,
+    ) async {
+      await abrir(tester, usuario: autor);
+
+      await tester.tap(find.byKey(DetallePublicacionScreen.claveEditar));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar publicación'), findsOneWidget);
+      expect(find.text('¿Qué tenis para asfalto?'), findsOneWidget);
+      expect(find.text('Guardar cambios'), findsOneWidget);
+    });
+
+    testWidgets('antes de guardar pide confirmación; al confirmar vuelve al '
+        'detalle con el cambio', (tester) async {
+      await abrir(tester, usuario: autor);
+
+      await editar(tester, titulo: 'Tenis para asfalto y trail');
+
+      expect(find.text('¿Guardar los cambios?'), findsOneWidget);
+      expect(repositorio.edicionRecibida, isNull);
+
+      await tester.tap(
+        find.byKey(NuevaPublicacionScreen.claveConfirmarEdicion),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DetallePublicacionScreen), findsOneWidget);
+      expect(find.text('Tenis para asfalto y trail'), findsOneWidget);
+      expect(find.text(NuevaPublicacionScreen.editada), findsOneWidget);
+    });
+
+    testWidgets('si cancela, no se guarda nada y sigue editando', (
+      tester,
+    ) async {
+      await abrir(tester, usuario: autor);
+
+      await editar(tester, titulo: 'Otro título');
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.edicionRecibida, isNull);
+      expect(find.text('Editar publicación'), findsOneWidget);
+      expect(find.text('Otro título'), findsOneWidget);
+    });
+
+    testWidgets('con un campo vacío no pregunta y marca el error', (
+      tester,
+    ) async {
+      await abrir(tester, usuario: autor);
+
+      await editar(tester, titulo: '   ');
+
+      expect(find.text('¿Guardar los cambios?'), findsNothing);
+      expect(find.text('Ponle un título a tu publicación.'), findsOneWidget);
+      expect(repositorio.edicionRecibida, isNull);
+    });
+
+    testWidgets('sin cambios no pregunta', (tester) async {
+      await abrir(tester, usuario: autor);
+
+      await editar(tester);
+
+      expect(find.text('¿Guardar los cambios?'), findsNothing);
+      expect(find.text(NuevaPublicacionScreen.sinCambios), findsOneWidget);
+    });
+
+    testWidgets('si la retienen mientras edita, lo avisa y no la cambia', (
+      tester,
+    ) async {
+      await abrir(tester, usuario: autor);
+      repositorio.errorAlEditar = const PublicacionNoDisponibleException();
+
+      await editar(tester, titulo: 'Llego tarde');
+      await tester.tap(
+        find.byKey(NuevaPublicacionScreen.claveConfirmarEdicion),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(EdicionPublicacion.noDisponible), findsOneWidget);
+      expect(find.text('Llego tarde'), findsNothing);
+    });
+
+    testWidgets('lo retenido no se ofrece para editar, ni a su autor', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        usuario: autor,
+        vistaModeracion: true,
+        publicaciones: [
+          publicacionDePrueba(id: 'pub-1', estado: EstadoPublicacion.retenida),
+        ],
+      );
+
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
+    });
   });
 }

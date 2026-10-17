@@ -10,6 +10,7 @@ import 'screens/admin/gestion_retos_screen.dart';
 import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/foro/detalle_publicacion_screen.dart';
+import 'screens/foro/editar_publicacion_screen.dart';
 import 'screens/foro/foro_screen.dart';
 import 'screens/foro/nueva_publicacion_screen.dart';
 import 'screens/history/historial_screen.dart';
@@ -218,6 +219,15 @@ final _navegacion = GoRouter(
           builder: (context, state) => DetallePublicacionScreen(
             publicacionId: state.pathParameters['publicacionId']!,
           ),
+          routes: [
+            // El autor edita lo suyo (SCRUM-355).
+            GoRoute(
+              path: 'editar',
+              builder: (context, state) => EditarPublicacionScreen(
+                publicacionId: state.pathParameters['publicacionId']!,
+              ),
+            ),
+          ],
         ),
       ],
     ),
@@ -246,6 +256,17 @@ final _navegacion = GoRouter(
               vistaModeracion: true,
             ),
           ),
+          routes: [
+            // El administrador edita lo que él publicó (SCRUM-355).
+            GoRoute(
+              path: 'editar',
+              builder: (context, state) => SoloAdministrador(
+                hijo: EditarPublicacionScreen(
+                  publicacionId: state.pathParameters['publicacionId']!,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     ),

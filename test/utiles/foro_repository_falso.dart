@@ -111,6 +111,34 @@ class ForoRepositorioFalso implements ForoRepository {
     return creado;
   }
 
+  NuevaPublicacion? edicionRecibida;
+
+  /// Error que lanza solo `editar`.
+  Object? errorAlEditar;
+
+  @override
+  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios) async {
+    edicionRecibida = cambios;
+    final error = errorAlEditar ?? this.error;
+    if (error != null) throw error;
+
+    final i = publicaciones.indexWhere((p) => p.id == id);
+    if (i < 0 || publicaciones[i].estado != EstadoPublicacion.publicada) {
+      throw const PublicacionNoDisponibleException();
+    }
+    final p = publicaciones[i];
+    return publicaciones[i] = PublicacionForo(
+      id: p.id,
+      autorId: p.autorId,
+      autorNombre: p.autorNombre,
+      titulo: cambios.titulo,
+      contenido: cambios.contenido,
+      estado: p.estado,
+      fechaCreacion: p.fechaCreacion,
+      autorEsAdmin: p.autorEsAdmin,
+    );
+  }
+
   /// Simula que la moderación retiró la publicación [id].
   void retener(String id) {
     final i = publicaciones.indexWhere((p) => p.id == id);

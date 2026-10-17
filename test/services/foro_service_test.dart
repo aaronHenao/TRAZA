@@ -185,6 +185,38 @@ void main() {
     }
   });
 
+  group('editar (SCRUM-355)', () {
+    test('manda solo el título y el contenido de esa publicación', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.editar('pub-1', nueva);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'PATCH');
+      expect(peticion.url.queryParameters['id'], 'eq.pub-1');
+      expect(jsonDecode(peticion.body), {
+        'titulo': 'Tenis',
+        'contenido': '¿Cuáles?',
+      });
+    });
+
+    for (final (codigo, causa) in [
+      ('PGRST116', 'la policy no dejó tocar la fila'),
+      ('42501', 'la seguridad a nivel de fila lo negó'),
+    ]) {
+      test('si $causa ($codigo), la publicación no está disponible', () async {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.editar('pub-1', nueva),
+          throwsA(isA<PublicacionNoDisponibleException>()),
+        );
+      });
+    }
+  });
+
   test('si la tabla rechaza los datos lo dice con su excepción', () async {
     final supabase = _SupabaseFalso(codigoPostgres: '23514');
     addTearDown(supabase.cerrar);

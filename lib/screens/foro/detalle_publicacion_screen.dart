@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/comentario_foro.dart';
 import '../../models/publicacion_foro.dart';
 import '../../services/foro_provider.dart';
+import '../../services/foro_service.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -36,8 +37,15 @@ class DetallePublicacionScreen extends ConsumerWidget {
   static String rutaDe(String id) => '/foro/$id';
   static String rutaAdminDe(String id) => '/admin/foro/$id';
 
+  /// Dónde se edita (SCRUM-355): debajo del detalle, en el foro o en la
+  /// moderación según desde dónde se abrió.
+  String get _rutaEditar =>
+      '${vistaModeracion ? rutaAdminDe(publicacionId) : rutaDe(publicacionId)}'
+      '/editar';
+
   static const claveCaja = Key('comentario-caja');
   static const claveEnviar = Key('comentario-enviar');
+  static const claveEditar = Key('publicacion-editar');
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 
@@ -49,6 +57,10 @@ class DetallePublicacionScreen extends ConsumerWidget {
     final comentable =
         publicacion is AsyncData<PublicacionForo?> &&
         (publicacion.value?.admiteComentarios ?? false);
+    final editable =
+        publicacion is AsyncData<PublicacionForo?> &&
+        (publicacion.value?.editablePor(ref.read(usuarioActualProvider)()) ??
+            false);
 
     void recargar() {
       ref
@@ -61,7 +73,18 @@ class DetallePublicacionScreen extends ConsumerWidget {
         child: AnchoContenido(
           child: Column(
             children: [
-              TrazaTopBar(titulo: 'Publicación', onAtras: context.pop),
+              TrazaTopBar(
+                titulo: 'Publicación',
+                onAtras: context.pop,
+                accion: editable
+                    ? TrazaIconButton(
+                        key: claveEditar,
+                        icon: Icons.edit_outlined,
+                        tooltip: 'Editar publicación',
+                        onPressed: () => context.push(_rutaEditar),
+                      )
+                    : null,
+              ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async => recargar(),

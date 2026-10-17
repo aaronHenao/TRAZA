@@ -36,6 +36,10 @@ class NotificacionesFalso implements NotificacionesRepository {
   @override
   Future<int> sinLeer() async => _sinLeer;
 
+  /// Lo que deja en la base un aviso que acaba de llegar, para las pruebas
+  /// del tiempo real.
+  void llegaron(int cuantos) => _sinLeer += cuantos;
+
   @override
   Future<void> marcarTodasLeidas() async {
     marcadas++;

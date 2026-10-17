@@ -4,9 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/notificacion.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
+import 'package:traza/services/cambios_notificaciones.dart';
+import 'package:traza/services/foro_service.dart' show usuarioActualProvider;
 import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 
+import '../utiles/fuente_cambios_notificaciones_falsa.dart';
 import '../utiles/notificaciones_falso.dart';
 import '../utiles/reloj_falso.dart';
 
@@ -57,10 +60,7 @@ void main() {
       await _abrir(
         tester,
         notificaciones: [
-          notificacionDePrueba(
-            titulo: 'T' * 120,
-            mensaje: 'M' * 500,
-          ),
+          notificacionDePrueba(titulo: 'T' * 120, mensaje: 'M' * 500),
         ],
       );
 
@@ -137,6 +137,24 @@ void main() {
       expect(repositorio.consultas, 2);
     });
 
+    testWidgets('con la bandeja abierta, lo que llega entra solo', (
+      tester,
+    ) async {
+      final (repositorio: repositorio, router: _) = await _abrir(
+        tester,
+        notificaciones: [notificacionDePrueba()],
+      );
+
+      expect(repositorio.consultas, 1);
+      expect(cambiosAvisos.escuchando, isTrue);
+
+      cambiosAvisos.emitir('usuario-1');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.consultas, 2);
+    });
+
     testWidgets('si no se pudo cargar, no da nada por visto', (tester) async {
       final (repositorio: repositorio, router: _) = await _abrir(
         tester,
@@ -148,6 +166,8 @@ void main() {
     });
   });
 }
+
+late FuenteCambiosNotificacionesFalsa cambiosAvisos;
 
 Future<({NotificacionesFalso repositorio, GoRouter router})> _abrir(
   WidgetTester tester, {
@@ -163,6 +183,7 @@ Future<({NotificacionesFalso repositorio, GoRouter router})> _abrir(
     notificaciones: notificaciones,
     error: error,
   );
+  cambiosAvisos = FuenteCambiosNotificacionesFalsa();
 
   final router = GoRouter(
     initialLocation: '/origen',
@@ -183,6 +204,8 @@ Future<({NotificacionesFalso repositorio, GoRouter router})> _abrir(
     ProviderScope(
       overrides: [
         notificacionesRepositoryProvider.overrideWithValue(repositorio),
+        fuenteCambiosNotificacionesProvider.overrideWithValue(cambiosAvisos),
+        usuarioActualProvider.overrideWithValue(() => 'usuario-1'),
         relojProvider.overrideWithValue(
           RelojFalso(DateTime(2026, 10, 17, 12)).call,
         ),

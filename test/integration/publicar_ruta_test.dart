@@ -25,6 +25,7 @@ import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
 import 'package:traza/screens/rutas/publicar_ruta_screen.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/services/cambios_foro.dart';
+import 'package:traza/services/cambios_notificaciones.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/foro_service.dart';
@@ -39,6 +40,7 @@ import 'package:traza/widgets/tarjeta_ruta.dart';
 import '../utiles/experiencia_falsa.dart';
 import '../utiles/foro_repository_falso.dart';
 import '../utiles/fuente_cambios_foro_falsa.dart';
+import '../utiles/fuente_cambios_notificaciones_falsa.dart';
 import '../utiles/niveles_falso.dart';
 import '../utiles/notificaciones_falso.dart';
 import '../utiles/proveedor_tiles_falso.dart';
@@ -121,6 +123,9 @@ void main() {
           usuarioActualProvider.overrideWithValue(() => 'usuario-1'),
           rutasRepositoryProvider.overrideWithValue(rutas),
           notificacionesRepositoryProvider.overrideWithValue(avisos),
+          fuenteCambiosNotificacionesProvider.overrideWithValue(
+            FuenteCambiosNotificacionesFalsa(),
+          ),
           foroRepositoryProvider.overrideWithValue(
             ForoRepositorioFalso(ahora: ahora),
           ),

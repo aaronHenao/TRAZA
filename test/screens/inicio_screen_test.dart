@@ -10,12 +10,15 @@ import 'package:traza/screens/home/inicio_screen.dart';
 import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/inicio_provider.dart';
+import 'package:traza/services/cambios_notificaciones.dart';
+import 'package:traza/services/foro_service.dart' show usuarioActualProvider;
 import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 
+import '../utiles/fuente_cambios_notificaciones_falsa.dart';
 import '../utiles/notificaciones_falso.dart';
 
 /// Historial de mentira: responde lo que la prueba le indique.
@@ -79,6 +82,9 @@ void main() {
     ),
   ];
 
+  late NotificacionesFalso avisos;
+  late FuenteCambiosNotificacionesFalsa cambiosAvisos;
+
   Future<void> abrirPortada(
     WidgetTester tester, {
     Future<List<ResumenEntrenamiento>> Function()? historial,
@@ -91,6 +97,9 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    avisos = NotificacionesFalso(sinLeer: sinLeer);
+    cambiosAvisos = FuenteCambiosNotificacionesFalsa();
 
     final router = GoRouter(
       initialLocation: '/inicio',
@@ -131,9 +140,9 @@ void main() {
               objetivos ?? () async => {TipoObjetivo.distancia: 15},
             ),
           ),
-          notificacionesRepositoryProvider.overrideWithValue(
-            NotificacionesFalso(sinLeer: sinLeer),
-          ),
+          notificacionesRepositoryProvider.overrideWithValue(avisos),
+          fuenteCambiosNotificacionesProvider.overrideWithValue(cambiosAvisos),
+          usuarioActualProvider.overrideWithValue(() => 'usuario-1'),
           // El nombre sale de la sesión de Supabase, que en las pruebas no
           // existe.
           nombreUsuarioProvider.overrideWithValue(nombre),
@@ -301,6 +310,32 @@ void main() {
       await abrirPortada(tester, sinLeer: 12);
 
       expect(find.text('9+'), findsOneWidget);
+    });
+
+    testWidgets('un aviso que llega enciende la campana sola', (tester) async {
+      // Sin esto habria que volver a la portada o tirar para refrescar para
+      // enterarse de que aprobaron la ruta.
+      await abrirPortada(tester);
+      expect(find.text('1'), findsNothing);
+      expect(cambiosAvisos.escuchando, isTrue);
+
+      avisos.llegaron(1);
+      cambiosAvisos.emitir('usuario-1');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1'), findsOneWidget);
+    });
+
+    testWidgets('al salir de la portada deja de escuchar', (tester) async {
+      // La conexión solo existe mientras hay algo que la mire.
+      await abrirPortada(tester, sinLeer: 1);
+      expect(cambiosAvisos.escuchando, isTrue);
+
+      await tester.tap(find.text('Perfil'));
+      await tester.pumpAndSettle();
+
+      expect(cambiosAvisos.escuchando, isFalse);
     });
 
     testWidgets('la campana abre la bandeja', (tester) async {

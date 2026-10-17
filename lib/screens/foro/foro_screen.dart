@@ -10,22 +10,62 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_publicacion.dart';
+import 'detalle_publicacion_screen.dart';
 import 'nueva_publicacion_screen.dart';
 
 /// El foro de la comunidad (SCRUM-346): lo que publican los corredores, de lo
 /// más reciente a lo más antiguo, con su autor y su fecha.
-class ForoScreen extends ConsumerWidget {
+///
+/// Se actualiza en vivo (SCRUM-357). Lo editado y los comentarios cambian en
+/// su sitio; las publicaciones nuevas de otros esperan detrás de un aviso
+/// para no mover la lista mientras se lee.
+class ForoScreen extends ConsumerStatefulWidget {
   const ForoScreen({super.key});
 
   static const ruta = '/foro';
 
   static const claveNueva = Key('foro-nueva-publicacion');
+  static const claveNuevas = Key('foro-publicaciones-nuevas');
+
+  static String textoNuevas(int cuantas) =>
+      cuantas == 1 ? '1 publicación nueva' : '$cuantas publicaciones nuevas';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final publicaciones = ref.watch(publicacionesForoProvider);
+  ConsumerState<ForoScreen> createState() => _ForoScreenState();
+}
 
-    void recargar() => ref.invalidate(publicacionesForoProvider);
+class _ForoScreenState extends ConsumerState<ForoScreen> {
+  final _desplazamiento = ScrollController();
+
+  @override
+  void dispose() {
+    _desplazamiento.dispose();
+    super.dispose();
+  }
+
+  /// Muestra lo que llegó en vivo y sube al principio, donde quedó.
+  void _verNuevas() {
+    ref.read(publicacionesNuevasProvider.notifier).state = const {};
+    if (_desplazamiento.hasClients) {
+      _desplazamiento.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(foroEnVivoProvider);
+    final publicaciones = ref.watch(publicacionesForoProvider);
+    final nuevas = ref.watch(publicacionesNuevasProvider);
+
+    // Refrescar a mano también muestra lo que estaba esperando.
+    void recargar() {
+      ref.read(publicacionesNuevasProvider.notifier).state = const {};
+      ref.invalidate(publicacionesForoProvider);
+    }
 
     Future<void> nueva() async {
       // `push`: al volver, el foro se consulta de nuevo y la publicación
@@ -42,35 +82,124 @@ class ForoScreen extends ConsumerWidget {
             children: [
               _Cabecera(onNueva: nueva),
               Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async => recargar(),
-                  child: switch (publicaciones) {
-                    AsyncData(value: final lista) when lista.isEmpty =>
-                      EstadoVacio(
-                        icono: Icons.forum_outlined,
-                        titulo: 'Aún no hay publicaciones',
-                        detalle:
-                            'Abre la conversación: pregunta o comparte algo '
-                            'sobre running.',
-                        accion: OutlinedButton(
-                          onPressed: nueva,
-                          child: const Text('Publicar'),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: RefreshIndicator(
+                        onRefresh: () async => recargar(),
+                        child: switch (publicaciones) {
+                          AsyncData(value: final lista) when lista.isEmpty =>
+                            EstadoVacio(
+                              icono: Icons.forum_outlined,
+                              titulo: 'Aún no hay publicaciones',
+                              detalle:
+                                  'Abre la conversación: pregunta o comparte algo '
+                                  'sobre running.',
+                              accion: OutlinedButton(
+                                onPressed: nueva,
+                                child: const Text('Publicar'),
+                              ),
+                            ),
+                          AsyncData(value: final lista) => _Lista(
+                            publicaciones: _sinLasNuevas(lista, nuevas),
+                            desplazamiento: _desplazamiento,
+                          ),
+                          AsyncError() => EstadoVacio(
+                            icono: Icons.cloud_off_outlined,
+                            titulo: 'No pudimos cargar el foro',
+                            detalle: 'Revisa tu conexión e inténtalo de nuevo.',
+                            accion: OutlinedButton(
+                              onPressed: recargar,
+                              child: const Text('Reintentar'),
+                            ),
+                          ),
+                          _ => const Center(child: CircularProgressIndicator()),
+                        },
+                      ),
+                    ),
+                    if (_cuantasEsperan(publicaciones, nuevas) case final n
+                        when n > 0)
+                      Positioned(
+                        top: AppSpacing.sm,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: _AvisoNuevas(
+                            texto: ForoScreen.textoNuevas(n),
+                            onVer: _verNuevas,
+                          ),
                         ),
                       ),
-                    AsyncData(value: final lista) => _Lista(
-                      publicaciones: lista,
-                    ),
-                    AsyncError() => EstadoVacio(
-                      icono: Icons.cloud_off_outlined,
-                      titulo: 'No pudimos cargar el foro',
-                      detalle: 'Revisa tu conexión e inténtalo de nuevo.',
-                      accion: OutlinedButton(
-                        onPressed: recargar,
-                        child: const Text('Reintentar'),
-                      ),
-                    ),
-                    _ => const Center(child: CircularProgressIndicator()),
-                  },
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La lista sin las publicaciones que llegaron en vivo y esperan el aviso.
+///
+/// Si todo lo que hay es nuevo, se muestra: esconderlo dejaría el foro vacío
+/// con un aviso encima.
+List<PublicacionForo> _sinLasNuevas(
+  List<PublicacionForo> lista,
+  Set<String> nuevas,
+) {
+  if (nuevas.isEmpty) return lista;
+  final visibles = lista.where((p) => !nuevas.contains(p.id)).toList();
+  return visibles.isEmpty ? lista : visibles;
+}
+
+/// Cuántas publicaciones esperan detrás del aviso: las nuevas que ya trajo la
+/// consulta y que la lista está escondiendo.
+int _cuantasEsperan(
+  AsyncValue<List<PublicacionForo>> publicaciones,
+  Set<String> nuevas,
+) {
+  if (publicaciones case AsyncData(value: final lista)) {
+    return lista.length - _sinLasNuevas(lista, nuevas).length;
+  }
+  return 0;
+}
+
+/// Pastilla flotante "N publicaciones nuevas · Ver" (SCRUM-357).
+class _AvisoNuevas extends StatelessWidget {
+  const _AvisoNuevas({required this.texto, required this.onVer});
+
+  final String texto;
+  final VoidCallback onVer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary,
+      shape: const StadiumBorder(),
+      elevation: 3,
+      child: InkWell(
+        key: ForoScreen.claveNuevas,
+        onTap: onVer,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.arrow_upward_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$texto · Ver',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -140,15 +269,17 @@ class _Cabecera extends StatelessWidget {
 }
 
 class _Lista extends ConsumerWidget {
-  const _Lista({required this.publicaciones});
+  const _Lista({required this.publicaciones, required this.desplazamiento});
 
   final List<PublicacionForo> publicaciones;
+  final ScrollController desplazamiento;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ahora = ref.read(relojProvider)();
 
     return ListView.separated(
+      controller: desplazamiento,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -164,6 +295,12 @@ class _Lista extends ConsumerWidget {
           key: TarjetaPublicacion.claveDe(publicacion.id),
           publicacion: publicacion,
           ahora: ahora,
+          // SCRUM-351: del foro al detalle. Al volver se refresca para que
+          // el número de comentarios esté al día.
+          onTap: () async {
+            await context.push(DetallePublicacionScreen.rutaDe(publicacion.id));
+            ref.invalidate(publicacionesForoProvider);
+          },
         );
       },
     );

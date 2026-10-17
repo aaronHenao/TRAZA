@@ -49,18 +49,31 @@ class TarjetaPublicacion extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      publicacion.autorNombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            publicacion.autorNombre,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        if (publicacion.autorEsAdmin) ...[
+                          const SizedBox(width: 6),
+                          const Flexible(child: InsigniaForo.administrador()),
+                        ],
+                      ],
                     ),
                     Text(
-                      fechaRelativa(publicacion.fechaCreacion, ahora),
+                      publicacion.editada
+                          ? '${fechaRelativa(publicacion.fechaCreacion, ahora)}'
+                                ' • Editada'
+                          : fechaRelativa(publicacion.fechaCreacion, ahora),
                       style: const TextStyle(
                         fontSize: 11.5,
                         color: AppColors.ink3,
@@ -69,7 +82,7 @@ class TarjetaPublicacion extends StatelessWidget {
                   ],
                 ),
               ),
-              if (conEstado) _EstadoPublicacion(estado: publicacion.estado),
+              if (conEstado) EstadoPublicacionChip(estado: publicacion.estado),
             ],
           ),
           const SizedBox(height: 12),
@@ -104,7 +117,88 @@ class TarjetaPublicacion extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          _NumeroComentarios(cuantos: publicacion.numeroComentarios),
         ],
+      ),
+    );
+  }
+}
+
+/// Cuántos comentarios tiene, al pie de la tarjeta (SCRUM-324).
+class _NumeroComentarios extends StatelessWidget {
+  const _NumeroComentarios({required this.cuantos});
+
+  final int cuantos;
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = switch (cuantos) {
+      0 => 'Comentar',
+      1 => '1 comentario',
+      _ => '$cuantos comentarios',
+    };
+
+    return Row(
+      children: [
+        const Icon(
+          Icons.chat_bubble_outline_rounded,
+          size: 15,
+          color: AppColors.ink3,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          texto,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Marca junto al nombre de quien escribe en el foro: si es el administrador
+/// (color principal) o el creador de la publicación que se comenta (color
+/// secundario).
+///
+/// Va dentro de un `Flexible`: en pantallas angostas cede espacio antes que
+/// desbordar la fila del nombre.
+class InsigniaForo extends StatelessWidget {
+  const InsigniaForo.administrador({super.key})
+    : texto = textoAdministrador,
+      color = AppColors.primary;
+
+  const InsigniaForo.autor({super.key})
+    : texto = textoAutor,
+      color = AppColors.secondary;
+
+  static const textoAdministrador = 'Administrador';
+  static const textoAutor = 'Autor';
+
+  final String texto;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        texto,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          height: 1.2,
+        ),
       ),
     );
   }
@@ -142,8 +236,9 @@ class AvatarAutor extends StatelessWidget {
   }
 }
 
-class _EstadoPublicacion extends StatelessWidget {
-  const _EstadoPublicacion({required this.estado});
+/// Pastilla con el estado de una publicación, para el administrador.
+class EstadoPublicacionChip extends StatelessWidget {
+  const EstadoPublicacionChip({required this.estado, super.key});
 
   final EstadoPublicacion estado;
 

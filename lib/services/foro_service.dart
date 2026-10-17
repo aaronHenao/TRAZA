@@ -2,12 +2,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/borrador_publicacion.dart';
+import '../models/comentario_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/version_publicacion.dart';
 
 /// Repositorio del foro que usa la app. Las pruebas lo sustituyen con
 /// `overrideWithValue`.
 final foroRepositoryProvider = Provider<ForoRepository>(
   (ref) => SupabaseForoRepository(),
+);
+
+/// Quién usa el foro: el id del usuario con la sesión abierta, o null.
+///
+/// Es una función y no un valor para que siempre diga la sesión de ahora, no
+/// la que había cuando se creó el provider. Las pruebas la sustituyen.
+final usuarioActualProvider = Provider<String? Function()>(
+  (ref) =>
+      () => Supabase.instance.client.auth.currentUser?.id,
 );
 
 /// Se lanza cuando se intenta usar el foro sin una sesión abierta.
@@ -32,7 +43,22 @@ class DatosDePublicacionInvalidosException implements Exception {
   String toString() => 'DatosDePublicacionInvalidosException: $detalle';
 }
 
-/// Acceso a la tabla `publicaciones_foro` (SCRUM-323).
+/// Se lanza al comentar o editar una publicación que fue eliminada o retenida
+/// por la moderación (criterio 3 de SCRUM-324, SCRUM-355).
+///
+/// Quienes lo impiden son las policies de `comentarios_foro` y
+/// `publicaciones_foro`, que exigen que la publicación esté publicada en ese
+/// momento: la app puede tener en pantalla una versión vieja.
+class PublicacionNoDisponibleException implements Exception {
+  const PublicacionNoDisponibleException();
+
+  @override
+  String toString() =>
+      'PublicacionNoDisponibleException: la publicación ya no está publicada';
+}
+
+/// Acceso a las tablas del foro: `publicaciones_foro` (SCRUM-323) y
+/// `comentarios_foro` (SCRUM-324).
 abstract interface class ForoRepository {
   /// Registra [publicacion] a nombre del usuario de la sesión y devuelve la
   /// fila creada (SCRUM-343).
@@ -50,6 +76,49 @@ abstract interface class ForoRepository {
   /// La policy de `select` solo le deja ver todo al administrador; a un
   /// corredor le devolvería lo publicado y lo suyo.
   Future<List<PublicacionForo>> todasParaModeracion();
+
+  /// La publicación con [id], o null si no existe o el usuario no puede
+  /// verla (SCRUM-350).
+  ///
+  /// Puede volver en cualquier estado: el autor ve lo suyo retenido y el
+  /// administrador todo. Si se puede comentar lo decide
+  /// [PublicacionForo.admiteComentarios].
+  Future<PublicacionForo?> publicacion(String id);
+
+  /// Los comentarios de una publicación, del más antiguo al más reciente,
+  /// como se lee una conversación (SCRUM-350).
+  Future<List<ComentarioForo>> comentarios(String publicacionId);
+
+  /// Registra [comentario] a nombre del usuario de la sesión y devuelve la
+  /// fila creada (SCRUM-350).
+  ///
+  /// Lanza [PublicacionNoDisponibleException] si la publicación ya no está
+  /// publicada.
+  Future<ComentarioForo> comentar(NuevoComentario comentario);
+
+  /// Cambia el título y el contenido de la publicación [id] y devuelve cómo
+  /// quedó (SCRUM-355).
+  ///
+  /// Lanza [PublicacionNoDisponibleException] si no es del usuario o ya no
+  /// está publicada.
+  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios);
+
+  /// Las versiones anteriores de una publicación editada, de la más reciente
+  /// a la original (SCRUM-355). La actual no está: es la publicación misma.
+  ///
+  /// Solo el administrador las lee; a cualquier otro la policy le devuelve
+  /// una lista vacía.
+  Future<List<VersionPublicacion>> versiones(String publicacionId);
+
+  /// Cambia el texto del comentario [id] y devuelve cómo quedó (SCRUM-356).
+  ///
+  /// Lanza [PublicacionNoDisponibleException] si no es del usuario o la
+  /// publicación ya no está publicada.
+  Future<ComentarioForo> editarComentario(String id, NuevoComentario cambios);
+
+  /// Las versiones anteriores de un comentario editado, de la más reciente a
+  /// la original (SCRUM-356). Solo el administrador las lee.
+  Future<List<VersionComentario>> versionesComentario(String comentarioId);
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -62,12 +131,28 @@ class SupabaseForoRepository implements ForoRepository {
        _usuarioActual = usuarioActual;
 
   static const _tabla = 'publicaciones_foro';
+  static const _tablaComentarios = 'comentarios_foro';
+  static const _tablaVersiones = 'versiones_publicacion_foro';
+  static const _tablaVersionesComentario = 'versiones_comentario_foro';
+
+  /// Las columnas de la publicación más cuántos comentarios tiene, contados
+  /// por PostgREST sin traerlos.
+  static const _columnas = '*, comentarios_foro(count)';
 
   /// Suficiente para el foro de un proyecto de curso sin traer la tabla
   /// entera.
   static const limite = 100;
 
   static const _restriccionIncumplida = '23514';
+  static const _rlsDenegado = '42501';
+
+  /// La consulta pidió una fila y no vino ninguna: en un update, la policy
+  /// no dejó tocar la fila.
+  static const _sinFilas = 'PGRST116';
+
+  /// La publicación ya no existe: la clave foránea no encuentra a quién
+  /// apuntar.
+  static const _sinReferencia = '23503';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -111,7 +196,7 @@ class SupabaseForoRepository implements ForoRepository {
     // retenido, y eso no pertenece al foro.
     final filas = await _cliente
         .from(_tabla)
-        .select()
+        .select(_columnas)
         .eq('estado', EstadoPublicacion.publicada.valorDb)
         .order('fecha_creacion', ascending: false)
         .limit(limite);
@@ -125,10 +210,153 @@ class SupabaseForoRepository implements ForoRepository {
 
     final filas = await _cliente
         .from(_tabla)
-        .select()
+        .select(_columnas)
         .order('fecha_creacion', ascending: false)
         .limit(limite);
 
     return filas.map(PublicacionForo.desdeSupabase).toList();
+  }
+
+  @override
+  Future<PublicacionForo?> publicacion(String id) async {
+    _usuarioId();
+
+    final fila = await _cliente
+        .from(_tabla)
+        .select(_columnas)
+        .eq('id', id)
+        .maybeSingle();
+
+    return fila == null ? null : PublicacionForo.desdeSupabase(fila);
+  }
+
+  @override
+  Future<List<ComentarioForo>> comentarios(String publicacionId) async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaComentarios)
+        .select()
+        .eq('publicacion_id', publicacionId)
+        .order('fecha_creacion', ascending: true)
+        .limit(limite);
+
+    return filas.map(ComentarioForo.desdeSupabase).toList();
+  }
+
+  @override
+  Future<ComentarioForo> comentar(NuevoComentario comentario) async {
+    final usuarioId = _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tablaComentarios)
+          // El nombre del autor no va: lo pone el trigger.
+          .insert({...comentario.aSupabase(), 'autor_id': usuarioId})
+          .select()
+          .single();
+
+      return ComentarioForo.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // La policy de insert exige que la publicación siga publicada; si fue
+      // retenida o eliminada, la fila viola la seguridad a nivel de fila.
+      if (e.code == _rlsDenegado || e.code == _sinReferencia) {
+        throw const PublicacionNoDisponibleException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDePublicacionInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<VersionPublicacion>> versiones(String publicacionId) async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaVersiones)
+        .select()
+        .eq('publicacion_id', publicacionId)
+        .order('reemplazada_en', ascending: false)
+        .limit(limite);
+
+    return filas.map(VersionPublicacion.desdeSupabase).toList();
+  }
+
+  @override
+  Future<PublicacionForo> editar(String id, NuevaPublicacion cambios) async {
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tabla)
+          // Solo el texto. Lo demás, aunque se mandara, lo deja igual el
+          // trigger `publicaciones_foro_proteger`, que además guarda la
+          // versión anterior y marca la fecha de edición.
+          .update(cambios.aSupabase())
+          .eq('id', id)
+          .select(_columnas)
+          .single();
+
+      return PublicacionForo.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // Si no es suya o ya no está publicada, la policy de update no deja ver
+      // la fila: el update no toca nada y no vuelve ninguna.
+      if (e.code == _sinFilas || e.code == _rlsDenegado) {
+        throw const PublicacionNoDisponibleException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDePublicacionInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<ComentarioForo> editarComentario(
+    String id,
+    NuevoComentario cambios,
+  ) async {
+    _usuarioId();
+
+    try {
+      final fila = await _cliente
+          .from(_tablaComentarios)
+          // Solo el texto. El trigger `comentarios_foro_proteger` deja lo
+          // demás como estaba, guarda la versión anterior y marca la edición.
+          .update({'contenido': cambios.contenido})
+          .eq('id', id)
+          .select()
+          .single();
+
+      return ComentarioForo.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // Si no es suyo o la publicación ya no está publicada, la policy de
+      // update no deja tocar la fila y no vuelve ninguna.
+      if (e.code == _sinFilas || e.code == _rlsDenegado) {
+        throw const PublicacionNoDisponibleException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDePublicacionInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<VersionComentario>> versionesComentario(
+    String comentarioId,
+  ) async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaVersionesComentario)
+        .select()
+        .eq('comentario_id', comentarioId)
+        .order('reemplazada_en', ascending: false)
+        .limit(limite);
+
+    return filas.map(VersionComentario.desdeSupabase).toList();
   }
 }

@@ -1,8 +1,13 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/borrador_publicacion.dart';
+import '../models/comentario_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/version_publicacion.dart';
+import 'cambios_foro.dart';
 import 'foro_service.dart';
 
 /// Cómo terminó un intento de publicar en el foro (SCRUM-323).
@@ -116,7 +121,10 @@ class CreacionPublicacion {
 
     try {
       final creada = await _ref.read(foroRepositoryProvider).crear(nueva);
-      _ref.invalidate(publicacionesForoProvider);
+      _ref
+        ..invalidate(publicacionesForoProvider)
+        // El administrador también publica, desde la moderación.
+        ..invalidate(moderacionForoProvider);
       return switch (creada.estado) {
         EstadoPublicacion.publicada => PublicacionCreada(creada),
         // Eliminada recién creada no tiene sentido; si la moderación llegara
@@ -135,3 +143,383 @@ class CreacionPublicacion {
     }
   }
 }
+
+/// Una publicación por su id, para el detalle (SCRUM-351).
+///
+/// Se consulta siempre y no se toma la del listado: lo que importa al abrirla
+/// es cómo está ahora, porque pudo ser retenida o eliminada después de que
+/// se cargó el foro (criterio 3 de SCRUM-324).
+final publicacionForoProvider = FutureProvider.autoDispose
+    .family<PublicacionForo?, String>(
+      (ref, id) => ref.watch(foroRepositoryProvider).publicacion(id),
+    );
+
+/// Los comentarios de una publicación, del más antiguo al más reciente.
+final comentariosForoProvider = FutureProvider.autoDispose
+    .family<List<ComentarioForo>, String>(
+      (ref, publicacionId) =>
+          ref.watch(foroRepositoryProvider).comentarios(publicacionId),
+    );
+
+/// Cómo terminó un intento de comentar (SCRUM-324).
+sealed class ResultadoComentario {
+  const ResultadoComentario();
+}
+
+/// El comentario quedó registrado y ya se ve bajo la publicación.
+class ComentarioRegistrado extends ResultadoComentario {
+  const ComentarioRegistrado(this.comentario);
+
+  final ComentarioForo comentario;
+}
+
+/// El texto no pasó las reglas: no se llegó a tocar la base (criterio 2).
+class ComentarioInvalido extends ResultadoComentario {
+  const ComentarioInvalido(this.error);
+
+  final String error;
+}
+
+/// La publicación fue eliminada o retenida y ya no admite comentarios
+/// (criterio 3).
+class PublicacionNoDisponible extends ResultadoComentario {
+  const PublicacionNoDisponible();
+}
+
+/// El guardado falló por otra razón. Lo escrito sigue en la caja.
+class ComentarioNoGuardado extends ResultadoComentario {
+  const ComentarioNoGuardado(this.mensaje);
+
+  final String mensaje;
+}
+
+final comentarioForoProvider = Provider<ComentarioPublicacion>(
+  ComentarioPublicacion.new,
+);
+
+/// Une la validación del comentario con el guardado (SCRUM-350).
+class ComentarioPublicacion {
+  const ComentarioPublicacion(this._ref);
+
+  final Ref _ref;
+
+  static const noDisponible = 'La publicación ya no se encuentra disponible.';
+  static const sinSesion = 'Inicia sesión para comentar.';
+  static const noSePudo =
+      'No se pudo enviar el comentario. Inténtalo de nuevo.';
+
+  Future<ResultadoComentario> comentar(
+    String publicacionId,
+    BorradorComentario borrador,
+  ) async {
+    final nuevo = borrador.aNuevoComentario(publicacionId);
+    if (nuevo == null) return ComentarioInvalido(borrador.error!);
+
+    try {
+      final comentario = await _ref
+          .read(foroRepositoryProvider)
+          .comentar(nuevo);
+      _ref
+        ..invalidate(comentariosForoProvider(publicacionId))
+        // Los listados muestran cuántos comentarios tiene cada publicación.
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(moderacionForoProvider);
+      return ComentarioRegistrado(comentario);
+    } on PublicacionNoDisponibleException {
+      // Se vuelve a pedir la publicación para que el detalle pase a decir que
+      // ya no está disponible, en vez de seguir ofreciendo la caja.
+      _ref
+        ..invalidate(publicacionForoProvider(publicacionId))
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(moderacionForoProvider);
+      return const PublicacionNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const ComentarioNoGuardado(sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo comentar: $error');
+      return const ComentarioNoGuardado(noSePudo);
+    }
+  }
+}
+
+/// Las versiones anteriores de una publicación editada (SCRUM-355).
+final versionesPublicacionProvider = FutureProvider.autoDispose
+    .family<List<VersionPublicacion>, String>(
+      (ref, publicacionId) =>
+          ref.watch(foroRepositoryProvider).versiones(publicacionId),
+    );
+
+/// Cómo terminó un intento de editar una publicación (SCRUM-355).
+sealed class ResultadoEdicion {
+  const ResultadoEdicion();
+}
+
+/// Los cambios quedaron guardados.
+class PublicacionEditada extends ResultadoEdicion {
+  const PublicacionEditada(this.publicacion);
+
+  final PublicacionForo publicacion;
+}
+
+/// El borrador no pasó las reglas: no se llegó a tocar la base.
+class EdicionConErrores extends ResultadoEdicion {
+  const EdicionConErrores(this.errores);
+
+  final Map<CampoPublicacion, String> errores;
+}
+
+/// La publicación fue retenida o eliminada mientras se editaba.
+class EdicionNoDisponible extends ResultadoEdicion {
+  const EdicionNoDisponible();
+}
+
+/// El guardado falló por otra razón. Lo escrito sigue en el formulario.
+class EdicionNoGuardada extends ResultadoEdicion {
+  const EdicionNoGuardada(this.mensaje);
+
+  final String mensaje;
+}
+
+final edicionPublicacionProvider = Provider<EdicionPublicacion>(
+  EdicionPublicacion.new,
+);
+
+/// Une la validación con el guardado de los cambios (SCRUM-355). Las reglas
+/// son las mismas que al publicar.
+class EdicionPublicacion {
+  const EdicionPublicacion(this._ref);
+
+  final Ref _ref;
+
+  static const noDisponible = 'La publicación ya no se encuentra disponible.';
+  static const sinSesion = 'Inicia sesión para editar tu publicación.';
+  static const noSePudo =
+      'No se pudieron guardar los cambios. Inténtalo de '
+      'nuevo.';
+  static const datosRechazados = CreacionPublicacion.datosRechazados;
+
+  Future<ResultadoEdicion> editar(
+    String publicacionId,
+    BorradorPublicacion borrador,
+  ) async {
+    final cambios = borrador.aNuevaPublicacion();
+    if (cambios == null) return EdicionConErrores(borrador.errores);
+
+    try {
+      final editada = await _ref
+          .read(foroRepositoryProvider)
+          .editar(publicacionId, cambios);
+      _refrescar(publicacionId);
+      return PublicacionEditada(editada);
+    } on PublicacionNoDisponibleException {
+      _refrescar(publicacionId);
+      return const EdicionNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const EdicionNoGuardada(sinSesion);
+    } on DatosDePublicacionInvalidosException catch (error) {
+      debugPrint('La base rechazó la edición: $error');
+      return const EdicionNoGuardada(datosRechazados);
+    } catch (error) {
+      debugPrint('No se pudo editar: $error');
+      return const EdicionNoGuardada(noSePudo);
+    }
+  }
+
+  /// El detalle y los dos listados muestran el título y el contenido, y el
+  /// historial ganó una versión.
+  void _refrescar(String publicacionId) {
+    _ref
+      ..invalidate(publicacionForoProvider(publicacionId))
+      ..invalidate(versionesPublicacionProvider(publicacionId))
+      ..invalidate(publicacionesForoProvider)
+      ..invalidate(moderacionForoProvider);
+  }
+}
+
+/// Las versiones anteriores de un comentario editado (SCRUM-356).
+final versionesComentarioProvider = FutureProvider.autoDispose
+    .family<List<VersionComentario>, String>(
+      (ref, comentarioId) =>
+          ref.watch(foroRepositoryProvider).versionesComentario(comentarioId),
+    );
+
+/// Cómo terminó un intento de editar un comentario (SCRUM-356).
+sealed class ResultadoEdicionComentario {
+  const ResultadoEdicionComentario();
+}
+
+/// El cambio quedó guardado.
+class ComentarioEditado extends ResultadoEdicionComentario {
+  const ComentarioEditado(this.comentario);
+
+  final ComentarioForo comentario;
+}
+
+/// El texto no pasó las reglas: no se llegó a tocar la base.
+class EdicionComentarioInvalida extends ResultadoEdicionComentario {
+  const EdicionComentarioInvalida(this.error);
+
+  final String error;
+}
+
+/// La publicación fue retenida o eliminada mientras se editaba.
+class EdicionComentarioNoDisponible extends ResultadoEdicionComentario {
+  const EdicionComentarioNoDisponible();
+}
+
+/// El guardado falló por otra razón. Lo escrito sigue en la caja.
+class EdicionComentarioNoGuardada extends ResultadoEdicionComentario {
+  const EdicionComentarioNoGuardada(this.mensaje);
+
+  final String mensaje;
+}
+
+final edicionComentarioProvider = Provider<EdicionComentario>(
+  EdicionComentario.new,
+);
+
+/// Une la validación con el guardado de un comentario editado (SCRUM-356).
+/// Las reglas son las mismas que al comentar.
+class EdicionComentario {
+  const EdicionComentario(this._ref);
+
+  final Ref _ref;
+
+  static const noDisponible = ComentarioPublicacion.noDisponible;
+  static const noSePudo =
+      'No se pudieron guardar los cambios. Inténtalo de nuevo.';
+
+  Future<ResultadoEdicionComentario> editar(
+    ComentarioForo comentario,
+    BorradorComentario borrador,
+  ) async {
+    final cambios = borrador.aNuevoComentario(comentario.publicacionId);
+    if (cambios == null) return EdicionComentarioInvalida(borrador.error!);
+
+    try {
+      final editado = await _ref
+          .read(foroRepositoryProvider)
+          .editarComentario(comentario.id, cambios);
+      _ref
+        ..invalidate(comentariosForoProvider(comentario.publicacionId))
+        ..invalidate(versionesComentarioProvider(comentario.id));
+      return ComentarioEditado(editado);
+    } on PublicacionNoDisponibleException {
+      // Como al comentar: el detalle pasa a decir que ya no está disponible.
+      _ref
+        ..invalidate(publicacionForoProvider(comentario.publicacionId))
+        ..invalidate(publicacionesForoProvider);
+      return const EdicionComentarioNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const EdicionComentarioNoGuardada(ComentarioPublicacion.sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo editar el comentario: $error');
+      return const EdicionComentarioNoGuardada(noSePudo);
+    }
+  }
+}
+
+/// Cuánto se espera después de un aviso antes de recargar (SCRUM-357): una
+/// ráfaga de cambios se resuelve con una sola consulta.
+const esperaCambiosForo = Duration(milliseconds: 500);
+
+/// Publicaciones de otros que llegaron en vivo y el foro todavía no muestra
+/// (SCRUM-357).
+///
+/// Se guardan aparte para no mover la lista mientras se lee: el foro avisa
+/// "N publicaciones nuevas" y las muestra cuando el usuario lo pide.
+final publicacionesNuevasProvider = StateProvider.autoDispose<Set<String>>(
+  (ref) => const {},
+);
+
+/// Escucha los cambios de todo el foro mientras el foro o la moderación están
+/// abiertos (SCRUM-357).
+///
+/// Lo que llega solo avisa: se recargan los listados, que vuelven a pasar
+/// por las policies. También recarga al volver la app a primer plano, por si
+/// se perdió algo mientras estuvo en segundo plano.
+final foroEnVivoProvider = Provider.autoDispose<void>((ref) {
+  final usuario = ref.read(usuarioActualProvider)();
+
+  Timer? espera;
+  void recargar() {
+    espera?.cancel();
+    // Por el contenedor y no por `ref`: así solo se recarga el listado que
+    // está en pantalla. `ref.invalidate` monta el otro en modo debug y lo
+    // consulta sin que nadie lo mire.
+    espera = Timer(esperaCambiosForo, () {
+      ref.container
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(moderacionForoProvider);
+    });
+  }
+
+  final suscripcion = ref.read(fuenteCambiosForoProvider).delForo().listen((
+    cambio,
+  ) {
+    final id = cambio.id;
+    // Lo que publica uno mismo ya aparece al volver del formulario.
+    if (cambio.esPublicacionNueva && id != null && cambio.autorId != usuario) {
+      final nuevas = ref.read(publicacionesNuevasProvider.notifier);
+      nuevas.state = {...nuevas.state, id};
+    }
+    recargar();
+  });
+  final ciclo = AppLifecycleListener(onResume: recargar);
+
+  ref.onDispose(() {
+    espera?.cancel();
+    suscripcion.cancel();
+    ciclo.dispose();
+  });
+});
+
+/// Escucha una publicación y sus comentarios mientras su detalle está abierto
+/// (SCRUM-357).
+final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
+  ref,
+  publicacionId,
+) {
+  Timer? esperaComentarios;
+  Timer? esperaPublicacion;
+
+  void recargarComentarios() {
+    esperaComentarios?.cancel();
+    esperaComentarios = Timer(
+      esperaCambiosForo,
+      () => ref.invalidate(comentariosForoProvider(publicacionId)),
+    );
+  }
+
+  void recargarPublicacion() {
+    esperaPublicacion?.cancel();
+    esperaPublicacion = Timer(
+      esperaCambiosForo,
+      () => ref.invalidate(publicacionForoProvider(publicacionId)),
+    );
+  }
+
+  void recargarTodo() {
+    recargarComentarios();
+    recargarPublicacion();
+  }
+
+  final suscripcion = ref
+      .read(fuenteCambiosForoProvider)
+      .deLaPublicacion(publicacionId)
+      .listen(
+        (cambio) => switch (cambio.tabla) {
+          TablaForo.comentarios => recargarComentarios(),
+          TablaForo.publicaciones => recargarPublicacion(),
+          null => recargarTodo(),
+        },
+      );
+  final ciclo = AppLifecycleListener(onResume: recargarTodo);
+
+  ref.onDispose(() {
+    esperaComentarios?.cancel();
+    esperaPublicacion?.cancel();
+    suscripcion.cancel();
+    ciclo.dispose();
+  });
+});

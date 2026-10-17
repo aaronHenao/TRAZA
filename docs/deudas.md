@@ -90,4 +90,30 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 **Qué falta:**
 
 - **La IA no existe todavía** (criterio 3 de SCRUM-323, subtarea SCRUM-347; se sigue en SCRUM-322). Hay que decidir dónde corre (Edge Function de Supabase, o una función llamada desde el trigger) y que sea ella quien deje la fila en `retenida` con su `motivo_moderacion` **antes** de devolverla al insertar. Para que la app se entere sin más cambios, el estado tiene que venir ya puesto en la fila que devuelve el `insert ... select`.
-- **El administrador solo consulta.** Aprobar una retenida o eliminar una publicación necesita policies de update que hoy no hay, a propósito: llegan con SCRUM-322 y SCRUM-242.
+- **El administrador todavía no modera.** Ya publica, comenta y edita lo suyo (SCRUM-354, SCRUM-355), pero aprobar una retenida o eliminar una publicación ajena llega con SCRUM-322 y SCRUM-242. Ojo: el trigger `publicaciones_foro_proteger` (`0024_foro_editar_publicacion.sql`, su función la reemplaza `0025_foro_historial_de_versiones.sql`) no deja cambiar `estado` ni `motivo_moderacion` en ningún update; la moderación tendrá que abrirle paso al administrador ahí, además de su policy.
+
+## SCRUM-324: el autor no puede eliminar su propia publicación
+
+**Qué quedó hecho (SCRUM-355):**
+
+- El autor edita el título y el contenido de lo suyo mientras esté publicado, con confirmación antes de guardar. Policy de update y trigger `publicaciones_foro_proteger` en `0024_foro_editar_publicacion.sql`.
+
+**Qué falta:**
+
+- **Eliminar la propia publicación.** No hay botón ni policy de delete en `publicaciones_foro`. Decidir antes de hacerlo:
+  - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
+  - la confirmación: es destructiva de verdad, así que el diálogo debe decir que también se van los comentarios.
+- Cuando se haga, el botón va junto al de editar en `DetallePublicacionScreen` y se ofrece con la misma regla (`PublicacionForo.editablePor`).
+
+## SCRUM-357: foro en tiempo real con Postgres Changes
+
+**Qué quedó hecho:**
+
+- `0028_foro_tiempo_real.sql` publica `publicaciones_foro` y `comentarios_foro` en Supabase Realtime.
+- `SupabaseCambiosForo` (`lib/services/cambios_foro.dart`) escucha con Postgres Changes. `foroEnVivoProvider` y `publicacionEnVivoProvider` no pintan lo que llega: esperan 500 ms y recargan las consultas de siempre, que pasan por RLS.
+- El foro avisa "N publicaciones nuevas · Ver" en vez de mover la lista. La conexión solo existe mientras hay una pantalla del foro abierta.
+
+**Qué falta:**
+
+- **Probarlo contra Supabase de verdad.** `SupabaseCambiosForo` no tiene pruebas automáticas: necesita el WebSocket real. Validar con dos dispositivos y revisar en Realtime → Reports que las conexiones se cierran al salir del foro.
+- **Pasar a Broadcast desde la base cuando haya moderación o más usuarios.** Postgres Changes hace una lectura de RLS por cada suscriptor en cada cambio y no avisa a quien deja de ver una fila: si una publicación pasa a `retenida`, quien la tiene abierta no recibe el evento (se entera en su siguiente acción). Con `realtime.broadcast_changes` en un trigger y un canal privado, un cambio es un solo mensaje y se puede avisar también lo que se retira. La app no cambia: solo `SupabaseCambiosForo`.

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/models/borrador_publicacion.dart';
+import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/services/foro_service.dart';
 
@@ -59,6 +60,21 @@ void main() {
     expect(consulta['order'], startsWith('fecha_creacion.desc'));
   });
 
+  test('sabe qué publicaciones escribió el administrador', () async {
+    final supabase = _SupabaseFalso(
+      filas: [
+        {...fila, 'autor_es_admin': true},
+        // Antes de 0023 la columna no existía.
+        {...fila, 'id': 'pub-2'},
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final lista = await supabase.repositorio.publicadas();
+
+    expect(lista.map((p) => p.autorEsAdmin), [true, false]);
+  });
+
   test('la moderación no filtra por estado', () async {
     final supabase = _SupabaseFalso(filas: [fila]);
     addTearDown(supabase.cerrar);
@@ -69,6 +85,237 @@ void main() {
       supabase.peticiones.single.url.queryParameters.keys,
       isNot(contains('estado')),
     );
+  });
+
+  test('el foro trae cuántos comentarios tiene cada publicación', () async {
+    final supabase = _SupabaseFalso(
+      filas: [
+        {
+          ...fila,
+          'comentarios_foro': [
+            {'count': 3},
+          ],
+        },
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final lista = await supabase.repositorio.publicadas();
+
+    expect(
+      supabase.peticiones.single.url.queryParameters['select'],
+      contains('comentarios_foro(count)'),
+    );
+    expect(lista.single.numeroComentarios, 3);
+  });
+
+  group('comentarios (SCRUM-350)', () {
+    final filaComentario = {
+      'id': 'com-1',
+      'publicacion_id': 'pub-1',
+      'autor_id': 'usuario-1',
+      'autor_nombre': 'Ana',
+      'contenido': 'Buen dato',
+      'fecha_creacion': '2026-10-16T15:00:00+00:00',
+    };
+    final nuevo = const BorradorComentario(
+      'Buen dato',
+    ).aNuevoComentario('pub-1')!;
+
+    test('comenta a nombre del usuario sin mandar su nombre', () async {
+      final supabase = _SupabaseFalso(filas: [filaComentario]);
+      addTearDown(supabase.cerrar);
+
+      final comentario = await supabase.repositorio.comentar(nuevo);
+
+      expect(comentario.autorNombre, 'Ana');
+      final peticion = supabase.peticiones.single;
+      expect(peticion.url.path, '/rest/v1/comentarios_foro');
+      expect(jsonDecode(peticion.body), {
+        'publicacion_id': 'pub-1',
+        'contenido': 'Buen dato',
+        'autor_id': 'usuario-1',
+      });
+    });
+
+    test(
+      'lee los comentarios de una publicación en orden de llegada',
+      () async {
+        final supabase = _SupabaseFalso(filas: [filaComentario]);
+        addTearDown(supabase.cerrar);
+
+        final lista = await supabase.repositorio.comentarios('pub-1');
+
+        expect(lista.single.contenido, 'Buen dato');
+        final consulta = supabase.peticiones.single.url.queryParameters;
+        expect(consulta['publicacion_id'], 'eq.pub-1');
+        expect(consulta['order'], startsWith('fecha_creacion.asc'));
+      },
+    );
+
+    test('sabe qué comentarios escribió el administrador', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...filaComentario, 'autor_es_admin': true},
+          {...filaComentario, 'id': 'com-2', 'autor_es_admin': false},
+          // Antes de 0022 la columna no existía.
+          {...filaComentario, 'id': 'com-3'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final lista = await supabase.repositorio.comentarios('pub-1');
+
+      expect(lista.map((c) => c.autorEsAdmin), [true, false, false]);
+    });
+
+    test('al editar manda solo el texto de ese comentario', () async {
+      final supabase = _SupabaseFalso(filas: [filaComentario]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.editarComentario('com-1', nuevo);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'PATCH');
+      expect(peticion.url.path, '/rest/v1/comentarios_foro');
+      expect(peticion.url.queryParameters['id'], 'eq.com-1');
+      expect(jsonDecode(peticion.body), {'contenido': 'Buen dato'});
+    });
+
+    test(
+      'si la policy no deja editarlo, la publicación no está disponible',
+      () {
+        final supabase = _SupabaseFalso(codigoPostgres: 'PGRST116');
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.editarComentario('com-1', nuevo),
+          throwsA(isA<PublicacionNoDisponibleException>()),
+        );
+      },
+    );
+
+    test('sabe si un comentario fue editado y lee su historial', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...filaComentario, 'fecha_edicion': '2026-10-16T16:00:00+00:00'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final lista = await supabase.repositorio.comentarios('pub-1');
+      expect(lista.single.editado, isTrue);
+
+      final historial = _SupabaseFalso(
+        filas: [
+          {
+            'id': 'vc-1',
+            'comentario_id': 'com-1',
+            'contenido': 'Antes',
+            'vigente_desde': '2026-10-16T15:00:00+00:00',
+            'reemplazada_en': '2026-10-16T16:00:00+00:00',
+          },
+        ],
+      );
+      addTearDown(historial.cerrar);
+
+      final versiones = await historial.repositorio.versionesComentario(
+        'com-1',
+      );
+
+      expect(versiones.single.contenido, 'Antes');
+      final consulta = historial.peticiones.single.url;
+      expect(consulta.path, '/rest/v1/versiones_comentario_foro');
+      expect(consulta.queryParameters['comentario_id'], 'eq.com-1');
+    });
+
+    for (final (codigo, causa) in [
+      ('42501', 'la publicación ya no está publicada'),
+      ('23503', 'la publicación ya no existe'),
+    ]) {
+      test('si $causa ($codigo), la publicación no está disponible', () async {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.comentar(nuevo),
+          throwsA(isA<PublicacionNoDisponibleException>()),
+        );
+      });
+    }
+  });
+
+  group('editar (SCRUM-355)', () {
+    test('manda solo el título y el contenido de esa publicación', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.editar('pub-1', nueva);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'PATCH');
+      expect(peticion.url.queryParameters['id'], 'eq.pub-1');
+      expect(jsonDecode(peticion.body), {
+        'titulo': 'Tenis',
+        'contenido': '¿Cuáles?',
+      });
+    });
+
+    test('lee el historial de la más reciente a la original', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {
+            'id': 'ver-1',
+            'publicacion_id': 'pub-1',
+            'titulo': 'Tenis',
+            'contenido': 'Antes',
+            'vigente_desde': '2026-10-16T14:00:00+00:00',
+            'reemplazada_en': '2026-10-16T15:00:00+00:00',
+          },
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final versiones = await supabase.repositorio.versiones('pub-1');
+
+      expect(versiones.single.contenido, 'Antes');
+      final consulta = supabase.peticiones.single.url;
+      expect(consulta.path, '/rest/v1/versiones_publicacion_foro');
+      expect(consulta.queryParameters['publicacion_id'], 'eq.pub-1');
+      expect(
+        consulta.queryParameters['order'],
+        startsWith('reemplazada_en.desc'),
+      );
+    });
+
+    test('sabe si una publicación fue editada', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'fecha_edicion': '2026-10-16T16:00:00+00:00'},
+          {...fila, 'id': 'pub-2'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final lista = await supabase.repositorio.publicadas();
+
+      expect(lista.map((p) => p.editada), [true, false]);
+    });
+
+    for (final (codigo, causa) in [
+      ('PGRST116', 'la policy no dejó tocar la fila'),
+      ('42501', 'la seguridad a nivel de fila lo negó'),
+    ]) {
+      test('si $causa ($codigo), la publicación no está disponible', () async {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.editar('pub-1', nueva),
+          throwsA(isA<PublicacionNoDisponibleException>()),
+        );
+      });
+    }
   });
 
   test('si la tabla rechaza los datos lo dice con su excepción', () async {

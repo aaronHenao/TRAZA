@@ -6,10 +6,13 @@ import 'package:traza/models/borrador_publicacion.dart';
 import 'package:traza/models/publicacion_foro.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
 import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
+import 'package:traza/services/cambios_foro.dart';
+import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 
 import '../utiles/foro_repository_falso.dart';
+import '../utiles/fuente_cambios_foro_falsa.dart';
 
 /// El foro (SCRUM-346) y el formulario para publicar en él (SCRUM-344 y
 /// SCRUM-345).
@@ -18,6 +21,7 @@ void main() {
   final ahora = DateTime(2026, 10, 16, 18);
 
   late ForoRepositorioFalso repositorio;
+  late FuenteCambiosForoFalsa cambios;
 
   Future<void> abrirForo(
     WidgetTester tester, {
@@ -32,6 +36,7 @@ void main() {
       publicaciones: publicaciones,
       ahora: ahora,
     );
+    cambios = FuenteCambiosForoFalsa();
     final router = GoRouter(
       initialLocation: ForoScreen.ruta,
       routes: [
@@ -53,6 +58,8 @@ void main() {
         overrides: [
           foroRepositoryProvider.overrideWithValue(repositorio),
           relojProvider.overrideWithValue(() => ahora),
+          usuarioActualProvider.overrideWithValue(() => 'usuario-1'),
+          fuenteCambiosForoProvider.overrideWithValue(cambios),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -108,6 +115,22 @@ void main() {
       expect(find.text('Hoy'), findsOneWidget);
       expect(find.text('Lucía'), findsOneWidget);
       expect(find.text('2 oct'), findsOneWidget);
+    });
+
+    testWidgets('una publicación editada lo dice junto a la fecha', (
+      tester,
+    ) async {
+      await abrirForo(
+        tester,
+        publicaciones: [
+          publicacionDePrueba(
+            fecha: DateTime(2026, 10, 16, 7),
+            fechaEdicion: DateTime(2026, 10, 16, 9),
+          ),
+        ],
+      );
+
+      expect(find.text('Hoy • Editada'), findsOneWidget);
     });
 
     testWidgets('sin publicaciones invita a abrir la conversación', (
@@ -241,6 +264,115 @@ void main() {
         find.text('No se pudo publicar. Inténtalo de nuevo.'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('en vivo (SCRUM-357)', () {
+    final tenis = publicacionDePrueba(id: 'a', titulo: 'Tenis para asfalto');
+    final ruta = publicacionDePrueba(id: 'b', titulo: 'Ruta en Las Palmas');
+
+    /// Lo que pasa cuando otro usuario publica: la base ya tiene la fila y
+    /// llega el aviso.
+    Future<void> otroPublica(WidgetTester tester) async {
+      repositorio.publicaciones.insert(0, ruta);
+      cambios.emitirForo(
+        const CambioForo(
+          tipo: TipoCambioForo.nuevo,
+          tabla: TablaForo.publicaciones,
+          id: 'b',
+          autorId: 'otro-usuario',
+        ),
+      );
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('lo nuevo de otro espera detrás de un aviso y "Ver" lo '
+        'muestra', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      await otroPublica(tester);
+
+      expect(find.text('1 publicación nueva · Ver'), findsOneWidget);
+      expect(find.text('Ruta en Las Palmas'), findsNothing);
+      expect(find.text('Tenis para asfalto'), findsOneWidget);
+
+      await tester.tap(find.byKey(ForoScreen.claveNuevas));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ruta en Las Palmas'), findsOneWidget);
+      expect(find.byKey(ForoScreen.claveNuevas), findsNothing);
+    });
+
+    testWidgets('lo que publica uno mismo no se anuncia', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      repositorio.publicaciones.insert(0, ruta);
+      cambios.emitirForo(
+        const CambioForo(
+          tipo: TipoCambioForo.nuevo,
+          tabla: TablaForo.publicaciones,
+          id: 'b',
+          autorId: 'usuario-1',
+        ),
+      );
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ForoScreen.claveNuevas), findsNothing);
+      expect(find.text('Ruta en Las Palmas'), findsOneWidget);
+    });
+
+    testWidgets('una edición se ve en su sitio, sin refrescar', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      repositorio.publicaciones[0] = publicacionDePrueba(
+        id: 'a',
+        titulo: 'Tenis para asfalto y trail',
+        fechaEdicion: ahora,
+      );
+      cambios.emitirForo(
+        const CambioForo(
+          tipo: TipoCambioForo.editado,
+          tabla: TablaForo.publicaciones,
+          id: 'a',
+        ),
+      );
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tenis para asfalto y trail'), findsOneWidget);
+    });
+
+    testWidgets('una ráfaga de avisos se resuelve con una sola consulta', (
+      tester,
+    ) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+      final antes = repositorio.consultas;
+
+      for (var i = 0; i < 5; i++) {
+        cambios.emitirForo(
+          const CambioForo(
+            tipo: TipoCambioForo.nuevo,
+            tabla: TablaForo.comentarios,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.consultas - antes, 1);
+    });
+
+    testWidgets('al salir del foro deja de escuchar', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+      expect(cambios.escuchandoForo, isTrue);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+
+      expect(cambios.escuchandoForo, isFalse);
     });
   });
 }

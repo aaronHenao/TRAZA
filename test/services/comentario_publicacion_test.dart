@@ -95,7 +95,7 @@ void main() {
         isTrue,
       );
       repositorio
-        ..retener('pub-1')
+        ..rechazar('pub-1')
         ..errorAlComentar = const PublicacionNoDisponibleException();
 
       final resultado = await comentar('Llego tarde');
@@ -104,7 +104,7 @@ void main() {
       final ahora = await container.read(
         publicacionForoProvider('pub-1').future,
       );
-      expect(ahora!.estado, EstadoPublicacion.retenida);
+      expect(ahora!.estado, EstadoPublicacion.rechazada);
       expect(ahora.admiteComentarios, isFalse);
     });
 

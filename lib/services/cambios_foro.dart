@@ -10,12 +10,13 @@ final fuenteCambiosForoProvider = Provider<FuenteCambiosForo>(
   (ref) => SupabaseCambiosForo(),
 );
 
-/// Qué tabla cambió.
-enum TablaForo { publicaciones, comentarios }
+/// Qué tabla cambió. `moderaciones` es `moderaciones_foro` (SCRUM-322).
+enum TablaForo { publicaciones, comentarios, moderaciones }
 
 /// Qué pasó.
 enum TipoCambioForo {
-  /// Se insertó una fila.
+  /// Se insertó una fila, o la moderación aprobó una publicación: para quien
+  /// lee el foro, apareció (SCRUM-322).
   nuevo,
 
   /// Se editó una fila.
@@ -37,6 +38,8 @@ class CambioForo {
     this.id,
     this.publicacionId,
     this.autorId,
+    this.estado,
+    this.motivo,
   });
 
   const CambioForo.reconectado() : this(tipo: TipoCambioForo.reconectado);
@@ -52,8 +55,21 @@ class CambioForo {
   /// acaba de publicar.
   final String? autorId;
 
+  /// Cómo quedó la fila, tal como lo guarda la base (`publicada`,
+  /// `rechazada`...).
+  final String? estado;
+
+  /// En una moderación, por qué se rechazó.
+  final String? motivo;
+
   bool get esPublicacionNueva =>
       tipo == TipoCambioForo.nuevo && tabla == TablaForo.publicaciones;
+
+  /// La moderación rechazó algo (criterio 5 de SCRUM-322).
+  bool get esRechazo =>
+      tabla == TablaForo.moderaciones &&
+      tipo == TipoCambioForo.editado &&
+      estado == 'rechazada';
 
   @override
   String toString() => 'CambioForo(${tipo.name}, ${tabla?.name}, $id)';
@@ -88,6 +104,7 @@ class SupabaseCambiosForo implements FuenteCambiosForo {
 
   static const _tablaPublicaciones = 'publicaciones_foro';
   static const _tablaComentarios = 'comentarios_foro';
+  static const _tablaModeraciones = 'moderaciones_foro';
 
   @override
   Stream<CambioForo> delForo() => _escuchar('foro', (canal, emitir) {
@@ -98,13 +115,21 @@ class SupabaseCambiosForo implements FuenteCambiosForo {
         table: _tablaPublicaciones,
         callback: (p) => emitir(_cambio(TablaForo.publicaciones, p)),
       )
-      // Solo los nuevos: en el listado se ve cuántos comentarios hay, no lo
-      // que dicen.
+      // En el listado se ve cuántos comentarios hay, no lo que dicen: basta
+      // con los nuevos y con los que la moderación aprobó.
       ..onPostgresChanges(
-        event: PostgresChangeEvent.insert,
+        event: PostgresChangeEvent.all,
         schema: 'public',
         table: _tablaComentarios,
         callback: (p) => emitir(_cambio(TablaForo.comentarios, p)),
+      )
+      // SCRUM-322: al autor le llegan los veredictos de lo suyo; al
+      // administrador, todos (la policy de select decide).
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: _tablaModeraciones,
+        callback: (p) => emitir(_cambio(TablaForo.moderaciones, p)),
       );
   });
 
@@ -133,6 +158,19 @@ class SupabaseCambiosForo implements FuenteCambiosForo {
               value: publicacionId,
             ),
             callback: (p) => emitir(_cambio(TablaForo.comentarios, p)),
+          )
+          // SCRUM-322: las ediciones propias de la publicación o de sus
+          // comentarios que esperan la moderación.
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: _tablaModeraciones,
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'publicacion_id',
+              value: publicacionId,
+            ),
+            callback: (p) => emitir(_cambio(TablaForo.moderaciones, p)),
           );
       });
 
@@ -181,23 +219,46 @@ class SupabaseCambiosForo implements FuenteCambiosForo {
   }
 
   static CambioForo? _cambio(TablaForo tabla, PostgresChangePayload p) {
-    final tipo = switch (p.eventType) {
+    final fila = p.newRecord;
+    return cambioDesdeFila(tabla, switch (p.eventType) {
       PostgresChangeEvent.insert => TipoCambioForo.nuevo,
       PostgresChangeEvent.update => TipoCambioForo.editado,
       // No hay policies de delete: no debería llegar.
       _ => null,
-    };
-    if (tipo == null) return null;
+    }, fila);
+  }
 
-    final fila = p.newRecord;
+  /// Traduce la fila que llegó por Realtime. Separado de `_cambio` para
+  /// probarlo sin un canal de verdad.
+  @visibleForTesting
+  static CambioForo? cambioDesdeFila(
+    TablaForo tabla,
+    TipoCambioForo? tipo,
+    Map<String, dynamic> fila,
+  ) {
+    if (tipo == null) return null;
+    final estado = fila['estado'] as String?;
+
+    // SCRUM-322: una publicación que pasa a publicada sin haber sido editada
+    // nunca es una que la moderación acaba de aprobar. Para el foro es nueva,
+    // aunque en la base sea un update. Una edición aprobada trae
+    // `fecha_edicion` y sigue siendo una edición.
+    final aprobada =
+        tabla == TablaForo.publicaciones &&
+        tipo == TipoCambioForo.editado &&
+        estado == 'publicada' &&
+        fila['fecha_edicion'] == null;
+
     return CambioForo(
-      tipo: tipo,
+      tipo: aprobada ? TipoCambioForo.nuevo : tipo,
       tabla: tabla,
       id: fila['id'] as String?,
-      publicacionId: tabla == TablaForo.comentarios
-          ? fila['publicacion_id'] as String?
-          : fila['id'] as String?,
+      publicacionId: tabla == TablaForo.publicaciones
+          ? fila['id'] as String?
+          : fila['publicacion_id'] as String?,
       autorId: fila['autor_id'] as String?,
+      estado: estado,
+      motivo: fila['motivo'] as String?,
     );
   }
 }

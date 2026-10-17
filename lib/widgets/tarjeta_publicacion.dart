@@ -10,8 +10,10 @@ import 'traza_card.dart';
 /// comienzo del contenido (SCRUM-346).
 ///
 /// La usan el foro del corredor y la moderación del administrador. Solo el
-/// administrador ve el estado y el motivo ([conEstado]): en el foro todo lo
-/// que aparece está publicado, y decirlo en cada tarjeta sería ruido.
+/// administrador ve el estado y el motivo ([conEstado]): en el foro casi todo
+/// lo que aparece está publicado, y decirlo en cada tarjeta sería ruido. Lo
+/// único que el autor ve marcado es lo suyo que está en revisión
+/// (SCRUM-322).
 class TarjetaPublicacion extends StatelessWidget {
   const TarjetaPublicacion({
     required this.publicacion,
@@ -82,7 +84,13 @@ class TarjetaPublicacion extends StatelessWidget {
                   ],
                 ),
               ),
-              if (conEstado) EstadoPublicacionChip(estado: publicacion.estado),
+              if (conEstado)
+                EstadoPublicacionChip(estado: publicacion.estado)
+              else if (publicacion.estado.esperaModeracion)
+                EstadoPublicacionChip(
+                  estado: publicacion.estado,
+                  paraElAutor: true,
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -236,11 +244,22 @@ class AvatarAutor extends StatelessWidget {
   }
 }
 
-/// Pastilla con el estado de una publicación, para el administrador.
+/// Pastilla con el estado de una publicación o un comentario.
+///
+/// El administrador ve el estado exacto. El autor ([paraElAutor]) ve lo que
+/// le importa: si ya se publicó, si está "en revisión" (la IA dudó o no) o si
+/// se rechazó (SCRUM-322).
 class EstadoPublicacionChip extends StatelessWidget {
-  const EstadoPublicacionChip({required this.estado, super.key});
+  const EstadoPublicacionChip({
+    required this.estado,
+    this.paraElAutor = false,
+    super.key,
+  });
 
   final EstadoPublicacion estado;
+  final bool paraElAutor;
+
+  static const enRevision = 'En revisión';
 
   @override
   Widget build(BuildContext context) {
@@ -250,10 +269,20 @@ class EstadoPublicacionChip extends StatelessWidget {
         AppColors.primaryTint,
         AppColors.primaryDark,
       ),
-      EstadoPublicacion.retenida => (
-        'Retenida',
-        AppColors.accentTint,
-        AppColors.accentInk,
+      EstadoPublicacion.enRevision => (
+        enRevision,
+        AppColors.secondaryTint,
+        AppColors.secondaryDark,
+      ),
+      EstadoPublicacion.pendiente => (
+        paraElAutor ? enRevision : 'Pendiente',
+        paraElAutor ? AppColors.secondaryTint : AppColors.accentTint,
+        paraElAutor ? AppColors.secondaryDark : AppColors.accentInk,
+      ),
+      EstadoPublicacion.rechazada => (
+        'Rechazada',
+        AppColors.dangerTint,
+        AppColors.danger,
       ),
       EstadoPublicacion.eliminada => (
         'Eliminada',

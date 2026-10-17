@@ -20,13 +20,33 @@ class EditarPublicacionScreen extends ConsumerWidget {
   final String publicacionId;
 
   static const noEditable = 'Esta publicación ya no se puede editar';
+  static const edicionEnCurso = 'Ya tienes una edición en revisión';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final publicacion = ref.watch(publicacionForoProvider(publicacionId));
     final usuario = ref.read(usuarioActualProvider)();
+    // SCRUM-322: una edición a la vez.
+    final edicionAbierta = ref.watch(
+      edicionAbiertaDePublicacionProvider(publicacionId),
+    );
 
     return switch (publicacion) {
+      AsyncData(value: final p?)
+          when p.editablePor(usuario) && edicionAbierta != null =>
+        _Aviso(
+          child: EstadoVacio(
+            icono: Icons.hourglass_top_rounded,
+            titulo: edicionEnCurso,
+            detalle:
+                'Podrás volver a editarla cuando la moderación revise tus '
+                'cambios.',
+            accion: OutlinedButton(
+              onPressed: context.pop,
+              child: const Text('Volver'),
+            ),
+          ),
+        ),
       AsyncData(value: final p?) when p.editablePor(usuario) =>
         NuevaPublicacionScreen(editando: p),
       AsyncData() => _Aviso(

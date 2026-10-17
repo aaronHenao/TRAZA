@@ -12,6 +12,7 @@ import 'screens/auth/rutas_auth.dart';
 import 'screens/foro/detalle_publicacion_screen.dart';
 import 'screens/foro/editar_publicacion_screen.dart';
 import 'screens/foro/foro_screen.dart';
+import 'screens/foro/mis_rechazados_screen.dart';
 import 'screens/foro/nueva_publicacion_screen.dart';
 import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
@@ -212,8 +213,13 @@ final _navegacion = GoRouter(
           path: 'nueva',
           builder: (context, state) => const NuevaPublicacionScreen(),
         ),
-        // Detalle con comentarios (SCRUM-324). Después de 'nueva': si no,
-        // 'nueva' se tomaría por un id.
+        // Lo que la moderación le rechazó al usuario (SCRUM-322).
+        GoRoute(
+          path: 'rechazados',
+          builder: (context, state) => const MisRechazadosScreen(),
+        ),
+        // Detalle con comentarios (SCRUM-324). Después de 'nueva' y
+        // 'rechazados': si no, se tomarían por un id.
         GoRoute(
           path: ':publicacionId',
           builder: (context, state) => DetallePublicacionScreen(

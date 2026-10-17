@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'publicacion_foro.dart';
+
 /// Cuánto puede medir un comentario. El mismo límite está en la restricción
 /// de `comentarios_foro` (`0021_foro_comentarios.sql`).
 const maxCaracteresComentario = 500;
@@ -20,6 +22,8 @@ class ComentarioForo {
     required this.fechaCreacion,
     this.autorEsAdmin = false,
     this.fechaEdicion,
+    this.estado = EstadoPublicacion.publicada,
+    this.motivoModeracion,
   });
 
   final String id;
@@ -36,15 +40,25 @@ class ComentarioForo {
   /// base al cambiar el contenido.
   final DateTime? fechaEdicion;
 
+  /// Pasa por la misma moderación que las publicaciones (SCRUM-322). Los
+  /// demás solo ven los publicados; el autor ve los suyos en cualquier
+  /// estado.
+  final EstadoPublicacion estado;
+
+  /// Por qué la moderación lo rechazó. Null mientras no haya rechazo.
+  final String? motivoModeracion;
+
   /// Si se editó: se avisa junto a la fecha.
   bool get editado => fechaEdicion != null;
 
-  /// Si [usuarioId] lo puede editar: es suyo (SCRUM-356).
+  /// Si [usuarioId] lo puede editar: es suyo y está publicado (SCRUM-356).
   ///
-  /// Que la publicación siga publicada lo decide quien lo muestra; la policy
-  /// de update de `comentarios_foro` exige las dos cosas.
+  /// Que la publicación siga publicada lo decide quien lo muestra;
+  /// `editar_comentario_foro` exige las dos cosas.
   bool editablePor(String? usuarioId) =>
-      usuarioId != null && usuarioId == autorId;
+      usuarioId != null &&
+      usuarioId == autorId &&
+      estado == EstadoPublicacion.publicada;
 
   factory ComentarioForo.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
@@ -54,6 +68,11 @@ class ComentarioForo {
     final contenido = fila['contenido'];
     final fecha = fila['fecha_creacion'];
     final edicion = fila['fecha_edicion'];
+    // Antes de 0029 la columna no existía: todo estaba publicado.
+    final estado = EstadoPublicacion.desdeDb(
+      fila['estado'] as String? ?? EstadoPublicacion.publicada.valorDb,
+    );
+    final motivo = fila['motivo_moderacion'];
 
     if (id is! String ||
         publicacionId is! String ||
@@ -61,7 +80,9 @@ class ComentarioForo {
         autorNombre is! String ||
         contenido is! String ||
         fecha is! String ||
-        (edicion != null && edicion is! String)) {
+        (edicion != null && edicion is! String) ||
+        estado == null ||
+        (motivo != null && motivo is! String)) {
       throw FormatException(
         'Fila de comentarios_foro incompleta o inesperada',
         fila,
@@ -79,6 +100,8 @@ class ComentarioForo {
       fechaEdicion: edicion is String
           ? DateTime.parse(edicion).toLocal()
           : null,
+      estado: estado,
+      motivoModeracion: motivo as String?,
     );
   }
 

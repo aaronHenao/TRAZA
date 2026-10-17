@@ -31,8 +31,13 @@ class NuevaPublicacionScreen extends ConsumerStatefulWidget {
   static const clavePublicar = Key('publicacion-publicar');
 
   static const publicada = 'Publicación creada';
-  static const retenida = 'Tu publicación quedó retenida para revisión';
+  static const enRevision =
+      'Tu publicación está en revisión. Aparecerá en el foro cuando se '
+      'apruebe.';
   static const editada = 'Publicación actualizada';
+  static const edicionEnRevision =
+      'Tus cambios están en revisión. Mientras tanto se ve la versión '
+      'anterior.';
   static const sinCambios = 'No hay cambios para guardar';
 
   static const claveConfirmarEdicion = Key('publicacion-confirmar-edicion');
@@ -93,9 +98,9 @@ class _NuevaPublicacionScreenState
         case PublicacionCreada():
           context.pop();
           mostrarToast(context, NuevaPublicacionScreen.publicada);
-        case PublicacionRetenida():
+        case PublicacionEnRevision():
           context.pop();
-          mostrarToast(context, NuevaPublicacionScreen.retenida);
+          mostrarToast(context, NuevaPublicacionScreen.enRevision);
         case PublicacionConErrores(:final errores):
           setState(() => _errores = errores);
           mostrarToast(context, 'Revisa los campos marcados');
@@ -134,9 +139,13 @@ class _NuevaPublicacionScreenState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('¿Guardar los cambios?'),
-        content: const Text(
-          'La publicación quedará marcada como editada y la versión anterior '
-          'quedará guardada.',
+        content: Text(
+          original.autorEsAdmin
+              ? 'La publicación quedará marcada como editada y la versión '
+                    'anterior quedará guardada.'
+              // SCRUM-322: lo del corredor pasa por la moderación.
+              : 'Los cambios pasarán por revisión antes de verse en el foro. '
+                    'Mientras tanto, todos verán la versión actual.',
         ),
         actions: [
           TextButton(
@@ -164,6 +173,9 @@ class _NuevaPublicacionScreenState
         case PublicacionEditada():
           context.pop();
           mostrarToast(context, NuevaPublicacionScreen.editada);
+        case EdicionEnRevision():
+          context.pop();
+          mostrarToast(context, NuevaPublicacionScreen.edicionEnRevision);
         case EdicionConErrores(:final errores):
           setState(() => _errores = errores);
           mostrarToast(context, 'Revisa los campos marcados');

@@ -42,3 +42,16 @@ String fechaYHoraRelativa(DateTime fecha, DateTime ahora) {
   final sufijo = local.hour < 12 ? 'a. m.' : 'p. m.';
   return '${fechaRelativa(fecha, ahora)}, $hora12:$minutos $sufijo';
 }
+
+/// El instante completo, sin "Hoy" ni "Ayer": `17 oct 2026, 2:05:09 p. m.`.
+/// Para la auditoría de la moderación (SCRUM-322), donde importa cuándo
+/// exactamente se decidió algo.
+String fechaExacta(DateTime fecha) {
+  final local = fecha.toLocal();
+  final hora12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final minutos = local.minute.toString().padLeft(2, '0');
+  final segundos = local.second.toString().padLeft(2, '0');
+  final sufijo = local.hour < 12 ? 'a. m.' : 'p. m.';
+  return '${local.day} ${_meses[local.month - 1]} ${local.year}, '
+      '$hora12:$minutos:$segundos $sufijo';
+}

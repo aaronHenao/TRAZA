@@ -29,10 +29,9 @@ import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
 import 'models/reto.dart';
 import 'models/resumen_entrenamiento.dart';
-import 'models/revision_ruta.dart';
 import 'screens/rutas/detalle_ruta_screen.dart';
 import 'screens/rutas/publicar_ruta_screen.dart';
-import 'screens/rutas/revision_rutas_screen.dart';
+import 'screens/rutas/rutas_revision.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
@@ -41,7 +40,6 @@ import 'theme/app_theme.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 import 'widgets/solo_administrador.dart';
-import 'widgets/solo_experto.dart';
 import 'widgets/ventana_rol_experto.dart';
 
 Future<void> main() async {
@@ -307,46 +305,9 @@ final _navegacion = GoRouter(
         ),
       ],
     ),
-    // Primera revisión de las rutas publicadas (SCRUM-327). La barrera de
-    // verdad es la base: solo el administrador ve lo que espera su revisión
-    // y solo él lo decide (`decidir_revision_ruta`, 0036).
-    GoRoute(
-      path: EtapaRevision.administrador.ruta,
-      builder: (context, state) => const SoloAdministrador(
-        hijo: RevisionRutasScreen(etapa: EtapaRevision.administrador),
-      ),
-      routes: [
-        GoRoute(
-          path: ':rutaId',
-          builder: (context, state) => SoloAdministrador(
-            hijo: RevisionRutaScreen(
-              rutaId: state.pathParameters['rutaId']!,
-              etapa: EtapaRevision.administrador,
-            ),
-          ),
-        ),
-      ],
-    ),
-    // Segunda revisión, la del Runner Experto (SCRUM-329). Se abre con
-    // `push` desde su pantalla. Igual que arriba, la barrera de verdad es la
-    // base: el experto solo ve y decide lo que el administrador ya aprobó.
-    GoRoute(
-      path: EtapaRevision.experto.ruta,
-      builder: (context, state) => const SoloExperto(
-        hijo: RevisionRutasScreen(etapa: EtapaRevision.experto),
-      ),
-      routes: [
-        GoRoute(
-          path: ':rutaId',
-          builder: (context, state) => SoloExperto(
-            hijo: RevisionRutaScreen(
-              rutaId: state.pathParameters['rutaId']!,
-              etapa: EtapaRevision.experto,
-            ),
-          ),
-        ),
-      ],
-    ),
+    // Las bandejas de revisión de rutas del administrador y del Runner
+    // Experto (SCRUM-321), cada una tras la barrera de su rol.
+    ...rutasRevision,
     // Entrenamientos anteriores (SCRUM-44).
     GoRoute(
       path: '/historial',

@@ -278,5 +278,33 @@ void main() {
       expect(EstadoRuta.desdeDb('rechazada'), EstadoRuta.rechazada);
       expect(EstadoRuta.desdeDb('retirada'), isNull);
     });
+
+    test('la etapa del Runner Experto es la de la restriccion (SCRUM-321)', () {
+      expect(
+        EstadoRuta.desdeDb('revision_experto'),
+        EstadoRuta.revisionExperto,
+      );
+    });
+  });
+
+  group('revision en dos etapas (SCRUM-321)', () {
+    test('una ruta aprobada por el administrador sigue siendo legible', () {
+      // Sin este estado, `desdeSupabase` lanzaria FormatException y se
+      // romperian el detalle y "mis rutas" en cuanto el admin aprobara.
+      final ruta = Ruta.desdeSupabase(fila(estado: 'revision_experto'));
+
+      expect(ruta.estado, EstadoRuta.revisionExperto);
+      expect(ruta.publicada, isFalse);
+      expect(ruta.fechaPublicacion, isNull);
+    });
+
+    test('una ruta rechazada trae su motivo', () {
+      final ruta = Ruta.desdeSupabase(
+        fila(estado: 'rechazada', motivo: 'El trazado cruza una autopista'),
+      );
+
+      expect(ruta.estado, EstadoRuta.rechazada);
+      expect(ruta.motivoRechazo, 'El trazado cruza una autopista');
+    });
   });
 }

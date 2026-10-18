@@ -7,14 +7,19 @@ import 'punto_gps.dart';
 /// Los nombres coinciden con la restricción `estado in (...)` de la tabla
 /// `rutas` (`0029_rutas.sql`).
 enum EstadoRuta {
-  /// Esperando a que un Runner Experto la apruebe (criterio 1 de SCRUM-241).
-  /// Solo la ven su autor, el experto y el administrador.
+  /// Recién enviada: espera la revisión del administrador, que es la
+  /// primera (SCRUM-321). Solo la ven su autor y el administrador.
   enRevision('en_revision'),
+
+  /// El administrador la aprobó y espera la revisión del Runner Experto
+  /// (SCRUM-321). La ven su autor, el experto y el administrador.
+  revisionExperto('revision_experto'),
 
   /// Aprobada y visible para toda la comunidad.
   publicada('publicada'),
 
-  /// El experto no la aprobó. La ve su autor con el motivo.
+  /// El administrador o el experto no la aprobó. La ve su autor con el
+  /// motivo.
   rechazada('rechazada');
 
   const EstadoRuta(this.valorDb);
@@ -120,7 +125,8 @@ class Ruta {
   /// SCRUM-240). La calcula la base al guardar la ruta.
   final double? distanciaKm;
 
-  /// Por qué el experto no la aprobó. Null mientras no la rechace.
+  /// Por qué el administrador o el experto no la aprobó. Null mientras no
+  /// la rechacen.
   final String? motivoRechazo;
 
   /// Cuándo quedó publicada, para mostrarlo junto al autor (criterio 4).

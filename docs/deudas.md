@@ -141,3 +141,20 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Reintentos del aviso**: pg_net manda el aviso una sola vez. Si la función no responde (caída o arranque en frío de más de 5 s), la fila se queda en revisión hasta que el administrador la decida. Si pasa seguido, agregar en una migración nueva un reintento periódico (pg_cron) de lo que lleve más de un minuto en revisión.
 - **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
 - **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.
+
+## SCRUM-321: validar la publicación de rutas (administrador y Runner Experto)
+
+**Qué quedó hecho:**
+
+- `0036_revision_de_rutas.sql`: la ruta pasa por dos revisiones. `en_revision` es ahora "pendiente del administrador" (así `preparar_ruta()` no se toca) y `revision_experto` es "pendiente del Runner Experto". El experto deja de ver lo que está `en_revision`. Las decisiones pasan solo por `decidir_revision_ruta`, que valida el rol y la etapa, exige motivo para rechazar (máximo 300 caracteres) y deja cada decisión en `revisiones_ruta`.
+- `0037_aviso_de_ruta_rechazada.sql`: al rechazarla se le avisa al autor con el motivo y con quién la rechazó. Es el gemelo de 0033.
+- App: bandeja del administrador (`/admin/rutas`, desde su panel), bandeja del experto (`/revision-rutas`, desde la pantalla de Runner Experto, solo si tiene el rol) y detalle con el trazado para decidir.
+- Se corrigió el orden de `/rutas/publicar` y `/rutas/:rutaId` en `main.dart`: "Publicar como ruta" abría el detalle con id `publicar`.
+
+**Qué falta:**
+
+- **Aplicar 0036 y luego 0037** en el SQL Editor y correr sus bloques de comprobación.
+- **No hay cuentas de Runner Experto de prueba.** Con la XP solo por retos (ver SCRUM-192) nadie llega a 150 000 XP. Para probar, sembrar el rol a mano: `insert into roles_usuario (usuario_id, rol) values ('<ID>', 'experto');`.
+- **Las bandejas no son en tiempo real**: se actualizan al entrar, al deslizar y al decidir. `rutas` no está en la publicación de Realtime.
+- **Unificar el diálogo de rechazo** (`pedirMotivoRechazo`) con el `_DialogoRechazo` privado de la moderación del foro, que hace lo mismo con otro texto.
+- **El administrador no puede corregir una decisión**: una ruta rechazada no vuelve a revisión. El autor puede volver a publicar el mismo entrenamiento (el índice de 0031 deja fuera las rechazadas).

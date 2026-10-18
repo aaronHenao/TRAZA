@@ -248,6 +248,19 @@ final _navegacion = GoRouter(
       path: NotificacionesScreen.ruta,
       builder: (context, state) => const NotificacionesScreen(),
     ),
+    // Publicar como ruta el recorrido de un entrenamiento (SCRUM-241). Se
+    // abre con `push` desde el resumen, que ya tiene el entrenamiento
+    // cargado y lo manda por `extra`: pedirlo otra vez por id seria
+    // consultar dos veces lo mismo. Sin él no hay recorrido que publicar, y
+    // la pantalla lo dice en vez de reventar.
+    //
+    // Antes que '/rutas/:rutaId' (SCRUM-321): go_router se queda con la
+    // primera que coincide, y 'publicar' se tomaría por el id de una ruta.
+    GoRoute(
+      path: PublicarRutaScreen.ruta,
+      builder: (context, state) =>
+          PublicarRutaScreen(resumen: state.extra as ResumenEntrenamiento?),
+    ),
     // El detalle de una ruta de la comunidad (SCRUM-240). Se abre con
     // `push` desde el apartado de rutas del foro, así al cerrarlo se vuelve
     // a la lista donde estaba.
@@ -255,16 +268,6 @@ final _navegacion = GoRouter(
       path: DetalleRutaScreen.ruta,
       builder: (context, state) =>
           DetalleRutaScreen(rutaId: state.pathParameters['rutaId']!),
-    ),
-    // Publicar como ruta el recorrido de un entrenamiento (SCRUM-241). Se
-    // abre con `push` desde el resumen, que ya tiene el entrenamiento
-    // cargado y lo manda por `extra`: pedirlo otra vez por id seria
-    // consultar dos veces lo mismo. Sin él no hay recorrido que publicar, y
-    // la pantalla lo dice en vez de reventar.
-    GoRoute(
-      path: PublicarRutaScreen.ruta,
-      builder: (context, state) =>
-          PublicarRutaScreen(resumen: state.extra as ResumenEntrenamiento?),
     ),
     // Lo que el administrador ve del foro. Tras SoloAdministrador como los
     // niveles; la barrera de verdad es la policy de select de la tabla.

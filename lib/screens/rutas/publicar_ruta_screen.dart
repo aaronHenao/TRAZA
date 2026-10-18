@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/resumen_entrenamiento.dart';
+import '../../models/revision_ruta.dart';
 import '../../models/ruta.dart';
 import '../../models/trazado.dart';
 import '../../services/rutas_provider.dart';
@@ -182,7 +183,8 @@ class _YaPublicada extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enRevision = ruta.estado == EstadoRuta.enRevision;
+    // Las dos etapas de la revisión (SCRUM-321) siguen sin estar publicadas.
+    final enRevision = ruta.estado.pendienteDeRevision;
 
     return Padding(
       key: PublicarRutaScreen.claveYaPublicada,
@@ -210,8 +212,9 @@ class _YaPublicada extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             enRevision
-                ? 'La publicaste como "${ruta.nombre}". Un Runner Experto la '
-                      'está revisando y te avisamos cuando se publique.'
+                ? 'La publicaste como "${ruta.nombre}". '
+                      '${ruta.estado.etiqueta}: te avisamos cuando se '
+                      'publique.'
                 : 'La comunidad ya puede ver "${ruta.nombre}".',
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -388,8 +391,10 @@ class _AvisoRevision extends StatelessWidget {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Un Runner Experto revisa tu ruta antes de que la vea la '
-              'comunidad. Te avisamos cuando se publique.',
+              // SCRUM-321: primero el administrador, después el experto.
+              'El administrador y después un Runner Experto revisan tu ruta '
+              'antes de que la vea la comunidad. Te avisamos cuando se '
+              'publique.',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.ink2,

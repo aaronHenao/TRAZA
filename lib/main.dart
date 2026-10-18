@@ -29,8 +29,10 @@ import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
 import 'models/reto.dart';
 import 'models/resumen_entrenamiento.dart';
+import 'models/revision_ruta.dart';
 import 'screens/rutas/detalle_ruta_screen.dart';
 import 'screens/rutas/publicar_ruta_screen.dart';
+import 'screens/rutas/revision_rutas_screen.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
@@ -301,6 +303,26 @@ final _navegacion = GoRouter(
               ),
             ),
           ],
+        ),
+      ],
+    ),
+    // Primera revisión de las rutas publicadas (SCRUM-327). La barrera de
+    // verdad es la base: solo el administrador ve lo que espera su revisión
+    // y solo él lo decide (`decidir_revision_ruta`, 0036).
+    GoRoute(
+      path: EtapaRevision.administrador.ruta,
+      builder: (context, state) => const SoloAdministrador(
+        hijo: RevisionRutasScreen(etapa: EtapaRevision.administrador),
+      ),
+      routes: [
+        GoRoute(
+          path: ':rutaId',
+          builder: (context, state) => SoloAdministrador(
+            hijo: RevisionRutaScreen(
+              rutaId: state.pathParameters['rutaId']!,
+              etapa: EtapaRevision.administrador,
+            ),
+          ),
         ),
       ],
     ),

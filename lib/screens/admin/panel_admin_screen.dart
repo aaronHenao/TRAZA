@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/revision_ruta.dart';
 import '../../theme/app_colors.dart';
+import '../rutas/revision_rutas_screen.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
@@ -21,6 +23,7 @@ class PanelAdminScreen extends StatelessWidget {
   static const claveRetos = Key('panel-admin-retos');
   static const claveNiveles = Key('panel-admin-niveles');
   static const claveForo = Key('panel-admin-foro');
+  static const claveRutas = Key('panel-admin-rutas');
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +67,16 @@ class PanelAdminScreen extends StatelessWidget {
                     'Consulta lo que se publica, decide lo que la IA dejó '
                     'pendiente y revisa lo rechazado.',
                 onTap: () => context.push(ModeracionForoScreen.ruta),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _TarjetaAcceso(
+                clave: claveRutas,
+                icono: Icons.route_outlined,
+                titulo: 'Revisión de rutas',
+                detalle:
+                    'Aprueba o rechaza las rutas que publican los corredores '
+                    'antes de que pasen al Runner Experto.',
+                onTap: () => context.push(EtapaRevision.administrador.ruta),
               ),
             ],
           ),

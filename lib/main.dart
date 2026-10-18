@@ -41,6 +41,7 @@ import 'theme/app_theme.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 import 'widgets/solo_administrador.dart';
+import 'widgets/solo_experto.dart';
 import 'widgets/ventana_rol_experto.dart';
 
 Future<void> main() async {
@@ -321,6 +322,26 @@ final _navegacion = GoRouter(
             hijo: RevisionRutaScreen(
               rutaId: state.pathParameters['rutaId']!,
               etapa: EtapaRevision.administrador,
+            ),
+          ),
+        ),
+      ],
+    ),
+    // Segunda revisión, la del Runner Experto (SCRUM-329). Se abre con
+    // `push` desde su pantalla. Igual que arriba, la barrera de verdad es la
+    // base: el experto solo ve y decide lo que el administrador ya aprobó.
+    GoRoute(
+      path: EtapaRevision.experto.ruta,
+      builder: (context, state) => const SoloExperto(
+        hijo: RevisionRutasScreen(etapa: EtapaRevision.experto),
+      ),
+      routes: [
+        GoRoute(
+          path: ':rutaId',
+          builder: (context, state) => SoloExperto(
+            hijo: RevisionRutaScreen(
+              rutaId: state.pathParameters['rutaId']!,
+              etapa: EtapaRevision.experto,
             ),
           ),
         ),

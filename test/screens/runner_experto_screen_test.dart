@@ -5,14 +5,23 @@ import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/models/runner_experto.dart';
+import 'package:traza/models/revision_ruta.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/screens/home/runner_experto_screen.dart';
+import 'package:traza/screens/rutas/revision_rutas_screen.dart';
 import 'package:traza/services/auth_service.dart';
+import 'package:traza/services/foro_service.dart';
+import 'package:traza/services/revision_rutas_service.dart';
+import 'package:traza/services/roles_service.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 
 import '../utiles/experiencia_falsa.dart';
 import '../utiles/niveles_falso.dart';
+import '../utiles/revision_rutas_falso.dart';
+import '../utiles/roles_falso.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 class _MockAuthService extends Mock implements AuthService {}
 
@@ -263,6 +272,54 @@ void main() {
       expect(formatearFecha(DateTime(2027, 3, 28)), '28 de marzo de 2027');
     });
   });
+
+  group('revisar rutas (SCRUM-329)', () {
+    final porRevisar = RevisionRutasFalso(
+      rutas: [
+        rutaDePrueba(id: 'a', estado: EstadoRuta.revisionExperto),
+        rutaDePrueba(id: 'b', estado: EstadoRuta.revisionExperto),
+        // Todavía del administrador: no cuenta para el experto.
+        rutaDePrueba(id: 'c'),
+      ],
+    );
+
+    testWidgets('sin el rol no se le muestra la bandeja (criterio 7)', (
+      tester,
+    ) async {
+      await _montar(tester, fechaRegistro: antiguo, ahora: hoy);
+
+      expect(find.byKey(RunnerExpertoScreen.claveRevisarRutas), findsNothing);
+    });
+
+    testWidgets('con el rol ve cuantas rutas le esperan', (tester) async {
+      await _montar(
+        tester,
+        fechaRegistro: antiguo,
+        ahora: hoy,
+        roles: RolesFalso.experto(),
+        revision: porRevisar,
+      );
+
+      expect(find.byKey(RunnerExpertoScreen.claveRevisarRutas), findsOneWidget);
+      expect(find.text('Revisar rutas (2)'), findsOneWidget);
+    });
+
+    testWidgets('abre su bandeja', (tester) async {
+      await _montar(
+        tester,
+        fechaRegistro: antiguo,
+        ahora: hoy,
+        roles: RolesFalso.experto(),
+        revision: porRevisar,
+      );
+
+      await tester.tap(find.byKey(RunnerExpertoScreen.claveRevisarRutas));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RevisionRutasScreen), findsOneWidget);
+      expect(find.text('Rutas por revisar'), findsOneWidget);
+    });
+  });
 }
 
 Future<void> _montar(
@@ -273,6 +330,8 @@ Future<void> _montar(
   ExperienciaFalsa? repositorio,
   List<Nivel>? niveles,
   NivelesFalso? repositorioNiveles,
+  RolesFalso? roles,
+  RevisionRutasFalso? revision,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -288,6 +347,11 @@ Future<void> _montar(
       GoRoute(
         path: RunnerExpertoScreen.ruta,
         builder: (_, _) => const RunnerExpertoScreen(),
+      ),
+      GoRoute(
+        path: EtapaRevision.experto.ruta,
+        builder: (_, _) =>
+            const RevisionRutasScreen(etapa: EtapaRevision.experto),
       ),
     ],
   );
@@ -306,6 +370,12 @@ Future<void> _montar(
           repositorioNiveles ?? NivelesFalso(catalogo: niveles ?? _mapa(11)),
         ),
         relojProvider.overrideWithValue(() => ahora),
+        // Por defecto, una cuenta sin el rol ganado (SCRUM-329).
+        rolesRepositoryProvider.overrideWithValue(roles ?? RolesFalso()),
+        revisionRutasRepositoryProvider.overrideWithValue(
+          revision ?? RevisionRutasFalso(),
+        ),
+        usuarioActualProvider.overrideWithValue(() => 'corredor-1'),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

@@ -5,15 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/insignia.dart';
+import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/insignias_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/services/perfil_provider.dart';
+import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/screens/home/runner_experto_screen.dart';
 import 'package:traza/screens/onboarding/perfil_screen.dart';
 import 'package:traza/models/perfil_state.dart';
 import 'package:traza/widgets/configuracion_valor_objetivo.dart';
 import 'package:traza/screens/onboarding/permisos_screen.dart';
+import 'package:traza/widgets/lista_historial.dart';
 import 'package:traza/widgets/seccion_insignias.dart';
 
 import '../utiles/insignias_falsas.dart';
@@ -619,6 +623,183 @@ void main() {
       expect(find.text('Pantalla Runner Experto'), findsOneWidget);
     });
   });
+
+  group('pestaña de actividades (SCRUM-285)', () {
+    final entrenamientos = [
+      ResumenEntrenamiento(
+        entrenamientoId: 'e1',
+        nombreActividad: 'Correr',
+        fechaFin: DateTime(2026, 9, 15, 7),
+        duracion: const Duration(minutes: 28, seconds: 14),
+        distanciaMetros: 5100,
+      ),
+    ];
+
+    Future<GoRouter> abrirPerfil(
+      WidgetTester tester, {
+      _HistorialFalso? historial,
+    }) => _montarPerfil(
+      tester,
+      enOnboarding: false,
+      historial: historial ?? _HistorialFalso(entrenamientos: entrenamientos),
+    );
+
+    testWidgets('el perfil abre en lo suyo, no en las actividades', (
+      tester,
+    ) async {
+      final historial = _HistorialFalso(entrenamientos: entrenamientos);
+      await abrirPerfil(tester, historial: historial);
+
+      expect(find.text('Distancia semanal'), findsOneWidget);
+      expect(find.byType(ListaHistorial), findsNothing);
+      // Sin abrir la pestaña no se consulta nada.
+      expect(historial.consultas, 0);
+    });
+
+    testWidgets('la pestaña muestra los entrenamientos anteriores', (
+      tester,
+    ) async {
+      await abrirPerfil(tester);
+
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.actividades)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListaHistorial), findsOneWidget);
+      expect(find.text('Correr · hoy'), findsOneWidget);
+      expect(find.text('5.10 km · 00:28:14'), findsOneWidget);
+    });
+
+    testWidgets('en las actividades no se ofrece guardar objetivos', (
+      tester,
+    ) async {
+      await abrirPerfil(tester);
+
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.actividades)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Guardar cambios'), findsNothing);
+      expect(find.text('Distancia semanal'), findsNothing);
+    });
+
+    testWidgets('se vuelve al perfil sin perder lo que estaba editando', (
+      tester,
+    ) async {
+      await abrirPerfil(tester);
+
+      await _marcarDistancia(tester);
+      await tester.enterText(_campoDe(TipoObjetivo.distancia), '18');
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.actividades)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.perfil)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('18'), findsOneWidget);
+      expect(_estadoDe(tester).valorDe(TipoObjetivo.distancia), 18);
+    });
+
+    testWidgets('la dirección puede abrir el perfil en las actividades', (
+      tester,
+    ) async {
+      // Así llegan el "Ver todos" de la portada y el reloj de Seleccionar
+      // actividad, que antes abrían la sección del historial.
+      final router = await abrirPerfil(tester);
+
+      router.go(PerfilScreen.rutaCon(PestanaPerfil.actividades));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListaHistorial), findsOneWidget);
+      expect(find.text('Correr · hoy'), findsOneWidget);
+    });
+
+    testWidgets('abierto en las actividades, la pestaña del perfil sigue '
+        'disponible', (tester) async {
+      final router = await abrirPerfil(tester);
+      router.go(PerfilScreen.rutaCon(PestanaPerfil.actividades));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.perfil)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Distancia semanal'), findsOneWidget);
+    });
+
+    testWidgets('la cabecera y las pestañas están en las dos', (tester) async {
+      await abrirPerfil(tester);
+
+      expect(find.text('Tu perfil'), findsOneWidget);
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.actividades)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tu perfil'), findsOneWidget);
+      expect(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.perfil)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('en el onboarding no hay pestañas ni se pide el historial', (
+      tester,
+    ) async {
+      // Recién registrado no hay entrenamientos: el perfil es un paso del
+      // registro y nada más.
+      final historial = _HistorialFalso(entrenamientos: entrenamientos);
+      await _montarPerfil(tester, historial: historial);
+
+      expect(find.text('Actividades'), findsNothing);
+      expect(find.byType(ListaHistorial), findsNothing);
+      expect(historial.consultas, 0);
+    });
+
+    testWidgets('en la pantalla más estrecha las dos pestañas caben', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320 * 3, 568 * 3);
+      tester.view.devicePixelRatio = 3;
+
+      await abrirPerfil(tester);
+
+      expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.byKey(PerfilScreen.clavePestana(PestanaPerfil.actividades)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Correr · hoy'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+}
+
+/// El día que ven las pruebas, para que "hoy" y "ayer" del historial no
+/// dependan de cuándo se corran.
+final _ahora = DateTime(2026, 9, 15, 9);
+
+/// Historial de mentira para la pestaña "Actividades": por defecto, vacío.
+class _HistorialFalso implements HistorialRepository {
+  _HistorialFalso({this.entrenamientos = const []});
+
+  final List<ResumenEntrenamiento> entrenamientos;
+  var consultas = 0;
+
+  @override
+  Future<List<ResumenEntrenamiento>> cargar() async {
+    consultas++;
+    return entrenamientos;
+  }
 }
 
 /// Repositorio de mentira: devuelve los objetivos que se le configuren,
@@ -675,11 +856,12 @@ Finder _campoDe(TipoObjetivo tipo) => find.descendant(
 FilledButton _botonGuardar(WidgetTester tester) =>
     tester.widget<FilledButton>(find.byType(FilledButton));
 
-Future<void> _montarPerfil(
+Future<GoRouter> _montarPerfil(
   WidgetTester tester, {
   ObjetivosRepository? repositorio,
   bool enOnboarding = true,
   InsigniasFalsas? insignias,
+  HistorialRepository? historial,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -687,16 +869,32 @@ Future<void> _montarPerfil(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final router = GoRouter(
-    initialLocation: '/perfil',
+    initialLocation: PerfilScreen.ruta,
     routes: [
       GoRoute(
-        path: '/perfil',
-        builder: (_, _) => PerfilScreen(enOnboarding: enOnboarding),
+        path: PerfilScreen.ruta,
+        // Como en la app: la pestaña con la que abre sale de la dirección.
+        builder: (_, state) => PerfilScreen(
+          enOnboarding: enOnboarding,
+          pestanaInicial: PestanaPerfil.desdeParametro(
+            state.uri.queryParameters['pestana'],
+          ),
+        ),
       ),
       GoRoute(path: '/permisos', builder: (_, _) => const PermisosScreen()),
       GoRoute(
         path: '/inicio',
         builder: (_, _) => const Scaffold(body: Text('Portada')),
+      ),
+      GoRoute(
+        path: '/actividad',
+        builder: (_, _) => const Scaffold(body: Text('Pantalla Actividad')),
+      ),
+      GoRoute(
+        path: '/resumen/:entrenamientoId',
+        builder: (_, state) => Scaffold(
+          body: Text('Resumen ${state.pathParameters['entrenamientoId']}'),
+        ),
       ),
       GoRoute(
         path: RunnerExpertoScreen.ruta,
@@ -705,6 +903,7 @@ Future<void> _montarPerfil(
       ),
     ],
   );
+  addTearDown(router.dispose);
 
   await tester.pumpWidget(
     ProviderScope(
@@ -715,11 +914,16 @@ Future<void> _montarPerfil(
         insigniasRepositoryProvider.overrideWithValue(
           insignias ?? InsigniasFalsas(),
         ),
+        historialRepositoryProvider.overrideWithValue(
+          historial ?? _HistorialFalso(),
+        ),
+        relojProvider.overrideWithValue(() => _ahora),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
+  return router;
 }
 
 /// Estado actual del perfil, leído del [ProviderScope] que monta la pantalla.

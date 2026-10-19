@@ -11,7 +11,6 @@ import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/foro/foro_screen.dart';
 import 'screens/foro/nueva_publicacion_screen.dart';
-import 'screens/history/historial_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
 import 'screens/home/mapa_progresion_screen.dart';
@@ -76,7 +75,7 @@ final _navegacion = GoRouter(
     // Login, registro y recuperación de contraseña (SCRUM-32 a SCRUM-36).
     ...rutasAuth,
     GoRoute(
-      path: '/perfil',
+      path: PerfilScreen.ruta,
       builder: (context, state) {
         // El administrador no tiene onboarding de corredor: no elige
         // objetivos ni concede permisos de ubicación. Como el redirect manda
@@ -89,10 +88,16 @@ final _navegacion = GoRouter(
           // destino válido y el flujo sigue a Permisos.
           return const PuertaAdmin(corredor: PerfilScreen(enOnboarding: true));
         }
-        return const PuertaAdmin(
+        return PuertaAdmin(
           corredor: NavegacionPrincipal(
             seccion: SeccionPrincipal.perfil,
-            child: PerfilScreen(),
+            // `?pestana=actividades` abre los entrenamientos (SCRUM-285):
+            // es como llegan quienes vienen a mirarlos.
+            child: PerfilScreen(
+              pestanaInicial: PestanaPerfil.desdeParametro(
+                state.uri.queryParameters['pestana'],
+              ),
+            ),
           ),
         );
       },
@@ -225,14 +230,6 @@ final _navegacion = GoRouter(
       path: ModeracionForoScreen.ruta,
       builder: (context, state) =>
           const SoloAdministrador(hijo: ModeracionForoScreen()),
-    ),
-    // Entrenamientos anteriores (SCRUM-44).
-    GoRoute(
-      path: '/historial',
-      builder: (context, state) => const NavegacionPrincipal(
-        seccion: SeccionPrincipal.historial,
-        child: HistorialScreen(),
-      ),
     ),
     // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
     // usuario eligió en los chips del inicio (SCRUM-93).

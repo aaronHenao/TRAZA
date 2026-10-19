@@ -10,6 +10,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/traza_card.dart';
+import '../onboarding/perfil_screen.dart';
 import 'progresion_screen.dart';
 
 /// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
@@ -281,7 +282,9 @@ class _UltimosEntrenamientos extends ConsumerWidget {
             ),
             if (ultimos.valueOrNull?.isNotEmpty ?? false)
               GestureDetector(
-                onTap: () => context.go('/historial'),
+                // El historial completo vive en el perfil desde SCRUM-285.
+                onTap: () =>
+                    context.go(PerfilScreen.rutaCon(PestanaPerfil.actividades)),
                 child: const Text(
                   'Ver todos',
                   style: TextStyle(

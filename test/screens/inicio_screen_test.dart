@@ -75,7 +75,7 @@ void main() {
     ),
   ];
 
-  Future<void> abrirPortada(
+  Future<GoRouter> abrirPortada(
     WidgetTester tester, {
     Future<List<ResumenEntrenamiento>> Function()? historial,
     Future<Map<TipoObjetivo, num>> Function()? objetivos,
@@ -94,10 +94,6 @@ void main() {
         GoRoute(
           path: '/actividad',
           builder: (_, _) => const Scaffold(body: Text('Pantalla Actividad')),
-        ),
-        GoRoute(
-          path: '/historial',
-          builder: (_, _) => const Scaffold(body: Text('Pantalla Historial')),
         ),
         GoRoute(
           path: '/perfil',
@@ -134,6 +130,7 @@ void main() {
     } else {
       await tester.pump();
     }
+    return router;
   }
 
   group('saludo', () {
@@ -245,13 +242,18 @@ void main() {
       expect(find.text('Ver todos'), findsNothing);
     });
 
-    testWidgets('"Ver todos" abre el historial completo', (tester) async {
-      await abrirPortada(tester);
+    testWidgets('"Ver todos" abre el historial completo, que vive en el '
+        'perfil (SCRUM-285)', (tester) async {
+      final router = await abrirPortada(tester);
 
       await tester.tap(find.text('Ver todos'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pantalla Historial'), findsOneWidget);
+      expect(find.text('Pantalla Perfil'), findsOneWidget);
+      final uri = router.routerDelegate.currentConfiguration.uri;
+      expect(uri.path, '/perfil');
+      // La pestaña de los entrenamientos, no la del perfil a secas.
+      expect(uri.queryParameters['pestana'], 'actividades');
     });
   });
 
@@ -272,15 +274,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Perfil'), findsOneWidget);
-    });
-
-    testWidgets('la barra lleva al historial', (tester) async {
-      await abrirPortada(tester);
-
-      await tester.tap(find.text('Historial'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Pantalla Historial'), findsOneWidget);
     });
 
     testWidgets('la tarjeta de progresión lleva a ver cuánto falta para el '

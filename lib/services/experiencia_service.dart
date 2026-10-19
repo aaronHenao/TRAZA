@@ -39,10 +39,11 @@ class SupabaseExperienciaRepository implements ExperienciaRepository {
 
   static const _tabla = 'experiencia_ganada';
 
-  /// Se embebe el nombre del reto a través de `reto_usuario_id` para
-  /// mostrarlo en el resumen sin otra consulta.
+  /// Se embebe el reto a través de `reto_usuario_id` para mostrarlo en el
+  /// resumen sin otra consulta: el nombre y el id con que se cruza con los
+  /// retos del usuario.
   static const _columnas =
-      'origen, cantidad, ajuste, retos_usuario(retos(nombre))';
+      'origen, cantidad, ajuste, retos_usuario(reto_id, retos(nombre))';
 
   // `Supabase.instance` se toca recién al usarlo, así que las pruebas que
   // nunca llegan a hablar con Supabase no necesitan inicializarlo.

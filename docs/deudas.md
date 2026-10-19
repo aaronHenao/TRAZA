@@ -90,4 +90,54 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 **Qué falta:**
 
 - **La IA no existe todavía** (criterio 3 de SCRUM-323, subtarea SCRUM-347; se sigue en SCRUM-322). Hay que decidir dónde corre (Edge Function de Supabase, o una función llamada desde el trigger) y que sea ella quien deje la fila en `retenida` con su `motivo_moderacion` **antes** de devolverla al insertar. Para que la app se entere sin más cambios, el estado tiene que venir ya puesto en la fila que devuelve el `insert ... select`.
-- **El administrador solo consulta.** Aprobar una retenida o eliminar una publicación necesita policies de update que hoy no hay, a propósito: llegan con SCRUM-322 y SCRUM-242.
+- **El administrador todavía no modera.** Ya publica, comenta y edita lo suyo (SCRUM-354, SCRUM-355), pero aprobar una retenida o eliminar una publicación ajena llega con SCRUM-322 y SCRUM-242. Ojo: el trigger `publicaciones_foro_proteger` (`0024_foro_editar_publicacion.sql`, su función la reemplaza `0025_foro_historial_de_versiones.sql`) no deja cambiar `estado` ni `motivo_moderacion` en ningún update; la moderación tendrá que abrirle paso al administrador ahí, además de su policy.
+
+## SCRUM-324: el autor no puede eliminar su propia publicación
+
+**Qué quedó hecho (SCRUM-355):**
+
+- El autor edita el título y el contenido de lo suyo mientras esté publicado, con confirmación antes de guardar. Policy de update y trigger `publicaciones_foro_proteger` en `0024_foro_editar_publicacion.sql`.
+
+**Qué falta:**
+
+- **Eliminar la propia publicación.** No hay botón ni policy de delete en `publicaciones_foro`. Decidir antes de hacerlo:
+  - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
+  - la confirmación: es destructiva de verdad, así que el diálogo debe decir que también se van los comentarios.
+- Cuando se haga, el botón va junto al de editar en `DetallePublicacionScreen` y se ofrece con la misma regla (`PublicacionForo.editablePor`).
+
+## SCRUM-357: foro en tiempo real con Postgres Changes
+
+**Qué quedó hecho:**
+
+- `0028_foro_tiempo_real.sql` publica `publicaciones_foro` y `comentarios_foro` en Supabase Realtime.
+- `SupabaseCambiosForo` (`lib/services/cambios_foro.dart`) escucha con Postgres Changes. `foroEnVivoProvider` y `publicacionEnVivoProvider` no pintan lo que llega: esperan 500 ms y recargan las consultas de siempre, que pasan por RLS.
+- El foro avisa "N publicaciones nuevas · Ver" en vez de mover la lista. La conexión solo existe mientras hay una pantalla del foro abierta.
+
+**Qué falta:**
+
+- **Probarlo contra Supabase de verdad.** `SupabaseCambiosForo` no tiene pruebas automáticas: necesita el WebSocket real. Validar con dos dispositivos y revisar en Realtime → Reports que las conexiones se cierran al salir del foro.
+- **Pasar a Broadcast desde la base cuando haya moderación o más usuarios.** Postgres Changes hace una lectura de RLS por cada suscriptor en cada cambio y no avisa a quien deja de ver una fila: si una publicación pasa a `retenida`, quien la tiene abierta no recibe el evento (se entera en su siguiente acción). Con `realtime.broadcast_changes` en un trigger y un canal privado, un cambio es un solo mensaje y se puede avisar también lo que se retira. La app no cambia: solo `SupabaseCambiosForo`.
+
+## SCRUM-322: moderación del foro con IA (Nemotron 3.5 Content Safety)
+
+**Qué quedó hecho:**
+
+- `0035_foro_moderacion_ia.sql`: lo que escribe un corredor (publicación, comentario o edición) queda `en_revision` y se anota en `moderaciones_foro`, que es a la vez la cola, el historial de auditoría y las faltas de cada usuario. Un trigger avisa a la Edge Function con pg_net. Las ediciones van por `editar_publicacion_foro` / `editar_comentario_foro` y no tocan lo publicado hasta que se aprueban. El administrador decide con `decidir_moderacion`. Lo del administrador no pasa por la IA.
+- Edge Function `supabase/functions/moderar-foro/`: doble pasada con Nemotron (taxonomía estándar + política de TRAZA en `politica_traza.ts`) y señales de spam sin IA. Si coinciden rechaza, si no coinciden deja pendiente para el administrador, y si NVIDIA falla también deja pendiente. Pruebas: `node --test` (o `deno test`) dentro de la carpeta; CI no las corre.
+- App: "En revisión" para el autor, pestañas de moderación con responsable, fecha exacta y motivo, "Mis rechazados" con faltas, contador en el foro y aviso en vivo del rechazo.
+
+- Activa en el proyecto compartido desde el 2026-10-17: 0035 aplicada (se aplicó cuando todavía se llamaba 0029, antes de traer las rutas de develop), secreto en Vault, función desplegada y secretos `NVIDIA_API_KEY` y `MODERACION_WEBHOOK_SECRET` guardados. Una vez listo todo, se vio que "Odio a los peruanos" sale rechazada como discurso de odio en menos de 5 s.
+
+**Cómo se opera:**
+
+- Desplegar tras cambiar la función: `npx supabase@2 functions deploy moderar-foro --project-ref prrumhnwizdirntqvynk --no-verify-jwt --use-api` (requiere `npx supabase@2 login` en una terminal propia; el `!` de Claude Code no es interactivo).
+- Cambiar un secreto (rol Admin u Owner en la organización): `npx supabase@2 secrets set NVIDIA_API_KEY=... --project-ref prrumhnwizdirntqvynk`.
+- Si algo se queda en revisión: Dashboard → Edge Functions → `moderar-foro` → Logs, y en el SQL Editor `select status_code, content, error_msg, created from net._http_response order by created desc limit 10;`. Si `vault.decrypted_secrets` no tiene `moderacion_webhook_secret`, el trigger no avisa a nadie.
+- No usar `supabase db push`: intentaría aplicar todas las migraciones sobre la base compartida.
+
+**Qué falta:**
+
+- **Rotar la key de NVIDIA**: la primera se compartió en un chat. Generar otra en build.nvidia.com, guardarla con `secrets set` y revocar la anterior.
+- **Reintentos del aviso**: pg_net manda el aviso una sola vez. Si la función no responde (caída o arranque en frío de más de 5 s), la fila se queda en revisión hasta que el administrador la decida. Si pasa seguido, agregar en una migración nueva un reintento periódico (pg_cron) de lo que lleve más de un minuto en revisión.
+- **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
+- **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.

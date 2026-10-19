@@ -61,8 +61,8 @@ class PanelAdminScreen extends StatelessWidget {
                 icono: Icons.forum_outlined,
                 titulo: 'Moderación del foro',
                 detalle:
-                    'Consulta lo que se publica y lo que retiene la '
-                    'moderación.',
+                    'Consulta lo que se publica, decide lo que la IA dejó '
+                    'pendiente y revisa lo rechazado.',
                 onTap: () => context.push(ModeracionForoScreen.ruta),
               ),
             ],

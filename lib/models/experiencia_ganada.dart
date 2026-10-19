@@ -5,17 +5,24 @@ import 'regla_experiencia.dart';
 /// Un reto que se completó al finalizar un entrenamiento (SCRUM-205).
 @immutable
 class RetoCompletado {
-  const RetoCompletado({required this.nombre, required this.xp});
+  const RetoCompletado({required this.nombre, required this.xp, this.retoId});
 
   final String nombre;
   final int xp;
 
-  @override
-  bool operator ==(Object other) =>
-      other is RetoCompletado && other.nombre == nombre && other.xp == xp;
+  /// Id del reto en `retos`, para ubicarlo entre los retos del usuario en el
+  /// resumen. Null si el usuario ya no puede verlo.
+  final String? retoId;
 
   @override
-  int get hashCode => Object.hash(nombre, xp);
+  bool operator ==(Object other) =>
+      other is RetoCompletado &&
+      other.nombre == nombre &&
+      other.xp == xp &&
+      other.retoId == retoId;
+
+  @override
+  int get hashCode => Object.hash(nombre, xp, retoId);
 
   @override
   String toString() => 'RetoCompletado($nombre, $xp XP)';
@@ -57,8 +64,8 @@ class ExperienciaDeEntrenamiento {
     'tope_diario': AjusteExperiencia.topeDiario,
   };
 
-  /// Lee las filas de `experiencia_ganada` de un entrenamiento, con el nombre
-  /// del reto embebido (`retos_usuario(retos(nombre))`).
+  /// Lee las filas de `experiencia_ganada` de un entrenamiento, con el reto
+  /// embebido (`retos_usuario(reto_id, retos(nombre))`).
   ///
   /// Devuelve null si no hay fila de actividad: el entrenamiento no se
   /// procesó (se finalizó antes de la migración, o la XP falló y el trigger
@@ -90,6 +97,7 @@ class ExperienciaDeEntrenamiento {
             RetoCompletado(
               nombre: _nombreDelReto(fila) ?? nombreRetoOculto,
               xp: cantidad.toInt(),
+              retoId: _idDelReto(fila),
             ),
           );
         default:
@@ -103,6 +111,13 @@ class ExperienciaDeEntrenamiento {
       ajuste: ajuste,
       retos: List.unmodifiable(retos),
     );
+  }
+
+  static String? _idDelReto(Map<String, dynamic> fila) {
+    final retoUsuario = fila['retos_usuario'];
+    if (retoUsuario is! Map) return null;
+    final id = retoUsuario['reto_id'];
+    return id is String ? id : null;
   }
 
   static String? _nombreDelReto(Map<String, dynamic> fila) {

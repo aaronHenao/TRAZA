@@ -9,7 +9,10 @@ import 'screens/admin/gestion_niveles_screen.dart';
 import 'screens/admin/gestion_retos_screen.dart';
 import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
+import 'screens/foro/detalle_publicacion_screen.dart';
+import 'screens/foro/editar_publicacion_screen.dart';
 import 'screens/foro/foro_screen.dart';
+import 'screens/foro/mis_rechazados_screen.dart';
 import 'screens/foro/nueva_publicacion_screen.dart';
 import 'screens/home/actividad_screen.dart';
 import 'screens/home/inicio_screen.dart';
@@ -17,6 +20,7 @@ import 'screens/home/mapa_progresion_screen.dart';
 import 'screens/home/progresion_screen.dart';
 import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
+import 'screens/notificaciones/notificaciones_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/rutas/rutas_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
@@ -24,6 +28,9 @@ import 'screens/retos/detalle_reto_screen.dart';
 import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
 import 'models/reto.dart';
+import 'models/resumen_entrenamiento.dart';
+import 'screens/rutas/detalle_ruta_screen.dart';
+import 'screens/rutas/publicar_ruta_screen.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
@@ -222,7 +229,53 @@ final _navegacion = GoRouter(
           path: 'nueva',
           builder: (context, state) => const NuevaPublicacionScreen(),
         ),
+        // Lo que la moderación le rechazó al usuario (SCRUM-322).
+        GoRoute(
+          path: 'rechazados',
+          builder: (context, state) => const MisRechazadosScreen(),
+        ),
+        // Detalle con comentarios (SCRUM-324). Después de 'nueva' y
+        // 'rechazados': si no, se tomarían por un id.
+        GoRoute(
+          path: ':publicacionId',
+          builder: (context, state) => DetallePublicacionScreen(
+            publicacionId: state.pathParameters['publicacionId']!,
+          ),
+          routes: [
+            // El autor edita lo suyo (SCRUM-355).
+            GoRoute(
+              path: 'editar',
+              builder: (context, state) => EditarPublicacionScreen(
+                publicacionId: state.pathParameters['publicacionId']!,
+              ),
+            ),
+          ],
+        ),
       ],
+    ),
+    // Los avisos del usuario (SCRUM-241, SCRUM-242). Se abre con `push`
+    // desde la campana de la portada, así al cerrarla se vuelve ahí.
+    GoRoute(
+      path: NotificacionesScreen.ruta,
+      builder: (context, state) => const NotificacionesScreen(),
+    ),
+    // El detalle de una ruta de la comunidad (SCRUM-240). Se abre con
+    // `push` desde el apartado de rutas del foro, así al cerrarlo se vuelve
+    // a la lista donde estaba.
+    GoRoute(
+      path: DetalleRutaScreen.ruta,
+      builder: (context, state) =>
+          DetalleRutaScreen(rutaId: state.pathParameters['rutaId']!),
+    ),
+    // Publicar como ruta el recorrido de un entrenamiento (SCRUM-241). Se
+    // abre con `push` desde el resumen, que ya tiene el entrenamiento
+    // cargado y lo manda por `extra`: pedirlo otra vez por id seria
+    // consultar dos veces lo mismo. Sin él no hay recorrido que publicar, y
+    // la pantalla lo dice en vez de reventar.
+    GoRoute(
+      path: PublicarRutaScreen.ruta,
+      builder: (context, state) =>
+          PublicarRutaScreen(resumen: state.extra as ResumenEntrenamiento?),
     ),
     // Lo que el administrador ve del foro. Tras SoloAdministrador como los
     // niveles; la barrera de verdad es la policy de select de la tabla.
@@ -230,6 +283,38 @@ final _navegacion = GoRouter(
       path: ModeracionForoScreen.ruta,
       builder: (context, state) =>
           const SoloAdministrador(hijo: ModeracionForoScreen()),
+      routes: [
+        // El administrador también publica (SCRUM-354), con el mismo
+        // formulario. Antes de ':publicacionId' por la misma razón que en
+        // el foro.
+        GoRoute(
+          path: 'nueva',
+          builder: (context, state) =>
+              const SoloAdministrador(hijo: NuevaPublicacionScreen()),
+        ),
+        // El mismo detalle en vista de moderación: el administrador lo ve
+        // en cualquier estado y comenta lo que está publicado.
+        GoRoute(
+          path: ':publicacionId',
+          builder: (context, state) => SoloAdministrador(
+            hijo: DetallePublicacionScreen(
+              publicacionId: state.pathParameters['publicacionId']!,
+              vistaModeracion: true,
+            ),
+          ),
+          routes: [
+            // El administrador edita lo que él publicó (SCRUM-355).
+            GoRoute(
+              path: 'editar',
+              builder: (context, state) => SoloAdministrador(
+                hijo: EditarPublicacionScreen(
+                  publicacionId: state.pathParameters['publicacionId']!,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     ),
     // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
     // usuario eligió en los chips del inicio (SCRUM-93).

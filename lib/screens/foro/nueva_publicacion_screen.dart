@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/borrador_publicacion.dart';
+import '../../models/publicacion_foro.dart';
 import '../../services/foro_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -12,17 +13,34 @@ import '../../widgets/traza_top_bar.dart';
 
 /// Formulario para publicar en el foro (SCRUM-344), con la validación de
 /// título, contenido y límite de caracteres (SCRUM-345).
+///
+/// El administrador usa el mismo formulario desde la moderación
+/// ([rutaAdmin], SCRUM-354), y el autor lo usa para editar lo suyo
+/// ([editando], SCRUM-355).
 class NuevaPublicacionScreen extends ConsumerStatefulWidget {
-  const NuevaPublicacionScreen({super.key});
+  const NuevaPublicacionScreen({this.editando, super.key});
+
+  /// La publicación que se edita, o null para una nueva.
+  final PublicacionForo? editando;
 
   static const ruta = '/foro/nueva';
+  static const rutaAdmin = '/admin/foro/nueva';
 
   static const claveTitulo = Key('publicacion-titulo');
   static const claveContenido = Key('publicacion-contenido');
   static const clavePublicar = Key('publicacion-publicar');
 
   static const publicada = 'Publicación creada';
-  static const retenida = 'Tu publicación quedó retenida para revisión';
+  static const enRevision =
+      'Tu publicación está en revisión. Aparecerá en el foro cuando se '
+      'apruebe.';
+  static const editada = 'Publicación actualizada';
+  static const edicionEnRevision =
+      'Tus cambios están en revisión. Mientras tanto se ve la versión '
+      'anterior.';
+  static const sinCambios = 'No hay cambios para guardar';
+
+  static const claveConfirmarEdicion = Key('publicacion-confirmar-edicion');
 
   @override
   ConsumerState<NuevaPublicacionScreen> createState() =>
@@ -31,8 +49,10 @@ class NuevaPublicacionScreen extends ConsumerStatefulWidget {
 
 class _NuevaPublicacionScreenState
     extends ConsumerState<NuevaPublicacionScreen> {
-  final _titulo = TextEditingController();
-  final _contenido = TextEditingController();
+  late final _titulo = TextEditingController(text: widget.editando?.titulo);
+  late final _contenido = TextEditingController(
+    text: widget.editando?.contenido,
+  );
 
   /// Los errores solo se pintan después del primer intento de publicar:
   /// marcar en rojo lo que todavía no se ha escrito sería regañar por
@@ -58,6 +78,9 @@ class _NuevaPublicacionScreenState
   }
 
   Future<void> _publicar() async {
+    final editando = widget.editando;
+    if (editando != null) return _guardarCambios(editando);
+
     if (_publicando) return;
     setState(() => _publicando = true);
     try {
@@ -75,9 +98,9 @@ class _NuevaPublicacionScreenState
         case PublicacionCreada():
           context.pop();
           mostrarToast(context, NuevaPublicacionScreen.publicada);
-        case PublicacionRetenida():
+        case PublicacionEnRevision():
           context.pop();
-          mostrarToast(context, NuevaPublicacionScreen.retenida);
+          mostrarToast(context, NuevaPublicacionScreen.enRevision);
         case PublicacionConErrores(:final errores):
           setState(() => _errores = errores);
           mostrarToast(context, 'Revisa los campos marcados');
@@ -90,14 +113,96 @@ class _NuevaPublicacionScreenState
     }
   }
 
+  /// Guarda la edición (SCRUM-355). Pide confirmación antes, porque lo que
+  /// todos leen cambia y la publicación queda marcada como editada.
+  Future<void> _guardarCambios(PublicacionForo original) async {
+    if (_publicando) return;
+    final borrador = BorradorPublicacion(
+      titulo: _titulo.text,
+      contenido: _contenido.text,
+    );
+
+    // Primero las reglas: no tiene sentido confirmar algo que no se puede
+    // guardar.
+    if (!borrador.esValido) {
+      setState(() => _errores = borrador.errores);
+      mostrarToast(context, 'Revisa los campos marcados');
+      return;
+    }
+    if (borrador.titulo.trim() == original.titulo &&
+        borrador.contenido.trim() == original.contenido) {
+      mostrarToast(context, NuevaPublicacionScreen.sinCambios);
+      return;
+    }
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Guardar los cambios?'),
+        content: Text(
+          original.autorEsAdmin
+              ? 'La publicación quedará marcada como editada y la versión '
+                    'anterior quedará guardada.'
+              // SCRUM-322: lo del corredor pasa por la moderación.
+              : 'Los cambios pasarán por revisión antes de verse en el foro. '
+                    'Mientras tanto, todos verán la versión actual.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: NuevaPublicacionScreen.claveConfirmarEdicion,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Guardar cambios'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _publicando = true);
+    try {
+      final resultado = await ref
+          .read(edicionPublicacionProvider)
+          .editar(original.id, borrador);
+      if (!mounted) return;
+
+      switch (resultado) {
+        case PublicacionEditada():
+          context.pop();
+          mostrarToast(context, NuevaPublicacionScreen.editada);
+        case EdicionEnRevision():
+          context.pop();
+          mostrarToast(context, NuevaPublicacionScreen.edicionEnRevision);
+        case EdicionConErrores(:final errores):
+          setState(() => _errores = errores);
+          mostrarToast(context, 'Revisa los campos marcados');
+        case EdicionNoDisponible():
+          context.pop();
+          mostrarToast(context, EdicionPublicacion.noDisponible);
+        case EdicionNoGuardada(:final mensaje):
+          mostrarToast(context, mensaje);
+      }
+    } finally {
+      if (mounted) setState(() => _publicando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final editando = widget.editando != null;
+
     return Scaffold(
       body: SafeArea(
         child: AnchoContenido(
           child: Column(
             children: [
-              TrazaTopBar(titulo: 'Nueva publicación', onAtras: context.pop),
+              TrazaTopBar(
+                titulo: editando ? 'Editar publicación' : 'Nueva publicación',
+                onAtras: context.pop,
+              ),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(
@@ -132,7 +237,11 @@ class _NuevaPublicacionScreenState
                   ],
                 ),
               ),
-              _Pie(publicando: _publicando, onPublicar: _publicar),
+              _Pie(
+                texto: editando ? 'Guardar cambios' : 'Publicar',
+                publicando: _publicando,
+                onPublicar: _publicar,
+              ),
             ],
           ),
         ),
@@ -237,8 +346,13 @@ class _Campo extends StatelessWidget {
 }
 
 class _Pie extends StatelessWidget {
-  const _Pie({required this.publicando, required this.onPublicar});
+  const _Pie({
+    required this.texto,
+    required this.publicando,
+    required this.onPublicar,
+  });
 
+  final String texto;
   final bool publicando;
   final VoidCallback onPublicar;
 
@@ -267,7 +381,7 @@ class _Pie extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : const Text('Publicar'),
+            : Text(texto),
       ),
     );
   }

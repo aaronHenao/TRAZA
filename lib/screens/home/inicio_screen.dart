@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/resumen_entrenamiento.dart';
 import '../../models/resumen_semana.dart';
 import '../../services/inicio_provider.dart';
+import '../../services/notificaciones_provider.dart';
 import '../../services/progresion_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
@@ -12,6 +13,7 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/tarjeta_nivel.dart';
 import '../../widgets/traza_card.dart';
+import '../notificaciones/notificaciones_screen.dart';
 import '../onboarding/perfil_screen.dart';
 
 /// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
@@ -28,6 +30,8 @@ class InicioScreen extends ConsumerWidget {
   /// otra, la del nivel (SCRUM-286), y de otro modo no se distinguen.
   static const claveBarraSemanal = Key('inicio-barra-semanal');
 
+  static const claveNotificaciones = Key('inicio-notificaciones');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return NavegacionPrincipal(
@@ -42,7 +46,10 @@ class InicioScreen extends ConsumerWidget {
               ..invalidate(resumenSemanaProvider)
               ..invalidate(ultimosEntrenamientosProvider)
               // La XP y los niveles de la tarjeta (SCRUM-286).
-              ..invalidate(progresionProvider);
+              ..invalidate(progresionProvider)
+              // Y la campana, que es lo que puede haber cambiado sin que el
+              // usuario hiciera nada.
+              ..invalidate(notificacionesSinLeerProvider);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -77,25 +84,70 @@ class _Saludo extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final nombre = ref.watch(nombreUsuarioProvider);
 
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 12),
-        Text(
-          nombre == null ? 'Hola' : 'Hola, $nombre',
-          style: const TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.19,
-            color: AppColors.ink,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              Text(
+                nombre == null ? 'Hola' : 'Hola, $nombre',
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.19,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Vamos por tu meta semanal',
+                style: TextStyle(fontSize: 13, color: AppColors.ink2),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 2),
-        const Text(
-          'Vamos por tu meta semanal',
-          style: TextStyle(fontSize: 13, color: AppColors.ink2),
-        ),
+        // La campana de la `greet-row` del prototipo (SCRUM-241).
+        const Padding(padding: EdgeInsets.only(top: 8), child: _Campana()),
       ],
+    );
+  }
+}
+
+/// Acceso a las notificaciones, con lo que lleva sin leer.
+///
+/// El contador no se pinta como error ni bloquea nada: si no se pudo contar,
+/// la campana sale sola y la bandeja sigue abriéndose.
+class _Campana extends ConsumerWidget {
+  const _Campana();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Mientras la portada esté a la vista, la campana escucha: un aviso
+    // llega cuando el usuario no lo está pidiendo.
+    ref.watch(notificacionesEnVivoProvider);
+    final sinLeer = ref.watch(notificacionesSinLeerProvider).valueOrNull ?? 0;
+
+    return IconButton(
+      key: InicioScreen.claveNotificaciones,
+      onPressed: () => context.push(NotificacionesScreen.ruta),
+      tooltip: 'Notificaciones',
+      icon: Badge(
+        isLabelVisible: sinLeer > 0,
+        backgroundColor: AppColors.danger,
+        // Pasado de nueve, el número exacto no le dice nada a nadie.
+        label: Text(sinLeer > 9 ? '9+' : '$sinLeer'),
+        child: const Icon(Icons.notifications_none_rounded, size: 22),
+      ),
+      style: IconButton.styleFrom(
+        foregroundColor: AppColors.ink,
+        backgroundColor: AppColors.bgAlt,
+        fixedSize: const Size(38, 38),
+        minimumSize: const Size(38, 38),
+        padding: EdgeInsets.zero,
+      ),
     );
   }
 }

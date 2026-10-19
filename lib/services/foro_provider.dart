@@ -7,6 +7,7 @@ import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
 import '../models/moderacion_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/reporte_foro.dart';
 import '../models/version_publicacion.dart';
 import 'cambios_foro.dart';
 import 'foro_service.dart';
@@ -69,11 +70,15 @@ enum VistaModeracionForo {
   publicadas(null, 'Publicadas'),
   pendientes(EstadoModeracion.pendiente, 'Pendientes'),
   enRevision(EstadoModeracion.enRevision, 'En revisión'),
-  rechazadas(EstadoModeracion.rechazada, 'Rechazadas');
+  rechazadas(EstadoModeracion.rechazada, 'Rechazadas'),
+
+  /// Lo que reportaron los corredores (SCRUM-369). Sale de `reportes_foro`.
+  reportadas(null, 'Reportadas');
 
   const VistaModeracionForo(this.estado, this.etiqueta);
 
-  /// El estado de la moderación que muestra, o null en "Publicadas".
+  /// El estado de la moderación que muestra, o null en "Publicadas" y
+  /// "Reportadas".
   final EstadoModeracion? estado;
   final String etiqueta;
 }
@@ -110,7 +115,8 @@ final moderacionesAdminProvider =
 /// La moderación de la pestaña elegida.
 ///
 /// Se filtra en memoria: cambiar de pestaña responde al instante y los
-/// contadores salen de la misma consulta.
+/// contadores salen de la misma consulta. No aplica a "Publicadas" ni a
+/// "Reportadas", que tienen `estado` null y salen de otras consultas.
 final moderacionesDeLaVistaProvider =
     Provider.autoDispose<AsyncValue<List<ModeracionForo>>>((ref) {
       final estado = ref.watch(vistaModeracionForoProvider).estado;
@@ -767,3 +773,102 @@ final publicacionEnVivoProvider = Provider.autoDispose.family<void, String>((
     ciclo.dispose();
   });
 });
+
+/// Todos los reportes del foro, para la bandeja del administrador
+/// (SCRUM-369).
+final reportesForoProvider = FutureProvider.autoDispose<List<ReporteForo>>(
+  (ref) => ref.watch(foroRepositoryProvider).reportes(),
+);
+
+/// Los reportes juntos por publicación: la pestaña "Reportadas".
+final publicacionesReportadasProvider =
+    Provider.autoDispose<AsyncValue<List<PublicacionReportada>>>(
+      (ref) => ref
+          .watch(reportesForoProvider)
+          .whenData(PublicacionReportada.agrupar),
+    );
+
+/// Cómo terminó un reporte (SCRUM-369).
+sealed class ResultadoReporte {
+  const ResultadoReporte();
+}
+
+/// Quedó registrado y está en la bandeja del administrador.
+class ReporteRecibido extends ResultadoReporte {
+  const ReporteRecibido();
+}
+
+/// El usuario ya la había reportado: no se registra otro (criterio 3).
+class ReporteDuplicado extends ResultadoReporte {
+  const ReporteDuplicado();
+}
+
+/// Eligió "Otro" sin decir por qué: no se llegó a tocar la base.
+class ReporteSinDetalle extends ResultadoReporte {
+  const ReporteSinDetalle();
+}
+
+/// La publicación ya no está publicada, o es suya.
+class ReporteNoDisponible extends ResultadoReporte {
+  const ReporteNoDisponible();
+}
+
+/// No se pudo guardar.
+class ReporteNoGuardado extends ResultadoReporte {
+  const ReporteNoGuardado(this.mensaje);
+
+  final String mensaje;
+}
+
+final reporteForoProvider = Provider<ReportePublicacion>(
+  ReportePublicacion.new,
+);
+
+/// El corredor reporta una publicación ofensiva (SCRUM-369).
+class ReportePublicacion {
+  const ReportePublicacion(this._ref);
+
+  final Ref _ref;
+
+  /// Criterio 2: se confirma sin decir nada que identifique a nadie.
+  static const recibido =
+      'Recibimos tu reporte. El autor no sabrá quién lo envió.';
+  static const duplicado = 'Ya reportaste esta publicación. Está en revisión.';
+  static const sinDetalle = 'Cuéntanos por qué la reportas.';
+  static const noDisponible = 'Esta publicación ya no está disponible.';
+  static const noSePudo = 'No se pudo enviar el reporte. Inténtalo de nuevo.';
+  static const sinSesion = 'Inicia sesión para reportar.';
+
+  Future<ResultadoReporte> reportar(
+    String publicacionId,
+    MotivoReporte motivo, {
+    String? detalle,
+  }) async {
+    final limpio = detalle?.trim();
+    if (motivo == MotivoReporte.otro && (limpio == null || limpio.isEmpty)) {
+      return const ReporteSinDetalle();
+    }
+
+    try {
+      await _ref
+          .read(foroRepositoryProvider)
+          .reportar(publicacionId, motivo, detalle: limpio);
+      _ref.invalidate(reportesForoProvider);
+      return const ReporteRecibido();
+    } on PublicacionYaReportadaException {
+      return const ReporteDuplicado();
+    } on PublicacionNoDisponibleException {
+      // Como al comentar: el detalle pasa a decir que ya no está disponible
+      // en vez de seguir ofreciendo reportarla.
+      _ref
+        ..invalidate(publicacionForoProvider(publicacionId))
+        ..invalidate(publicacionesForoProvider);
+      return const ReporteNoDisponible();
+    } on SesionRequeridaParaForoException {
+      return const ReporteNoGuardado(sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo enviar el reporte: $error');
+      return const ReporteNoGuardado(noSePudo);
+    }
+  }
+}

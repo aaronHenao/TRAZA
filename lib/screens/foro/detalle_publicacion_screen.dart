@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/comentario_foro.dart';
 import '../../models/publicacion_foro.dart';
+import '../../models/reporte_foro.dart';
 import '../../services/foro_provider.dart';
 import '../../services/foro_service.dart';
 import '../../services/reloj_provider.dart';
@@ -63,6 +64,13 @@ class DetallePublicacionScreen extends ConsumerWidget {
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 
+  // Reportar (SCRUM-369).
+  static const claveReportar = Key('publicacion-reportar');
+  static Key claveMotivoReporte(MotivoReporte motivo) =>
+      Key('reporte-motivo-${motivo.valorDb}');
+  static const claveDetalleReporte = Key('reporte-detalle');
+  static const claveEnviarReporte = Key('reporte-enviar');
+
   // Avisos de la moderación al autor (SCRUM-322).
   static const claveAvisoModeracion = Key('publicacion-aviso-moderacion');
   static const publicacionEnRevision =
@@ -95,6 +103,12 @@ class DetallePublicacionScreen extends ConsumerWidget {
         publicacion is AsyncData<PublicacionForo?> &&
         edicionAbierta == null &&
         (publicacion.value?.editablePor(usuario) ?? false);
+    // SCRUM-369: lo publicado ajeno se reporta. En la moderación no: el
+    // administrador ya la está revisando.
+    final reportable =
+        !vistaModeracion &&
+        publicacion is AsyncData<PublicacionForo?> &&
+        (publicacion.value?.reportablePor(usuario) ?? false);
 
     void recargar() {
       ref
@@ -116,6 +130,13 @@ class DetallePublicacionScreen extends ConsumerWidget {
                         icon: Icons.edit_outlined,
                         tooltip: 'Editar publicación',
                         onPressed: () => context.push(_rutaEditar),
+                      )
+                    : reportable
+                    ? TrazaIconButton(
+                        key: claveReportar,
+                        icon: Icons.flag_outlined,
+                        tooltip: 'Reportar publicación',
+                        onPressed: () => _reportar(context, ref, publicacionId),
                       )
                     : null,
               ),
@@ -166,6 +187,135 @@ class DetallePublicacionScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Pide el motivo y reporta la publicación (SCRUM-369).
+///
+/// El aviso confirma que llegó sin nombrar a nadie (criterio 2), y si ya la
+/// había reportado lo dice en vez de registrar otro (criterio 3).
+Future<void> _reportar(
+  BuildContext context,
+  WidgetRef ref,
+  String publicacionId,
+) async {
+  final eleccion = await showDialog<({MotivoReporte motivo, String? detalle})>(
+    context: context,
+    builder: (_) => const _DialogoReporte(),
+  );
+  if (eleccion == null || !context.mounted) return;
+
+  final resultado = await ref
+      .read(reporteForoProvider)
+      .reportar(publicacionId, eleccion.motivo, detalle: eleccion.detalle);
+  if (!context.mounted) return;
+
+  mostrarToast(context, switch (resultado) {
+    ReporteRecibido() => ReportePublicacion.recibido,
+    ReporteDuplicado() => ReportePublicacion.duplicado,
+    ReporteSinDetalle() => ReportePublicacion.sinDetalle,
+    ReporteNoDisponible() => ReportePublicacion.noDisponible,
+    ReporteNoGuardado(:final mensaje) => mensaje,
+  });
+}
+
+/// El motivo del reporte y, si hace falta, el detalle. "Enviar" espera a que
+/// se elija un motivo, y "Otro" exige contar por qué.
+class _DialogoReporte extends StatefulWidget {
+  const _DialogoReporte();
+
+  @override
+  State<_DialogoReporte> createState() => _DialogoReporteState();
+}
+
+class _DialogoReporteState extends State<_DialogoReporte> {
+  final _detalle = TextEditingController();
+  MotivoReporte? _motivo;
+  String? _error;
+
+  @override
+  void dispose() {
+    _detalle.dispose();
+    super.dispose();
+  }
+
+  void _enviar() {
+    final motivo = _motivo;
+    if (motivo == null) return;
+    final texto = _detalle.text.trim();
+    if (motivo == MotivoReporte.otro && texto.isEmpty) {
+      setState(() => _error = ReportePublicacion.sinDetalle);
+      return;
+    }
+    Navigator.of(
+      context,
+    ).pop((motivo: motivo, detalle: texto.isEmpty ? null : texto));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reportar publicación'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'El administrador la revisará. El autor no sabrá quién la '
+              'reportó.',
+              style: TextStyle(fontSize: 13, color: AppColors.ink2),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            RadioGroup<MotivoReporte>(
+              groupValue: _motivo,
+              onChanged: (motivo) => setState(() {
+                _motivo = motivo;
+                _error = null;
+              }),
+              child: Column(
+                children: [
+                  for (final motivo in MotivoReporte.values)
+                    RadioListTile<MotivoReporte>(
+                      key: DetallePublicacionScreen.claveMotivoReporte(motivo),
+                      value: motivo,
+                      title: Text(motivo.etiqueta),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                ],
+              ),
+            ),
+            TextField(
+              key: DetallePublicacionScreen.claveDetalleReporte,
+              controller: _detalle,
+              maxLength: maxCaracteresDetalleReporte,
+              minLines: 1,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (_) => setState(() => _error = null),
+              decoration: InputDecoration(
+                hintText: _motivo == MotivoReporte.otro
+                    ? 'Cuéntanos por qué'
+                    : 'Detalle (opcional)',
+                errorText: _error,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        TextButton(
+          key: DetallePublicacionScreen.claveEnviarReporte,
+          onPressed: _motivo == null ? null : _enviar,
+          child: const Text('Enviar'),
+        ),
+      ],
     );
   }
 }

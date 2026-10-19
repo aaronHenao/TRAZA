@@ -2,6 +2,7 @@ import 'package:traza/models/borrador_publicacion.dart';
 import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/moderacion_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/reporte_foro.dart';
 import 'package:traza/models/version_publicacion.dart';
 import 'package:traza/services/foro_service.dart';
 
@@ -14,14 +15,19 @@ import 'package:traza/services/foro_service.dart';
 /// Las ediciones se comportan como `editar_*_foro` (SCRUM-322): las de un
 /// corredor quedan en [moderacionesGuardadas] sin tocar lo publicado; las del
 /// administrador ([comoAdmin]) se aplican de una vez.
+///
+/// Los reportes se comportan como `reportes_foro` (SCRUM-369): [reportes]
+/// son los que ya había, de otros usuarios.
 class ForoRepositorioFalso implements ForoRepository {
   ForoRepositorioFalso({
     List<PublicacionForo>? publicaciones,
     List<ModeracionForo>? moderaciones,
+    List<ReporteForo>? reportes,
     this.estadoAlCrear = EstadoPublicacion.publicada,
     this.ahora,
   }) : publicaciones = [...?publicaciones],
-       moderacionesGuardadas = [...?moderaciones];
+       moderacionesGuardadas = [...?moderaciones],
+       reportesGuardados = [...?reportes];
 
   final List<PublicacionForo> publicaciones;
   EstadoPublicacion estadoAlCrear;
@@ -413,6 +419,74 @@ class ForoRepositorioFalso implements ForoRepository {
     }
   }
 
+  /// `reportes_foro` en memoria (SCRUM-369), como la lee el administrador:
+  /// sin quién envió cada reporte.
+  final List<ReporteForo> reportesGuardados;
+
+  /// Quién envió cada reporte de [reportesGuardados], por su id. Es lo que en
+  /// la base guarda `reportante_id` y la app nunca pide (criterio 2). Los
+  /// [reportes] del constructor no están: son de otros usuarios.
+  final Map<String, String> reportanteDe = {};
+
+  /// Lo que recibió `reportar`: (publicación, motivo, detalle).
+  (String, MotivoReporte, String?)? reporteRecibido;
+
+  /// Error que lanza solo `reportar`.
+  Object? errorAlReportar;
+
+  /// Error que lanza solo `reportes`: la bandeja no carga.
+  Object? errorAlLeerReportes;
+
+  /// Cuántas veces se pidió la bandeja de reportes. Aparte de [consultas]
+  /// para no mover las cuentas de las pruebas del foro.
+  int consultasReportes = 0;
+
+  @override
+  Future<void> reportar(
+    String publicacionId,
+    MotivoReporte motivo, {
+    String? detalle,
+  }) async {
+    reporteRecibido = (publicacionId, motivo, detalle);
+    final error = errorAlReportar ?? this.error;
+    if (error != null) throw error;
+
+    // Como la policy de insert: solo lo publicado y ajeno. Postgres la
+    // revisa antes que el unique.
+    final p = publicaciones.where((p) => p.id == publicacionId).firstOrNull;
+    if (p == null ||
+        p.estado != EstadoPublicacion.publicada ||
+        p.autorId == usuario) {
+      throw const PublicacionNoDisponibleException();
+    }
+
+    // Como `unique (publicacion_id, reportante_id)`.
+    final yaLaReporto = reportesGuardados.any(
+      (r) => r.publicacionId == publicacionId && reportanteDe[r.id] == usuario,
+    );
+    if (yaLaReporto) throw const PublicacionYaReportadaException();
+
+    final reporte = ReporteForo(
+      id: 'rep-${reportesGuardados.length + 1}',
+      publicacionId: publicacionId,
+      tituloPublicacion: p.titulo,
+      autorPublicacion: p.autorNombre,
+      motivo: motivo,
+      detalle: detalle,
+      fecha: _ahora,
+    );
+    reportesGuardados.insert(0, reporte);
+    reportanteDe[reporte.id] = usuario;
+  }
+
+  @override
+  Future<List<ReporteForo>> reportes() async {
+    consultasReportes++;
+    final error = errorAlLeerReportes ?? this.error;
+    if (error != null) throw error;
+    return [...reportesGuardados];
+  }
+
   /// Simula que la moderación rechazó la publicación [id] (SCRUM-322).
   void rechazar(String id, {String? motivo}) =>
       _cambiarEstado(id, EstadoPublicacion.rechazada, motivo);
@@ -529,4 +603,24 @@ ModeracionForo moderacionDePrueba({
           ? null
           : DateTime(2026, 10, 16, 9, 0, 7)),
   vistaPorAutor: vistaPorAutor,
+);
+
+/// Un reporte de ejemplo para las pruebas (SCRUM-369). Por defecto, sobre
+/// `publicacionDePrueba(id: 'pub-1')`.
+ReporteForo reporteDePrueba({
+  String id = 'rep-1',
+  String publicacionId = 'pub-1',
+  String tituloPublicacion = '¿Qué tenis para asfalto?',
+  String autorPublicacion = 'Carlos',
+  MotivoReporte motivo = MotivoReporte.acoso,
+  String? detalle,
+  DateTime? fecha,
+}) => ReporteForo(
+  id: id,
+  publicacionId: publicacionId,
+  tituloPublicacion: tituloPublicacion,
+  autorPublicacion: autorPublicacion,
+  motivo: motivo,
+  detalle: detalle,
+  fecha: fecha ?? DateTime(2026, 10, 16, 11),
 );

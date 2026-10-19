@@ -47,3 +47,5 @@ CLAUDE.md
 .claude
 # Supabase CLI: estado local (versión, proyecto), no va al repositorio.
 supabase/.temp/
+docs/HU_Persona_4.md
+docs/roadmap_persona_4.md

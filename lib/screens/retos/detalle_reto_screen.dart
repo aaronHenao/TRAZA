@@ -121,8 +121,11 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
     // SCRUM-170: si el corredor ya lo tiene en juego, la pantalla lo dice en
     // vez de ofrecerle activarlo otra vez.
     final mios = ref.watch(misRetosProvider);
+    // Cualquiera que ya sea suyo, lo tenga en juego o no: a un reto que
+    // cumplió le interesa ver que lo cumplió, no que le ofrezcan activarlo
+    // otra vez —que además la base no dejaría, porque solo se activa una.
     final mio = mios.valueOrNull
-        ?.where((m) => m.reto.id == reto.id && m.enCursoEn(hoy))
+        ?.where((m) => m.reto.id == reto.id)
         .firstOrNull;
     // Mientras no se sepa, el botón espera: ofrecer activar y rectificar un
     // segundo después es peor que un botón quieto.
@@ -162,9 +165,9 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
                 ),
               ),
               switch (mio) {
-                // Ya es suyo: lo que falta por saber es cuánto le queda, no
-                // si lo acepta.
-                final activo? => _PieConProgreso(mio: activo),
+                // Ya es suyo: lo que falta por saber es en qué quedó, no si
+                // lo acepta.
+                final suyo? => _PieConProgreso(mio: suyo, hoy: hoy),
                 // Tiene otro del mismo hueco: el botón no se ofrece, y en su
                 // lugar va el motivo.
                 _ when bloqueo != null => _PieBloqueado(motivo: bloqueo),
@@ -181,13 +184,31 @@ class _DetalleRetoScreenState extends ConsumerState<DetalleRetoScreen> {
   }
 }
 
-/// Lo que ve quien ya tiene el reto activo: cuánto lleva hecho.
+/// Lo que ve quien ya tiene el reto: cuánto lleva hecho y en qué quedó.
 class _PieConProgreso extends StatelessWidget {
-  const _PieConProgreso({required this.mio});
+  const _PieConProgreso({required this.mio, required this.hoy});
 
   final RetoDelUsuario mio;
 
+  /// Para saber si al reto todavía le queda plazo.
+  final DateTime hoy;
+
   static const clave = Key('reto-ya-activo');
+  static const claveFalta = Key('reto-cuanto-falta');
+
+  bool get _vencido => !mio.completado && mio.vencidoEn(hoy);
+
+  String get _titulo => switch (mio) {
+    _ when mio.completado => 'Reto completado',
+    _ when _vencido => 'Se acabó el plazo',
+    _ => 'Ya lo tienes activo',
+  };
+
+  IconData get _icono => switch (mio) {
+    _ when mio.completado => Icons.emoji_events,
+    _ when _vencido => Icons.schedule,
+    _ => Icons.directions_run,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -209,16 +230,12 @@ class _PieConProgreso extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.directions_run,
-                size: 18,
-                color: AppColors.secondaryDark,
-              ),
+              Icon(_icono, size: 18, color: AppColors.secondaryDark),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Ya lo tienes activo',
-                  style: TextStyle(
+                  _titulo,
+                  style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.ink,
@@ -242,8 +259,67 @@ class _PieConProgreso extends StatelessWidget {
               valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
             ),
           ),
+          const SizedBox(height: 8),
+          _ComoQuedo(mio: mio, hoy: hoy),
         ],
       ),
+    );
+  }
+}
+
+/// En qué quedó el reto para este corredor.
+///
+/// Si sigue en juego, lo que le falta (criterio 3 de SCRUM-239): la barra
+/// dice en qué va y el "7 de 10 km" dice cuánto lleva contra la meta, pero
+/// ninguno de los dos contesta la pregunta con la que uno sale a correr, que
+/// es cuánto me queda.
+///
+/// Si ya se acabó —cumplido o vencido— no se le pide que corra lo que ya no
+/// puede: se le dice en qué terminó.
+class _ComoQuedo extends StatelessWidget {
+  const _ComoQuedo({required this.mio, required this.hoy});
+
+  final RetoDelUsuario mio;
+  final DateTime hoy;
+
+  @override
+  Widget build(BuildContext context) {
+    final faltan = TarjetaReto.textoKm(mio.faltanKm);
+
+    final (icono, texto, color) = switch (mio) {
+      _ when mio.completado => (
+        Icons.emoji_events_outlined,
+        'Llegaste a la meta y ganaste sus ${mio.reto.xpOtorgada} XP',
+        AppColors.secondaryDark,
+      ),
+      _ when mio.vencidoEn(hoy) => (
+        Icons.schedule,
+        'Te quedaste a $faltan km de la meta',
+        AppColors.ink3,
+      ),
+      _ => (
+        Icons.flag_outlined,
+        'Te faltan $faltan km para completarlo',
+        AppColors.ink2,
+      ),
+    };
+
+    return Row(
+      key: _PieConProgreso.claveFalta,
+      children: [
+        Icon(icono, size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

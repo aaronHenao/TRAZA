@@ -10,13 +10,16 @@ import 'nivel.dart';
 /// acredita XP; eso pertenece a esas historias.
 ///
 /// Los cuatro datos que pide el criterio 1 salen de aquí: [nivelActual],
-/// [experiencia], el umbral de [siguienteNivel] y [experienciaFaltante].
+/// [experiencia], el umbral de [siguienteNivel] y [experienciaFaltante]. La
+/// tarjeta de la portada (SCRUM-286) añade [numeroNivel], el puesto que ocupa
+/// el nivel actual.
 @immutable
 class Progresion {
   const Progresion._({
     required this.experiencia,
     required this.nivelActual,
     required this.siguienteNivel,
+    required this.numeroNivel,
   });
 
   /// Calcula en qué punto de [niveles] deja al corredor su [experiencia].
@@ -32,11 +35,13 @@ class Progresion {
 
     Nivel? actual;
     Nivel? siguiente;
+    var numero = 0;
     for (final nivel in ordenados) {
       // Se entra al nivel al llegar a su umbral, no al pasarlo: con 100 XP
       // justos ya se es Bronce si Bronce empieza en 100.
       if (nivel.umbralExperiencia <= experiencia) {
         actual = nivel;
+        numero++;
       } else {
         siguiente = nivel;
         break;
@@ -47,6 +52,7 @@ class Progresion {
       experiencia: experiencia,
       nivelActual: actual,
       siguienteNivel: siguiente,
+      numeroNivel: numero,
     );
   }
 
@@ -61,6 +67,14 @@ class Progresion {
 
   /// El siguiente nivel por alcanzar, o null si no hay ninguno por encima.
   final Nivel? siguienteNivel;
+
+  /// En qué puesto de la progresión va [nivelActual]: 1 es el primer nivel,
+  /// contando de menor a mayor umbral. Cero mientras no alcance ninguno.
+  ///
+  /// Es el número que el corredor lee como "Nivel 3", y el mismo que el mapa
+  /// de progresión usa como parada actual (SCRUM-226): la parada 0 es el
+  /// punto de partida, así que los dos cuentan igual y no se contradicen.
+  final int numeroNivel;
 
   /// Si el administrador ya registró niveles.
   ///
@@ -109,13 +123,15 @@ class Progresion {
       other is Progresion &&
       other.experiencia == experiencia &&
       other.nivelActual == nivelActual &&
-      other.siguienteNivel == siguienteNivel;
+      other.siguienteNivel == siguienteNivel &&
+      other.numeroNivel == numeroNivel;
 
   @override
-  int get hashCode => Object.hash(experiencia, nivelActual, siguienteNivel);
+  int get hashCode =>
+      Object.hash(experiencia, nivelActual, siguienteNivel, numeroNivel);
 
   @override
   String toString() =>
-      'Progresion($experiencia XP, actual: ${nivelActual?.nombre ?? 'ninguno'}, '
-      'siguiente: ${siguienteNivel?.nombre ?? 'ninguno'})';
+      'Progresion($experiencia XP, actual: ${nivelActual?.nombre ?? 'ninguno'} '
+      '(nivel $numeroNivel), siguiente: ${siguienteNivel?.nombre ?? 'ninguno'})';
 }

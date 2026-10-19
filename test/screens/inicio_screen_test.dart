@@ -4,15 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza/models/nivel.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/screens/home/inicio_screen.dart';
-import 'package:traza/screens/home/progresion_screen.dart';
+import 'package:traza/screens/home/mapa_progresion_screen.dart';
+import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/inicio_provider.dart';
+import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
+import 'package:traza/widgets/tarjeta_nivel.dart';
+
+import '../utiles/experiencia_falsa.dart';
+import '../utiles/niveles_falso.dart';
 
 /// Historial de mentira: responde lo que la prueba le indique.
 class _HistorialFalso implements HistorialRepository {
@@ -23,6 +30,13 @@ class _HistorialFalso implements HistorialRepository {
   @override
   Future<List<ResumenEntrenamiento>> cargar() => respuesta();
 }
+
+/// Los niveles con los que se pinta la tarjeta: con 250 XP va en Bronce y le
+/// faltan 250 para Plata.
+const _niveles = [
+  Nivel(id: 'n-1', nombre: 'Bronce', umbralExperiencia: 100),
+  Nivel(id: 'n-2', nombre: 'Plata', umbralExperiencia: 500),
+];
 
 /// Objetivos de mentira: solo se le pregunta por la meta de distancia.
 class _ObjetivosFalsos implements ObjetivosRepository {
@@ -81,6 +95,8 @@ void main() {
     Future<Map<TipoObjetivo, num>> Function()? objetivos,
     String? nombre = 'Ana',
     bool esperar = true,
+    NivelesFalso? niveles,
+    ExperienciaFalsa? experiencia,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
@@ -100,8 +116,8 @@ void main() {
           builder: (_, _) => const Scaffold(body: Text('Pantalla Perfil')),
         ),
         GoRoute(
-          path: ProgresionScreen.ruta,
-          builder: (_, _) => const Scaffold(body: Text('Pantalla Progresión')),
+          path: MapaProgresionScreen.ruta,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Mapa')),
         ),
       ],
     );
@@ -121,6 +137,13 @@ void main() {
           // existe.
           nombreUsuarioProvider.overrideWithValue(nombre),
           relojProvider.overrideWithValue(() => ahora),
+          // La tarjeta de nivel (SCRUM-286): umbrales y XP acumulada.
+          nivelesRepositoryProvider.overrideWithValue(
+            niveles ?? NivelesFalso(catalogo: _niveles),
+          ),
+          experienciaRepositoryProvider.overrideWithValue(
+            experiencia ?? ExperienciaFalsa(acumulada: 250),
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -158,14 +181,14 @@ void main() {
       // 5.1 + 3.0 + 2.0 km desde el lunes; el de la semana pasada no entra.
       expect(find.text('10.1 / 15 km'), findsOneWidget);
       expect(find.text('3 entrenamientos'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byKey(InicioScreen.claveBarraSemanal), findsOneWidget);
     });
 
     testWidgets('sin meta de distancia invita a ponerse una', (tester) async {
       await abrirPortada(tester, objetivos: () async => {});
 
       expect(find.text('10.1 km'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byKey(InicioScreen.claveBarraSemanal), findsNothing);
       expect(
         find.text(
           'Ponte una meta de distancia en tu perfil para seguirla desde aquí.',
@@ -257,6 +280,26 @@ void main() {
     });
   });
 
+  group('tarjeta de nivel (SCRUM-286)', () {
+    testWidgets('la portada abre con el nivel arriba del resumen semanal', (
+      tester,
+    ) async {
+      await abrirPortada(tester);
+
+      expect(find.byKey(TarjetaNivel.clave), findsOneWidget);
+      expect(find.text('NIVEL 1'), findsOneWidget);
+      expect(find.text('Bronce'), findsOneWidget);
+      expect(find.text('250 XP acumulados'), findsOneWidget);
+      expect(find.text('Te faltan 250 XP para Plata.'), findsOneWidget);
+
+      // Primero el nivel, después la semana, como en el prototipo.
+      expect(
+        tester.getTopLeft(find.byKey(TarjetaNivel.clave)).dy,
+        lessThan(tester.getTopLeft(find.text('ESTA SEMANA')).dy),
+      );
+    });
+  });
+
   group('salidas de la portada', () {
     testWidgets('el "+" lleva a elegir la actividad', (tester) async {
       await abrirPortada(tester);
@@ -276,14 +319,15 @@ void main() {
       expect(find.text('Pantalla Perfil'), findsOneWidget);
     });
 
-    testWidgets('la tarjeta de progresión lleva a ver cuánto falta para el '
-        'siguiente nivel', (tester) async {
+    testWidgets('la tarjeta de nivel abre el mapa de progresión (SCRUM-286)', (
+      tester,
+    ) async {
       await abrirPortada(tester);
 
-      await tester.tap(find.byKey(InicioScreen.claveAccesoProgresion));
+      await tester.tap(find.byKey(TarjetaNivel.clave));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pantalla Progresión'), findsOneWidget);
+      expect(find.text('Pantalla Mapa'), findsOneWidget);
     });
   });
 }

@@ -5,26 +5,28 @@ import 'package:go_router/go_router.dart';
 import '../../models/resumen_entrenamiento.dart';
 import '../../models/resumen_semana.dart';
 import '../../services/inicio_provider.dart';
+import '../../services/progresion_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/navegacion_principal.dart';
+import '../../widgets/tarjeta_nivel.dart';
 import '../../widgets/traza_card.dart';
 import '../onboarding/perfil_screen.dart';
-import 'progresion_screen.dart';
 
 /// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
 /// el usuario al entrar y desde donde arranca todo.
 ///
 /// Del prototipo se toman el saludo, el bloque de progreso y el botón "+".
-/// Los retos y las rutas quedan fuera: son historias que todavía no existen.
-/// En su lugar, el progreso muestra lo que el usuario sí tiene hoy: el
-/// objetivo semanal del perfil, sus últimos entrenamientos y el acceso a su
-/// progresión de niveles (SCRUM-178).
+/// Hoy muestra la tarjeta de nivel (SCRUM-286), el objetivo semanal del perfil
+/// y los últimos entrenamientos. Los retos y las rutas llegan con sus propias
+/// subtareas, cuando las historias que los producen existan.
 class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
-  static const claveAccesoProgresion = Key('inicio-progresion');
+  /// La barra de la meta semanal. Tiene clave propia porque la portada lleva
+  /// otra, la del nivel (SCRUM-286), y de otro modo no se distinguen.
+  static const claveBarraSemanal = Key('inicio-barra-semanal');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,8 +38,11 @@ class InicioScreen extends ConsumerWidget {
         bottom: false,
         child: RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(resumenSemanaProvider);
-            ref.invalidate(ultimosEntrenamientosProvider);
+            ref
+              ..invalidate(resumenSemanaProvider)
+              ..invalidate(ultimosEntrenamientosProvider)
+              // La XP y los niveles de la tarjeta (SCRUM-286).
+              ..invalidate(progresionProvider);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -50,9 +55,10 @@ class InicioScreen extends ConsumerWidget {
             children: const [
               _Saludo(),
               SizedBox(height: AppSpacing.lg),
-              _ProgresoSemanal(),
+              // El nivel primero, como en el prototipo (SCRUM-286).
+              TarjetaNivel(),
               SizedBox(height: AppSpacing.md),
-              _AccesoProgresion(),
+              _ProgresoSemanal(),
               SizedBox(height: AppSpacing.lg),
               _UltimosEntrenamientos(),
             ],
@@ -176,6 +182,7 @@ class _Avance extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.pill),
             child: LinearProgressIndicator(
+              key: InicioScreen.claveBarraSemanal,
               value: progreso,
               minHeight: 8,
               backgroundColor: AppColors.bgAlt,
@@ -194,64 +201,6 @@ class _Avance extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// Entrada a la progresión de niveles (SCRUM-178).
-///
-/// La portada no repite los datos: quien quiere saber cuánto le falta para
-/// subir entra aquí y los ve juntos, sin que esta tarjeta tenga que consultar
-/// nada para pintarse.
-class _AccesoProgresion extends StatelessWidget {
-  const _AccesoProgresion();
-
-  @override
-  Widget build(BuildContext context) {
-    return TrazaCard(
-      key: InicioScreen.claveAccesoProgresion,
-      // `push`: al cerrarla se vuelve a la portada.
-      onTap: () => context.push(ProgresionScreen.ruta),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppColors.secondaryTint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.stairs_outlined,
-              size: 20,
-              color: AppColors.secondaryDark,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tu progresión',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Mira cuánto te falta para el siguiente nivel',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(Icons.chevron_right, size: 20, color: AppColors.ink3),
-        ],
-      ),
     );
   }
 }

@@ -65,9 +65,11 @@ class DetalleRutaScreen extends ConsumerWidget {
                         'Puede que su autor la haya retirado o que todavía '
                         'esté en revisión.',
                   ),
+                  // Criterio 5 de SCRUM-358: dice que el recorrido no se pudo
+                  // mostrar y deja reintentar.
                   AsyncError() => EstadoVacio(
                     icono: Icons.cloud_off_rounded,
-                    titulo: 'No pudimos cargar la ruta',
+                    titulo: 'No pudimos mostrar el recorrido',
                     detalle: 'Revisa tu conexión e inténtalo de nuevo.',
                     accion: OutlinedButton(
                       key: claveReintentar,

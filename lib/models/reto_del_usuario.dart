@@ -55,6 +55,15 @@ class RetoDelUsuario {
     return (progresoKm / reto.metaKm).clamp(0.0, 1.0);
   }
 
+  /// Cuántos km le faltan para la meta (criterio 3 de SCRUM-239).
+  ///
+  /// Cero si ya la alcanzó: pasarse de la meta no deja un faltante negativo,
+  /// igual que [progreso] no desborda la barra.
+  double get faltanKm {
+    final falta = reto.metaKm - progresoKm;
+    return falta > 0 ? falta : 0;
+  }
+
   /// Si se acabó el plazo sin completarlo (SCRUM-173).
   ///
   /// No basta con mirar `estado`: pasar una fila a `vencido` requeriría un

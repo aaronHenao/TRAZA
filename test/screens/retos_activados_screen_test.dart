@@ -135,6 +135,82 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  group('cuánto falta (SCRUM-239)', () {
+    testWidgets('el detalle dice cuánto le queda para la meta', (tester) async {
+      // La barra y el "2 de 5 km" dicen en qué va; lo que falta es la
+      // pregunta con la que uno sale a correr.
+      await abrir(
+        tester,
+        desde: '/retos/c1',
+        detalleDe: correHoy,
+        mios: [enCurso(correHoy, progresoKm: 2)],
+      );
+
+      expect(find.text('2 de 5 km'), findsOneWidget);
+      expect(find.text('Te faltan 3 km para completarlo'), findsOneWidget);
+    });
+
+    testWidgets('pasarse de la meta no deja un faltante negativo', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        desde: '/retos/c1',
+        detalleDe: correHoy,
+        mios: [enCurso(correHoy, progresoKm: 7)],
+      );
+
+      expect(find.text('Te faltan 0 km para completarlo'), findsOneWidget);
+    });
+  });
+
+  group('un reto que ya se acabó (fix de SCRUM-170)', () {
+    testWidgets('el que cumpliste dice que lo cumpliste, no te ofrece '
+        'activarlo otra vez', (tester) async {
+      await abrir(
+        tester,
+        desde: '/retos/c1',
+        detalleDe: correHoy,
+        mios: [
+          RetoDelUsuario(
+            reto: correHoy,
+            estado: EstadoRetoUsuario.completado,
+            progresoKm: 5,
+            fechaActivacion: ahora,
+            fechaCompletado: ahora,
+          ),
+        ],
+      );
+
+      expect(find.text('Reto completado'), findsOneWidget);
+      expect(
+        find.text('Llegaste a la meta y ganaste sus 50 XP'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(FilledButton, 'Activar reto'), findsNothing);
+    });
+
+    testWidgets('al vencido se le dice a cuánto se quedó', (tester) async {
+      final seVencio = reto(
+        id: 'c3',
+        nombre: 'Corre 5 km ayer',
+        inicio: DateTime(2026, 10, 1),
+        fin: DateTime(2026, 10, 2),
+      );
+
+      await abrir(
+        tester,
+        desde: '/retos/c3',
+        detalleDe: seVencio,
+        mios: [enCurso(seVencio, progresoKm: 1)],
+      );
+
+      expect(find.text('Se acabó el plazo'), findsOneWidget);
+      expect(find.text('Te quedaste a 4 km de la meta'), findsOneWidget);
+      expect(find.textContaining('Te faltan'), findsNothing);
+    });
+  });
+
   group('sección "En curso" (SCRUM-170)', () {
     testWidgets('no aparece si no hay nada activo', (tester) async {
       await abrir(tester, catalogo: [correHoy]);

@@ -98,6 +98,16 @@ class PublicacionForo {
       usuarioId == autorId &&
       estado == EstadoPublicacion.publicada;
 
+  /// Si [usuarioId] la puede reportar: es de otro y sigue publicada
+  /// (SCRUM-369). Lo que espera la moderación ya lo está revisando alguien.
+  ///
+  /// Lo mismo exige la policy de insert de `reportes_foro`; aquí solo decide
+  /// si se ofrece el botón.
+  bool reportablePor(String? usuarioId) =>
+      usuarioId != null &&
+      usuarioId != autorId &&
+      estado == EstadoPublicacion.publicada;
+
   factory PublicacionForo.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
     final autorId = fila['autor_id'];

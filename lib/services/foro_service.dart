@@ -5,6 +5,7 @@ import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
 import '../models/moderacion_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/reporte_foro.dart';
 import '../models/version_publicacion.dart';
 
 /// Repositorio del foro que usa la app. Las pruebas lo sustituyen con
@@ -77,6 +78,17 @@ class ModeracionYaResueltaException implements Exception {
   @override
   String toString() =>
       'ModeracionYaResueltaException: la moderación ya fue resuelta';
+}
+
+/// Se lanza cuando el usuario reporta una publicación que ya había
+/// reportado (criterio 3 de SCRUM-369). Lo impide el `unique` de
+/// `reportes_foro`: la publicación ya está en revisión.
+class PublicacionYaReportadaException implements Exception {
+  const PublicacionYaReportadaException();
+
+  @override
+  String toString() =>
+      'PublicacionYaReportadaException: el usuario ya reportó la publicación';
 }
 
 /// Acceso a las tablas del foro: `publicaciones_foro` (SCRUM-323) y
@@ -179,6 +191,22 @@ abstract interface class ForoRepository {
   /// El autor abrió "Mis rechazados": sus rechazos dejan de contarse como
   /// nuevos (criterio 5 de SCRUM-322).
   Future<void> marcarRechazosVistos();
+
+  /// Reporta la publicación [publicacionId] a nombre del usuario de la
+  /// sesión, con su [motivo] (SCRUM-369).
+  ///
+  /// Lanza [PublicacionYaReportadaException] si ya la había reportado y
+  /// [PublicacionNoDisponibleException] si ya no está publicada o es suya.
+  Future<void> reportar(
+    String publicacionId,
+    MotivoReporte motivo, {
+    String? detalle,
+  });
+
+  /// Los últimos [SupabaseForoRepository.limiteModeracion] reportes, del más
+  /// reciente al más antiguo, para la bandeja del administrador (SCRUM-369).
+  /// A un corredor la policy le devuelve solo los suyos.
+  Future<List<ReporteForo>> reportes();
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -195,6 +223,13 @@ class SupabaseForoRepository implements ForoRepository {
   static const _tablaVersiones = 'versiones_publicacion_foro';
   static const _tablaVersionesComentario = 'versiones_comentario_foro';
   static const _tablaModeraciones = 'moderaciones_foro';
+  static const _tablaReportes = 'reportes_foro';
+
+  /// Sin `reportante_id`: la bandeja no dice quién reportó (criterio 2 de
+  /// SCRUM-369).
+  static const _columnasReporte =
+      'id, publicacion_id, motivo, detalle, fecha, '
+      'publicaciones_foro(titulo, autor_nombre)';
 
   /// Las columnas de la publicación más cuántos comentarios tiene, contados
   /// por PostgREST sin traerlos. Se cuentan solo los publicados
@@ -220,6 +255,9 @@ class SupabaseForoRepository implements ForoRepository {
   /// La publicación ya no existe: la clave foránea no encuentra a quién
   /// apuntar.
   static const _sinReferencia = '23503';
+
+  /// Ya hay una fila igual: el usuario ya reportó esa publicación.
+  static const _repetido = '23505';
 
   /// Ya hay una edición en revisión, o la moderación ya se resolvió
   /// (`0035_foro_moderacion_ia.sql`).
@@ -500,5 +538,46 @@ class SupabaseForoRepository implements ForoRepository {
   Future<void> marcarRechazosVistos() async {
     _usuarioId();
     await _cliente.rpc('marcar_rechazos_vistos');
+  }
+
+  @override
+  Future<void> reportar(
+    String publicacionId,
+    MotivoReporte motivo, {
+    String? detalle,
+  }) async {
+    final usuarioId = _usuarioId();
+    final limpio = detalle?.trim();
+
+    try {
+      // Sin `select`: lo que vuelve no hace falta.
+      await _cliente.from(_tablaReportes).insert({
+        'publicacion_id': publicacionId,
+        'reportante_id': usuarioId,
+        'motivo': motivo.valorDb,
+        'detalle': (limpio == null || limpio.isEmpty) ? null : limpio,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code == _repetido) throw const PublicacionYaReportadaException();
+      // La policy de insert exige que siga publicada y sea ajena; si la
+      // borraron, la clave foránea no la encuentra.
+      if (e.code == _rlsDenegado || e.code == _sinReferencia) {
+        throw const PublicacionNoDisponibleException();
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<ReporteForo>> reportes() async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaReportes)
+        .select(_columnasReporte)
+        .order('fecha', ascending: false)
+        .limit(limiteModeracion);
+
+    return filas.map(ReporteForo.desdeSupabase).toList();
   }
 }

@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/moderacion_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/reporte_foro.dart';
 import 'package:traza/screens/admin/moderacion_foro_screen.dart';
+import 'package:traza/screens/foro/detalle_publicacion_screen.dart';
 import 'package:traza/screens/foro/nueva_publicacion_screen.dart';
 import 'package:traza/services/foro_provider.dart';
 import 'package:traza/services/cambios_foro.dart';
@@ -31,6 +33,9 @@ void main() {
     WidgetTester tester,
     List<PublicacionForo> publicaciones, {
     List<ModeracionForo> moderaciones = const [],
+    // SCRUM-369: los reportes que ya había y lo que pasó antes de abrir.
+    List<ReporteForo> reportes = const [],
+    Future<void> Function(ForoRepositorioFalso)? preparar,
   }) async {
     tester.view.physicalSize = const Size(390 * 3, 900 * 3);
     tester.view.devicePixelRatio = 3;
@@ -40,8 +45,10 @@ void main() {
     repositorio = ForoRepositorioFalso(
       publicaciones: publicaciones,
       moderaciones: moderaciones,
+      reportes: reportes,
       ahora: ahora,
     );
+    await preparar?.call(repositorio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -334,5 +341,298 @@ void main() {
 
     expect(find.text('Ruta en Las Palmas'), findsOneWidget);
     expect(find.text('Publicadas (2)'), findsOneWidget);
+  });
+
+  group('reportadas (SCRUM-369)', () {
+    // Sobre `publicaciones`: a 'a' la reportaron dos veces; a 'b', una, más
+    // tarde (antes de que la rechazaran).
+    final reportes = [
+      reporteDePrueba(
+        id: 'r-b',
+        publicacionId: 'b',
+        tituloPublicacion: 'Gana dinero fácil',
+        autorPublicacion: 'Carlos',
+        motivo: MotivoReporte.odio,
+        fecha: DateTime(2026, 10, 16, 12),
+      ),
+      reporteDePrueba(
+        id: 'r-a2',
+        publicacionId: 'a',
+        tituloPublicacion: 'Tenis para asfalto',
+        autorPublicacion: 'Carlos',
+        motivo: MotivoReporte.spam,
+        fecha: DateTime(2026, 10, 16, 11),
+      ),
+      reporteDePrueba(
+        id: 'r-a1',
+        publicacionId: 'a',
+        tituloPublicacion: 'Tenis para asfalto',
+        autorPublicacion: 'Carlos',
+        motivo: MotivoReporte.acoso,
+        fecha: DateTime(2026, 10, 16, 10),
+      ),
+    ];
+
+    Finder dentroDe(String publicacionId, Finder buscado) => find.descendant(
+      of: find.byKey(ModeracionForoScreen.claveReportada(publicacionId)),
+      matching: buscado,
+    );
+
+    testWidgets('el chip cuenta las publicaciones reportadas, no los '
+        'reportes, y Publicadas no cambia (criterio 1 de SCRUM-369)', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        publicaciones,
+        moderaciones: moderaciones,
+        reportes: reportes,
+      );
+
+      expect(
+        find.byKey(
+          ModeracionForoScreen.claveVista(VistaModeracionForo.reportadas),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Reportadas (2)'), findsOneWidget);
+      expect(find.text('Publicadas (1)'), findsOneWidget);
+      expect(find.text('Pendientes (1)'), findsOneWidget);
+      expect(find.text('En revisión (1)'), findsOneWidget);
+      expect(find.text('Rechazadas (1)'), findsOneWidget);
+      // Sigue abriendo en lo publicado, sin las tarjetas de reportes.
+      expect(find.byKey(TarjetaPublicacion.claveDe('a')), findsOneWidget);
+      expect(
+        find.byKey(ModeracionForoScreen.claveReportada('a')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('muestra cada publicación reportada con cuántos reportes '
+        'tiene y sus motivos, la más reciente primero (criterio 1 de '
+        'SCRUM-369)', (tester) async {
+      await abrir(tester, publicaciones, reportes: reportes);
+
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      expect(dentroDe('a', find.text('Tenis para asfalto')), findsOneWidget);
+      expect(dentroDe('a', find.textContaining('Carlos')), findsWidgets);
+      expect(
+        dentroDe('a', find.textContaining(RegExp(r'\b2 reportes\b'))),
+        findsOneWidget,
+      );
+      expect(
+        dentroDe('a', find.textContaining('Acoso o insultos')),
+        findsWidgets,
+      );
+      expect(dentroDe('a', find.textContaining('Spam')), findsWidgets);
+
+      expect(dentroDe('b', find.text('Gana dinero fácil')), findsOneWidget);
+      expect(
+        dentroDe('b', find.textContaining(RegExp(r'\b1 reporte\b'))),
+        findsOneWidget,
+      );
+      expect(
+        dentroDe('b', find.textContaining('Odio o discriminación')),
+        findsWidgets,
+      );
+      expect(
+        tester
+            .getTopLeft(find.byKey(ModeracionForoScreen.claveReportada('b')))
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(ModeracionForoScreen.claveReportada('a')))
+              .dy,
+        ),
+      );
+    });
+
+    testWidgets('la bandeja del administrador recibe el reporte recién hecho '
+        '(criterio 1 de SCRUM-369)', (tester) async {
+      await abrir(
+        tester,
+        publicaciones,
+        preparar: (r) => r.reportar(
+          'a',
+          MotivoReporte.violencia,
+          detalle: 'Amenaza a otro corredor',
+        ),
+      );
+
+      expect(find.text('Reportadas (1)'), findsOneWidget);
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      expect(dentroDe('a', find.text('Tenis para asfalto')), findsOneWidget);
+      expect(
+        dentroDe('a', find.textContaining('Violencia o amenazas')),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('al deslizar para recargar aparece lo que se reportó con la '
+        'bandeja abierta (criterio 1 de SCRUM-369)', (tester) async {
+      await abrir(tester, publicaciones);
+      await irA(tester, VistaModeracionForo.reportadas);
+      expect(find.text('Nada reportado'), findsOneWidget);
+
+      await repositorio.reportar('a', MotivoReporte.acoso);
+      await tester.fling(
+        find.byType(ListView).first,
+        const Offset(0, 300),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(ModeracionForoScreen.claveReportada('a')),
+        findsOneWidget,
+      );
+      expect(find.text('Reportadas (1)'), findsOneWidget);
+    });
+
+    testWidgets('nunca muestra quién reportó (criterio 2 de SCRUM-369)', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        publicaciones,
+        preparar: (r) => r.reportar('a', MotivoReporte.acoso),
+      );
+      expect(repositorio.reportanteDe.values, [ForoRepositorioFalso.usuario]);
+
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      expect(
+        find.byKey(ModeracionForoScreen.claveReportada('a')),
+        findsOneWidget,
+      );
+      expect(find.textContaining(ForoRepositorioFalso.usuario), findsNothing);
+      expect(find.textContaining('Ana Runner'), findsNothing);
+    });
+
+    testWidgets('muestra lo que contó cada corredor al reportar, sin decir '
+        'quién (criterio 1 de SCRUM-369)', (tester) async {
+      await abrir(
+        tester,
+        publicaciones,
+        reportes: [
+          reporteDePrueba(
+            id: 'r-1',
+            publicacionId: 'a',
+            tituloPublicacion: 'Tenis para asfalto',
+            motivo: MotivoReporte.otro,
+            detalle: 'Publica el teléfono de otra corredora',
+          ),
+          reporteDePrueba(
+            id: 'r-2',
+            publicacionId: 'a',
+            tituloPublicacion: 'Tenis para asfalto',
+            motivo: MotivoReporte.spam,
+          ),
+        ],
+      );
+
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      expect(
+        dentroDe(
+          'a',
+          find.textContaining('Publica el teléfono de otra corredora'),
+        ),
+        findsOneWidget,
+      );
+      expect(dentroDe('a', find.textContaining('2 reportes')), findsOneWidget);
+    });
+
+    testWidgets('si la bandeja no carga, deja reintentar', (tester) async {
+      await abrir(
+        tester,
+        publicaciones,
+        reportes: reportes,
+        preparar: (r) async => r.errorAlLeerReportes = Exception('sin red'),
+      );
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      expect(find.text('No pudimos cargar el foro'), findsOneWidget);
+      // Las demás pestañas no se rompen.
+      expect(find.text('Publicadas (1)'), findsOneWidget);
+
+      repositorio.errorAlLeerReportes = null;
+      final antes = repositorio.consultasReportes;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.consultasReportes, greaterThan(antes));
+      expect(
+        find.byKey(ModeracionForoScreen.claveReportada('a')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sin reportes lo dice', (tester) async {
+      await abrir(tester, publicaciones);
+
+      expect(find.text('Reportadas (0)'), findsOneWidget);
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      expect(find.text('Nada reportado'), findsOneWidget);
+    });
+
+    testWidgets('tocar una reportada abre su detalle de moderación', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390 * 3, 900 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repositorio = ForoRepositorioFalso(
+        publicaciones: publicaciones,
+        reportes: reportes,
+        ahora: ahora,
+      );
+      final router = GoRouter(
+        initialLocation: ModeracionForoScreen.ruta,
+        routes: [
+          GoRoute(
+            path: ModeracionForoScreen.ruta,
+            builder: (_, _) => const ModeracionForoScreen(),
+            routes: [
+              GoRoute(
+                path: ':publicacionId',
+                builder: (_, state) => DetallePublicacionScreen(
+                  publicacionId: state.pathParameters['publicacionId']!,
+                  vistaModeracion: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            foroRepositoryProvider.overrideWithValue(repositorio),
+            relojProvider.overrideWithValue(() => ahora),
+            usuarioActualProvider.overrideWithValue(() => 'admin-1'),
+            fuenteCambiosForoProvider.overrideWithValue(cambios),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await irA(tester, VistaModeracionForo.reportadas);
+
+      await tester.tap(find.byKey(ModeracionForoScreen.claveReportada('a')));
+      await tester.pumpAndSettle();
+
+      final detalle = tester.widget<DetallePublicacionScreen>(
+        find.byType(DetallePublicacionScreen),
+      );
+      expect(detalle.publicacionId, 'a');
+      expect(detalle.vistaModeracion, isTrue);
+      expect(find.text('Tenis para asfalto'), findsOneWidget);
+    });
   });
 }

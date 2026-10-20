@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/resumen_entrenamiento.dart';
 import '../models/resumen_semana.dart';
+import '../models/reto_del_usuario.dart';
 import '../models/tipo_objetivo.dart';
 import 'auth_service.dart';
 import 'historial_service.dart';
@@ -45,16 +46,28 @@ final metaSemanalProvider = FutureProvider.autoDispose<num?>((ref) async {
   }
 });
 
-/// Cuántos retos tiene el corredor en juego ahora mismo (SCRUM-287).
+/// Los retos que el corredor tiene en juego ahora mismo, para la portada
+/// (SCRUM-287 y SCRUM-288).
 ///
 /// En juego es lo mismo que en la sección de Retos: activados, sin completar y
-/// con la vigencia abierta. La cuenta se hace aquí y no en la base para no
+/// con la vigencia abierta. El filtro se hace aquí y no en la base para no
 /// repetir la regla: la de `RetoDelUsuario` es la que manda.
-final retosActivosProvider = FutureProvider.autoDispose<int>((ref) async {
+///
+/// Van del que se acaba primero al que más plazo le queda, y entre los que
+/// terminan el mismo día, el más avanzado delante: así el que la portada
+/// destaca es el que hay que atender hoy.
+final retosEnCursoProvider = FutureProvider.autoDispose<List<RetoDelUsuario>>((
+  ref,
+) async {
   final mios = await ref.watch(misRetosProvider.future);
   final ahora = ref.read(relojProvider)();
 
-  return mios.where((mio) => mio.enCursoEn(ahora)).length;
+  return mios.where((mio) => mio.enCursoEn(ahora)).toList()..sort((a, b) {
+    final plazo = a.reto.vigencia
+        .diasRestantesDesde(ahora)
+        .compareTo(b.reto.vigencia.diasRestantesDesde(ahora));
+    return plazo != 0 ? plazo : b.progreso.compareTo(a.progreso);
+  });
 });
 
 /// Los últimos entrenamientos, para asomarlos en la portada.

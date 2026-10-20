@@ -25,6 +25,7 @@ import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
+import 'package:traza/widgets/bloque_reto_activo.dart';
 import 'package:traza/widgets/indicadores_semana.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_nivel.dart';
@@ -173,6 +174,10 @@ void main() {
         GoRoute(
           path: MapaProgresionScreen.ruta,
           builder: (_, _) => const Scaffold(body: Text('Pantalla Mapa')),
+        ),
+        GoRoute(
+          path: BloqueRetoActivo.rutaRetos,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Retos')),
         ),
         GoRoute(
           path: NotificacionesScreen.ruta,
@@ -376,6 +381,48 @@ void main() {
       expect(
         tester.getTopLeft(find.byKey(TarjetaNivel.clave)).dy,
         lessThan(tester.getTopLeft(find.text('ESTA SEMANA')).dy),
+      );
+    });
+  });
+
+  group('reto activo (SCRUM-288)', () {
+    testWidgets('la portada lo muestra con su avance', (tester) async {
+      await abrirPortada(tester);
+
+      expect(find.text('RETO ACTIVO'), findsOneWidget);
+      expect(find.text('Corre 20 km esta semana'), findsOneWidget);
+      expect(find.text('8 de 20 km'), findsOneWidget);
+    });
+
+    testWidgets('va entre los indicadores y los últimos entrenamientos', (
+      tester,
+    ) async {
+      await abrirPortada(tester);
+
+      final semana = tester.getTopLeft(find.byKey(IndicadoresSemana.clave)).dy;
+      final reto = tester.getTopLeft(find.text('RETO ACTIVO')).dy;
+      final ultimos = tester.getTopLeft(find.text('ÚLTIMOS ENTRENAMIENTOS')).dy;
+      expect(reto, greaterThan(semana));
+      expect(reto, lessThan(ultimos));
+    });
+
+    testWidgets('al tocarlo lleva a la sección de Retos', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.text('Corre 20 km esta semana'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Retos'), findsOneWidget);
+    });
+
+    testWidgets('sin retos activados invita a activar uno', (tester) async {
+      await abrirPortada(tester, retos: () async => const []);
+
+      expect(find.text('Activa un reto y empieza a ganar XP.'), findsOneWidget);
+      // Y el indicador de la semana queda en cero, no en guion.
+      expect(
+        tester.widget<Text>(find.byKey(IndicadoresSemana.claveRetos)).data,
+        '0',
       );
     });
   });

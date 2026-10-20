@@ -68,7 +68,7 @@ class _Cifras extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Los retos no bloquean las otras dos cifras: mientras se consultan, o si
     // la consulta falla, su caja queda en guion y las demás se leen igual.
-    final retos = ref.watch(retosActivosProvider).valueOrNull;
+    final retos = ref.watch(retosEnCursoProvider).valueOrNull?.length;
     final actividades = resumen.entrenamientos;
 
     return Column(

@@ -9,11 +9,13 @@ import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/reto.dart';
 import 'package:traza/models/reto_del_usuario.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/home/inicio_screen.dart';
 import 'package:traza/screens/home/mapa_progresion_screen.dart';
+import 'package:traza/screens/rutas/rutas_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/inicio_provider.dart';
@@ -24,8 +26,10 @@ import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
+import 'package:traza/services/rutas_service.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
 import 'package:traza/widgets/bloque_reto_activo.dart';
+import 'package:traza/widgets/carrusel_rutas_cercanas.dart';
 import 'package:traza/widgets/indicadores_semana.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_nivel.dart';
@@ -36,6 +40,7 @@ import '../utiles/niveles_falso.dart';
 import '../utiles/fuente_cambios_notificaciones_falsa.dart';
 import '../utiles/notificaciones_falso.dart';
 import '../utiles/retos_repository_falso.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 /// Historial de mentira: responde lo que la prueba le indique.
 class _HistorialFalso implements HistorialRepository {
@@ -100,8 +105,21 @@ final _retoEnCurso = RetoDelUsuario(
   fechaActivacion: DateTime(2026, 9, 14, 8),
 );
 
-/// Pruebas de la portada: el saludo, los indicadores de la semana, los
-/// últimos entrenamientos y las salidas hacia actividad, historial y perfil.
+/// Una pantalla donde la portada entra entera, para poder mirar dos bloques a
+/// la vez sin arrastrar.
+const _pantallaAlta = Size(390, 1600);
+
+/// Una ruta que la comunidad ya puede ver, para el carrusel (SCRUM-289).
+final _rutaPublicada = rutaDePrueba(
+  id: 'r-1',
+  nombre: 'Vuelta al estadio',
+  estado: EstadoRuta.publicada,
+  fechaPublicacion: DateTime(2026, 9, 15, 9),
+);
+
+/// Pruebas de la portada: el saludo, los indicadores de la semana, el reto
+/// activo, las rutas, los últimos entrenamientos y las salidas hacia
+/// actividad, historial y perfil.
 void main() {
   final ahora = DateTime(2026, 9, 16, 10);
 
@@ -149,9 +167,14 @@ void main() {
     NivelesFalso? niveles,
     ExperienciaFalsa? experiencia,
     Future<List<RetoDelUsuario>> Function()? retos,
+    List<Ruta>? rutas,
     int sinLeer = 0,
+    // La portada ya no cabe entera en un celular: lo que queda abajo no se
+    // construye hasta arrastrar. Las pruebas que comparan el orden de los
+    // bloques, o que miran dos a la vez, piden una pantalla alta.
+    Size tamano = const Size(390, 844),
   }) async {
-    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.physicalSize = tamano * 3;
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -178,6 +201,10 @@ void main() {
         GoRoute(
           path: BloqueRetoActivo.rutaRetos,
           builder: (_, _) => const Scaffold(body: Text('Pantalla Retos')),
+        ),
+        GoRoute(
+          path: RutasScreen.ruta,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Rutas')),
         ),
         GoRoute(
           path: NotificacionesScreen.ruta,
@@ -215,6 +242,10 @@ void main() {
           // El tercer indicador de la semana (SCRUM-287).
           retosRepositoryProvider.overrideWithValue(
             _RetosFalsos(retos ?? () async => [_retoEnCurso]),
+          ),
+          // El carrusel de rutas (SCRUM-289).
+          rutasRepositoryProvider.overrideWithValue(
+            RutasRepositorioFalso(rutas: rutas ?? [_rutaPublicada]),
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -263,7 +294,7 @@ void main() {
     testWidgets('van entre la tarjeta de nivel y los entrenamientos', (
       tester,
     ) async {
-      await abrirPortada(tester);
+      await abrirPortada(tester, tamano: _pantallaAlta);
 
       final nivel = tester.getTopLeft(find.byKey(TarjetaNivel.clave)).dy;
       final semana = tester.getTopLeft(find.byKey(IndicadoresSemana.clave)).dy;
@@ -308,6 +339,7 @@ void main() {
         tester,
         historial: () => pendiente.future,
         esperar: false,
+        tamano: _pantallaAlta,
       );
 
       expect(find.text('Cargando tu semana…'), findsOneWidget);
@@ -328,7 +360,7 @@ void main() {
 
   group('últimos entrenamientos', () {
     testWidgets('asoma los tres más recientes', (tester) async {
-      await abrirPortada(tester);
+      await abrirPortada(tester, tamano: _pantallaAlta);
 
       expect(find.text('ÚLTIMOS ENTRENAMIENTOS'), findsOneWidget);
       expect(find.text('Correr · hoy'), findsOneWidget);
@@ -341,7 +373,11 @@ void main() {
 
     testWidgets('sin entrenamientos invita a empezar y no ofrece el '
         'historial', (tester) async {
-      await abrirPortada(tester, historial: () async => []);
+      await abrirPortada(
+        tester,
+        historial: () async => [],
+        tamano: _pantallaAlta,
+      );
 
       expect(
         find.text('Todavía no has entrenado. Toca el botón + para empezar.'),
@@ -352,7 +388,7 @@ void main() {
 
     testWidgets('"Ver todos" abre el historial completo, que vive en el '
         'perfil (SCRUM-285)', (tester) async {
-      final router = await abrirPortada(tester);
+      final router = await abrirPortada(tester, tamano: _pantallaAlta);
 
       await tester.tap(find.text('Ver todos'));
       await tester.pumpAndSettle();
@@ -397,7 +433,7 @@ void main() {
     testWidgets('va entre los indicadores y los últimos entrenamientos', (
       tester,
     ) async {
-      await abrirPortada(tester);
+      await abrirPortada(tester, tamano: _pantallaAlta);
 
       final semana = tester.getTopLeft(find.byKey(IndicadoresSemana.clave)).dy;
       final reto = tester.getTopLeft(find.text('RETO ACTIVO')).dy;
@@ -424,6 +460,47 @@ void main() {
         tester.widget<Text>(find.byKey(IndicadoresSemana.claveRetos)).data,
         '0',
       );
+    });
+  });
+
+  group('rutas cercanas (SCRUM-289)', () {
+    testWidgets('la portada las asoma con su distancia', (tester) async {
+      await abrirPortada(tester);
+
+      expect(find.text('RUTAS CERCANAS'), findsOneWidget);
+      expect(find.text('Vuelta al estadio'), findsOneWidget);
+      expect(find.text('5.23 km'), findsOneWidget);
+    });
+
+    testWidgets('van después del reto y antes de los entrenamientos', (
+      tester,
+    ) async {
+      await abrirPortada(tester, tamano: _pantallaAlta);
+
+      final reto = tester.getTopLeft(find.text('RETO ACTIVO')).dy;
+      final rutas = tester.getTopLeft(find.text('RUTAS CERCANAS')).dy;
+      final ultimos = tester.getTopLeft(find.text('ÚLTIMOS ENTRENAMIENTOS')).dy;
+      expect(rutas, greaterThan(reto));
+      expect(rutas, lessThan(ultimos));
+    });
+
+    testWidgets('"Ver todas" lleva a la sección de Rutas', (tester) async {
+      await abrirPortada(tester);
+
+      await tester.tap(find.byKey(CarruselRutasCercanas.claveVerTodas));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Rutas'), findsOneWidget);
+    });
+
+    testWidgets('sin rutas publicadas no ofrece "Ver todas"', (tester) async {
+      await abrirPortada(tester, rutas: const []);
+
+      expect(
+        find.textContaining('Todavía no hay rutas publicadas'),
+        findsOneWidget,
+      );
+      expect(find.byKey(CarruselRutasCercanas.claveVerTodas), findsNothing);
     });
   });
 

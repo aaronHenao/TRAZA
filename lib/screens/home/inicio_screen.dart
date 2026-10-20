@@ -10,6 +10,7 @@ import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/bloque_reto_activo.dart';
+import '../../widgets/carrusel_rutas_cercanas.dart';
 import '../../widgets/indicadores_semana.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/tarjeta_nivel.dart';
@@ -44,6 +45,9 @@ class InicioScreen extends ConsumerWidget {
               ..invalidate(ultimosEntrenamientosProvider)
               // Los retos del indicador y del bloque (SCRUM-287 y SCRUM-288).
               ..invalidate(retosEnCursoProvider)
+              // Las rutas del carrusel: la comunidad publica mientras el
+              // usuario hace otra cosa (SCRUM-289).
+              ..invalidate(rutasCercanasProvider)
               // La XP y los niveles de la tarjeta (SCRUM-286).
               ..invalidate(progresionProvider)
               // Y la campana, que es lo que puede haber cambiado sin que el
@@ -69,6 +73,9 @@ class InicioScreen extends ConsumerWidget {
               SizedBox(height: AppSpacing.lg),
               // El reto que hay que atender hoy (SCRUM-288).
               BloqueRetoActivo(),
+              SizedBox(height: AppSpacing.lg),
+              // Las rutas de la comunidad, de lado (SCRUM-289).
+              CarruselRutasCercanas(),
               SizedBox(height: AppSpacing.lg),
               _UltimosEntrenamientos(),
             ],

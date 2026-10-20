@@ -141,3 +141,12 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Reintentos del aviso**: pg_net manda el aviso una sola vez. Si la función no responde (caída o arranque en frío de más de 5 s), la fila se queda en revisión hasta que el administrador la decida. Si pasa seguido, agregar en una migración nueva un reintento periódico (pg_cron) de lo que lleve más de un minuto en revisión.
 - **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
 - **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.
+
+## SCRUM-289: el carrusel de rutas de la portada
+
+**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, con su distancia, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240).
+
+**Qué falta, y de quién depende:**
+
+- **La cercanía (HU-29, SCRUM-243).** Hoy el carrusel muestra las últimas publicadas, no las más cercanas: ordenar por distancia pide el permiso de ubicación y la distancia del usuario a cada trazado, que todavía no se calcula. El orden se arregla en `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) y el widget no cambia. Mientras eso falte, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
+- **La dificultad (HU-34, y su revisión en HU-35 / SCRUM-259).** La tabla `rutas` no tiene esa columna, así que la pastilla de cada tarjeta dice "Sin clasificar", que es la verdad de hoy. Cuando la columna exista, se lee en `_TarjetaCorta` y se quita la constante `CarruselRutasCercanas.sinDificultad`. Es el mismo pendiente que anotó SCRUM-240 para el detalle de la ruta.

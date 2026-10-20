@@ -154,3 +154,16 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Actuar sobre lo reportado** es de SCRUM-242 (eliminar publicaciones). Hoy el administrador ve la bandeja y abre el detalle, pero no puede retirar la publicación ni descartar los reportes. Cuando exista la eliminación, conviene que la tarjeta de `_TarjetaReportada` (`lib/screens/admin/moderacion_foro_screen.dart`) ofrezca la misma acción, y que lo retirado deje de contar en "Reportadas" (filtrar por `publicaciones_foro.estado` en `reportes()` o en `PublicacionReportada.agrupar`).
 - **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
 - **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
+
+## SCRUM-374: recompensas
+
+**Qué quedó hecho:**
+
+- `0037_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
+- Gestión del administrador (`/admin/recompensas`, desde el Panel) con su formulario, y catálogo del corredor (`/recompensas`, desde Inicio) con los puntos de cada recompensa.
+
+**Qué falta:**
+
+- **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. SCRUM-380 va a crear la tabla `canjes_recompensa` solo para guardar los puntos del momento del canje; el flujo de canjear (una función `security definer` que valide el saldo y descuente) es de otra HU. Coordinar con quien la tenga para no crear dos tablas.
+- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, va con una policy de update (la que agregue SCRUM-380 para cambiar los puntos) y un interruptor en la tarjeta de la gestión.
+- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`. Lo mismo con `_AccesoRecompensas` y `_AccesoProgresion` de `inicio_screen.dart`: si llega una tercera tarjeta de acceso, conviene un `_Acceso` común.

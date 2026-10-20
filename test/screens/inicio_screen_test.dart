@@ -16,6 +16,7 @@ import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
+import 'package:traza/screens/recompensas/catalogo_recompensas_screen.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 
 import '../utiles/fuente_cambios_notificaciones_falsa.dart';
@@ -125,6 +126,10 @@ void main() {
         GoRoute(
           path: ProgresionScreen.ruta,
           builder: (_, _) => const Scaffold(body: Text('Pantalla Progresión')),
+        ),
+        GoRoute(
+          path: CatalogoRecompensasScreen.ruta,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Recompensas')),
         ),
       ],
     );
@@ -384,6 +389,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Progresión'), findsOneWidget);
+    });
+
+    testWidgets('la tarjeta de recompensas, debajo de la progresión, lleva al '
+        'catálogo de beneficios (criterio 3 de SCRUM-374)', (tester) async {
+      await abrirPortada(tester);
+
+      final acceso = find.byKey(InicioScreen.claveAccesoRecompensas);
+      expect(
+        find.descendant(of: acceso, matching: find.text('Recompensas')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(acceso).dy,
+        greaterThan(
+          tester.getTopLeft(find.byKey(InicioScreen.claveAccesoProgresion)).dy,
+        ),
+      );
+
+      await tester.ensureVisible(acceso);
+      await tester.pumpAndSettle();
+      await tester.tap(acceso);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Recompensas'), findsOneWidget);
     });
   });
 }

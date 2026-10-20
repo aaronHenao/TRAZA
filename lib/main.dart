@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/admin/formulario_nivel_screen.dart';
+import 'screens/admin/formulario_recompensa_screen.dart';
 import 'screens/admin/formulario_reto_screen.dart';
 import 'screens/admin/gestion_niveles_screen.dart';
+import 'screens/admin/gestion_recompensas_screen.dart';
 import 'screens/admin/gestion_retos_screen.dart';
 import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
@@ -24,6 +26,7 @@ import 'widgets/navegacion_principal.dart';
 import 'screens/notificaciones/notificaciones_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/onboarding/permisos_screen.dart';
+import 'screens/recompensas/catalogo_recompensas_screen.dart';
 import 'screens/retos/detalle_reto_screen.dart';
 import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
@@ -154,6 +157,26 @@ final _navegacion = GoRouter(
               const SoloAdministrador(hijo: FormularioNivelScreen()),
         ),
       ],
+    ),
+    // Gestión de recompensas (SCRUM-374) con su formulario, tras
+    // SoloAdministrador como los niveles. La barrera de verdad es RLS.
+    GoRoute(
+      path: GestionRecompensasScreen.ruta,
+      builder: (context, state) =>
+          const SoloAdministrador(hijo: GestionRecompensasScreen()),
+      routes: [
+        GoRoute(
+          path: 'nueva',
+          builder: (context, state) =>
+              const SoloAdministrador(hijo: FormularioRecompensaScreen()),
+        ),
+      ],
+    ),
+    // El catálogo de recompensas del corredor (SCRUM-374). Se abre con
+    // `push` desde la portada.
+    GoRoute(
+      path: CatalogoRecompensasScreen.ruta,
+      builder: (context, state) => const CatalogoRecompensasScreen(),
     ),
     // Cuánto le falta al corredor para el siguiente nivel (SCRUM-178). Se
     // abre con `push` desde la portada, así se vuelve a ella al cerrarla.

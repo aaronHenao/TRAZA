@@ -7,6 +7,7 @@ import 'auth_service.dart';
 import 'historial_service.dart';
 import 'objetivos_service.dart';
 import 'reloj_provider.dart';
+import 'retos_provider.dart';
 
 /// Nombre con el que saludar en la portada, o null si no hay ninguno.
 final nombreUsuarioProvider = Provider<String?>(
@@ -42,6 +43,18 @@ final metaSemanalProvider = FutureProvider.autoDispose<num?>((ref) async {
   } catch (_) {
     return null;
   }
+});
+
+/// Cuántos retos tiene el corredor en juego ahora mismo (SCRUM-287).
+///
+/// En juego es lo mismo que en la sección de Retos: activados, sin completar y
+/// con la vigencia abierta. La cuenta se hace aquí y no en la base para no
+/// repetir la regla: la de `RetoDelUsuario` es la que manda.
+final retosActivosProvider = FutureProvider.autoDispose<int>((ref) async {
+  final mios = await ref.watch(misRetosProvider.future);
+  final ahora = ref.read(relojProvider)();
+
+  return mios.where((mio) => mio.enCursoEn(ahora)).length;
 });
 
 /// Los últimos entrenamientos, para asomarlos en la portada.

@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/resumen_entrenamiento.dart';
-import '../../models/resumen_semana.dart';
 import '../../services/inicio_provider.dart';
 import '../../services/notificaciones_provider.dart';
 import '../../services/progresion_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/indicadores_semana.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/tarjeta_nivel.dart';
 import '../../widgets/traza_card.dart';
@@ -26,10 +26,6 @@ import '../onboarding/perfil_screen.dart';
 class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
-  /// La barra de la meta semanal. Tiene clave propia porque la portada lleva
-  /// otra, la del nivel (SCRUM-286), y de otro modo no se distinguen.
-  static const claveBarraSemanal = Key('inicio-barra-semanal');
-
   static const claveNotificaciones = Key('inicio-notificaciones');
 
   @override
@@ -45,6 +41,8 @@ class InicioScreen extends ConsumerWidget {
             ref
               ..invalidate(resumenSemanaProvider)
               ..invalidate(ultimosEntrenamientosProvider)
+              // Los retos en juego del tercer indicador (SCRUM-287).
+              ..invalidate(retosActivosProvider)
               // La XP y los niveles de la tarjeta (SCRUM-286).
               ..invalidate(progresionProvider)
               // Y la campana, que es lo que puede haber cambiado sin que el
@@ -65,7 +63,8 @@ class InicioScreen extends ConsumerWidget {
               // El nivel primero, como en el prototipo (SCRUM-286).
               TarjetaNivel(),
               SizedBox(height: AppSpacing.md),
-              _ProgresoSemanal(),
+              // Los tres indicadores de la semana (SCRUM-287).
+              IndicadoresSemana(),
               SizedBox(height: AppSpacing.lg),
               _UltimosEntrenamientos(),
             ],
@@ -148,111 +147,6 @@ class _Campana extends ConsumerWidget {
         minimumSize: const Size(38, 38),
         padding: EdgeInsets.zero,
       ),
-    );
-  }
-}
-
-/// Lo que lleva esta semana frente a su objetivo de distancia, con la barra
-/// de progreso del prototipo (`.lv-track`).
-class _ProgresoSemanal extends ConsumerWidget {
-  const _ProgresoSemanal();
-
-  static const claveAvance = Key('inicio-avance-semanal');
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final resumen = ref.watch(resumenSemanaProvider);
-
-    return TrazaCard(
-      child: switch (resumen) {
-        AsyncData(:final value) => _Avance(resumen: value),
-        AsyncError() => const _AvisoTarjeta(
-          'No pudimos cargar tu progreso de esta semana.',
-        ),
-        _ => const _AvisoTarjeta('Cargando tu progreso…'),
-      },
-    );
-  }
-}
-
-class _Avance extends StatelessWidget {
-  const _Avance({required this.resumen});
-
-  final ResumenSemana resumen;
-
-  @override
-  Widget build(BuildContext context) {
-    final progreso = resumen.progreso;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'ESTA SEMANA',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.66,
-            color: AppColors.ink2,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Flexible(
-              child: Text(
-                resumen.avanceTexto,
-                key: _ProgresoSemanal.claveAvance,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            // Expanded y no Spacer: el conteo queda igual contra el borde
-            // derecho, pero con el texto del sistema en grande cede espacio
-            // en vez de desbordar la tarjeta.
-            Expanded(
-              child: Text(
-                resumen.entrenamientos == 1
-                    ? '1 entrenamiento'
-                    : '${resumen.entrenamientos} entrenamientos',
-                textAlign: TextAlign.end,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
-              ),
-            ),
-          ],
-        ),
-        if (progreso != null) ...[
-          const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: LinearProgressIndicator(
-              key: InicioScreen.claveBarraSemanal,
-              value: progreso,
-              minHeight: 8,
-              backgroundColor: AppColors.bgAlt,
-              valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-            ),
-          ),
-        ] else ...[
-          const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Ponte una meta de distancia en tu perfil para seguirla desde aquí.',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.ink2,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ],
     );
   }
 }

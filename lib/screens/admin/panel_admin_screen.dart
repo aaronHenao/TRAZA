@@ -7,6 +7,7 @@ import '../../widgets/ancho_contenido.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
 import 'gestion_niveles_screen.dart';
+import 'gestion_recompensas_screen.dart';
 import 'gestion_retos_screen.dart';
 import 'moderacion_foro_screen.dart';
 
@@ -21,6 +22,7 @@ class PanelAdminScreen extends StatelessWidget {
   static const claveRetos = Key('panel-admin-retos');
   static const claveNiveles = Key('panel-admin-niveles');
   static const claveForo = Key('panel-admin-foro');
+  static const claveRecompensas = Key('panel-admin-recompensas');
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +66,16 @@ class PanelAdminScreen extends StatelessWidget {
                     'Consulta lo que se publica, decide lo que la IA dejó '
                     'pendiente y revisa lo rechazado.',
                 onTap: () => context.push(ModeracionForoScreen.ruta),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _TarjetaAcceso(
+                clave: claveRecompensas,
+                icono: Icons.card_giftcard_outlined,
+                titulo: 'Gestionar recompensas',
+                detalle:
+                    'Crea los beneficios que los corredores obtienen con sus '
+                    'puntos.',
+                onTap: () => context.push(GestionRecompensasScreen.ruta),
               ),
             ],
           ),

@@ -199,6 +199,80 @@ void main() {
     });
   });
 
+  group('puntos que cambió el administrador (SCRUM-380)', () {
+    /// Cambia los puntos como lo hace la gestión del administrador, sobre el
+    /// mismo repositorio que consulta el catálogo.
+    Future<ResultadoCambioPuntos> cambiarPuntos(
+      WidgetTester tester,
+      Recompensa recompensa,
+      String texto,
+    ) => ProviderScope.containerOf(
+      tester.element(find.byType(Navigator).first),
+    ).read(cambioPuntosRecompensaProvider).cambiar(recompensa, texto);
+
+    testWidgets('tras cambiar los puntos, el corredor ve el valor nuevo al '
+        'abrir el catálogo (criterio 1 de SCRUM-380)', (tester) async {
+      await montar(tester);
+      await abrirCatalogo(tester);
+      expect(enLaTarjeta('recompensa-botella', '300 puntos'), findsOneWidget);
+      await volver(tester);
+
+      final resultado = await cambiarPuntos(tester, botella, '100');
+      expect(resultado, isA<PuntosCambiados>());
+
+      await abrirCatalogo(tester);
+
+      expect(enLaTarjeta('recompensa-botella', '100 puntos'), findsOneWidget);
+      expect(find.text('300 puntos'), findsNothing);
+      // Y pasa a su nuevo lugar según los puntos.
+      expect(nombresEnPantalla(tester), [
+        'Botella TRAZA',
+        'Vale de hidratación',
+      ]);
+    });
+
+    testWidgets('con el catálogo abierto, el valor nuevo aparece sin tener '
+        'que salir (criterio 1 de SCRUM-380)', (tester) async {
+      await montar(tester);
+      await abrirCatalogo(tester);
+
+      await cambiarPuntos(tester, hidratacion, '450');
+      await tester.pumpAndSettle();
+
+      expect(
+        enLaTarjeta('recompensa-hidratacion', '450 puntos'),
+        findsOneWidget,
+      );
+      expect(find.text('150 puntos'), findsNothing);
+    });
+
+    testWidgets('una cantidad inválida no cambia lo que ve el corredor '
+        '(criterio 2 de SCRUM-380)', (tester) async {
+      await montar(tester);
+
+      final resultado = await cambiarPuntos(tester, botella, '0');
+      expect(resultado, isA<PuntosInvalidos>());
+
+      await abrirCatalogo(tester);
+
+      expect(enLaTarjeta('recompensa-botella', '300 puntos'), findsOneWidget);
+    });
+
+    testWidgets('el corredor no tiene cómo cambiar los puntos', (tester) async {
+      await montar(tester);
+      await abrirCatalogo(tester);
+
+      expect(find.text('Cambiar puntos'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(TarjetaRecompensa),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        ),
+        findsNothing,
+      );
+    });
+  });
+
   group('estados de la lista', () {
     testWidgets('sin recompensas disponibles lo dice', (tester) async {
       await montar(tester, recompensas: [camiseta]);

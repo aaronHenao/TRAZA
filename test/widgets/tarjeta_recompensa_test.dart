@@ -83,4 +83,94 @@ void main() {
   test('cada recompensa tiene su clave a partir del id', () {
     expect(TarjetaRecompensa.claveDe('abc'), const Key('recompensa-abc'));
   });
+
+  group('acciones al pie (SCRUM-380)', () {
+    Future<void> montarConAcciones(
+      WidgetTester tester,
+      List<Widget> acciones,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaRecompensa(
+              recompensa: recompensaDePrueba(),
+              conDisponibilidad: true,
+              acciones: acciones,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final botones = find.byWidgetPredicate((w) => w is ButtonStyleButton);
+
+    testWidgets('sin acciones no pinta ningún botón: así la ve el corredor', (
+      tester,
+    ) async {
+      await montar(tester, recompensaDePrueba());
+
+      expect(botones, findsNothing);
+    });
+
+    testWidgets('con una lista de acciones vacía tampoco', (tester) async {
+      await montarConAcciones(tester, const []);
+
+      expect(botones, findsNothing);
+    });
+
+    testWidgets('con acciones las pinta dentro de la tarjeta, debajo de los '
+        'puntos, y responden al toque', (tester) async {
+      var tocada = false;
+      await montarConAcciones(tester, [
+        TextButton(
+          key: const Key('accion-de-prueba'),
+          onPressed: () => tocada = true,
+          child: const Text('Cambiar puntos'),
+        ),
+      ]);
+
+      final accion = find.byKey(const Key('accion-de-prueba'));
+      expect(
+        find.descendant(of: find.byType(TarjetaRecompensa), matching: accion),
+        findsOneWidget,
+      );
+      expect(find.text('Cambiar puntos'), findsOneWidget);
+      // Al pie: debajo de los puntos y de la disponibilidad.
+      expect(
+        tester.getTopLeft(accion).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.text('150 puntos')).dy),
+      );
+      expect(
+        tester.getTopLeft(accion).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.text('Disponible')).dy),
+      );
+      // Lo demás de la tarjeta sigue ahí.
+      expect(find.text('Vale de hidratación'), findsOneWidget);
+
+      await tester.tap(accion);
+      expect(tocada, isTrue);
+    });
+
+    testWidgets('varias acciones van en una misma fila', (tester) async {
+      await montarConAcciones(tester, [
+        TextButton(
+          key: const Key('primera'),
+          onPressed: () {},
+          child: const Text('Cambiar puntos'),
+        ),
+        TextButton(
+          key: const Key('segunda'),
+          onPressed: () {},
+          child: const Text('Retirar'),
+        ),
+      ]);
+
+      final primera = find.byKey(const Key('primera'));
+      final segunda = find.byKey(const Key('segunda'));
+      expect(primera, findsOneWidget);
+      expect(segunda, findsOneWidget);
+      expect(tester.getCenter(primera).dy, tester.getCenter(segunda).dy);
+      expect(tester.getCenter(primera).dx, isNot(tester.getCenter(segunda).dx));
+    });
+  });
 }

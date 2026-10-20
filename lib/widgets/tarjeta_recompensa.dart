@@ -7,17 +7,22 @@ import 'traza_card.dart';
 /// Una recompensa con los puntos que cuesta (SCRUM-374).
 ///
 /// La usan el catálogo del corredor y la gestión del administrador. Solo la
-/// gestión pide [conDisponibilidad]: el corredor únicamente ve lo que puede
-/// obtener.
+/// gestión pide [conDisponibilidad] y [acciones]: el corredor únicamente ve
+/// lo que puede obtener.
 class TarjetaRecompensa extends StatelessWidget {
   const TarjetaRecompensa({
     required this.recompensa,
     this.conDisponibilidad = false,
+    this.acciones = const [],
     super.key,
   });
 
   final Recompensa recompensa;
   final bool conDisponibilidad;
+
+  /// Botones al pie, en una fila: lo que el administrador puede hacer con
+  /// la recompensa (SCRUM-380).
+  final List<Widget> acciones;
 
   static Key claveDe(String id) => Key('recompensa-$id');
 
@@ -87,6 +92,10 @@ class TarjetaRecompensa extends StatelessWidget {
                           : AppColors.ink3,
                     ),
                   ),
+                ],
+                if (acciones.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Wrap(spacing: 8, children: acciones),
                 ],
               ],
             ),

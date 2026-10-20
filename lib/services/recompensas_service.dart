@@ -40,12 +40,12 @@ abstract interface class RecompensasRepository {
   /// Lanza [SoloAdministradorException] si la cuenta no es administradora.
   Future<Recompensa> crear(NuevaRecompensa recompensa);
 
-  /// Lo que ve el corredor: las disponibles, de la que menos puntos cuesta a
-  /// la que más (criterio 3).
+  /// Lo que ve el corredor: las disponibles que no se han retirado
+  /// (SCRUM-385), de la que menos puntos cuesta a la que más (criterio 3).
   Future<List<Recompensa>> catalogo();
 
-  /// Todas, disponibles o no, para la gestión del administrador. La más
-  /// reciente primero.
+  /// Las que no se han retirado (SCRUM-385), disponibles o no, para la
+  /// gestión del administrador. La más reciente primero.
   Future<List<Recompensa>> todas();
 
   /// Cambia los puntos de [recompensa] y devuelve la fila guardada
@@ -55,6 +55,12 @@ abstract interface class RecompensasRepository {
   /// Lanza [SoloAdministradorException] si la base no deja y
   /// [DatosDeRecompensaInvalidosException] si un `check` lo rechaza.
   Future<Recompensa> cambiarPuntos(Recompensa recompensa, int puntos);
+
+  /// Retira [recompensa] del catálogo (SCRUM-385). No borra la fila: los
+  /// canjes que se hicieron siguen teniendo a qué apuntar (criterio 3).
+  ///
+  /// Lanza [SoloAdministradorException] si la base no deja.
+  Future<void> retirar(Recompensa recompensa);
 }
 
 class SupabaseRecompensasRepository implements RecompensasRepository {
@@ -112,12 +118,14 @@ class SupabaseRecompensasRepository implements RecompensasRepository {
   Future<List<Recompensa>> catalogo() async {
     _exigirSesion();
 
-    // El filtro va aunque RLS ya lo limite: al administrador la policy le
-    // deja ver también las que no están disponibles.
+    // Los filtros van aunque RLS ya limite: al administrador la policy le
+    // deja ver también lo no disponible, y al corredor lo retirado que ya
+    // canjeó (para su historial, no para canjearlo otra vez).
     final filas = await _cliente
         .from(_tabla)
         .select()
         .eq('disponible', true)
+        .isFilter('retirada_en', null)
         // `ascending` va explícito: el default de `order` es descendente.
         .order('puntos_requeridos', ascending: true);
 
@@ -128,9 +136,11 @@ class SupabaseRecompensasRepository implements RecompensasRepository {
   Future<List<Recompensa>> todas() async {
     _exigirSesion();
 
+    // Lo eliminado ya no se gestiona (SCRUM-385).
     final filas = await _cliente
         .from(_tabla)
         .select()
+        .isFilter('retirada_en', null)
         .order('fecha_creacion', ascending: false);
 
     return filas.map(Recompensa.desdeSupabase).toList();
@@ -156,6 +166,28 @@ class SupabaseRecompensasRepository implements RecompensasRepository {
       }
       if (e.code == _restriccionIncumplida) {
         throw DatosDeRecompensaInvalidosException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> retirar(Recompensa recompensa) async {
+    _exigirSesion();
+
+    try {
+      // La fecha la reemplaza la base por la de ahora
+      // (`recompensas_sellar_retirada`, 0039); basta con mandar alguna.
+      await _cliente
+          .from(_tabla)
+          .update({'retirada_en': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', recompensa.id)
+          .select()
+          .single();
+    } on PostgrestException catch (e) {
+      // Sin es_admin() el update no ve la fila (0 filas) o RLS lo niega.
+      if (e.code == _rlsDenegado || e.code == _sinFilas) {
+        throw const SoloAdministradorException();
       }
       rethrow;
     }

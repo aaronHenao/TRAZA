@@ -45,7 +45,7 @@ final catalogoRecompensasProvider =
       (ref) => ref.watch(recompensasRepositoryProvider).catalogo(),
     );
 
-/// Todas las recompensas, para la gestión del administrador.
+/// Las recompensas que no se han retirado, para la gestión del administrador.
 final gestionRecompensasProvider = FutureProvider.autoDispose<List<Recompensa>>(
   (ref) => ref.watch(recompensasRepositoryProvider).todas(),
 );
@@ -168,6 +168,61 @@ class CambioPuntosRecompensa {
     } catch (error) {
       debugPrint('No se pudieron cambiar los puntos: $error');
       return const PuntosNoGuardados(noSePudo);
+    }
+  }
+}
+
+/// Cómo terminó una eliminación (SCRUM-385).
+sealed class ResultadoRetiradaRecompensa {
+  const ResultadoRetiradaRecompensa();
+}
+
+/// Quedó retirada: ya no se ve en el catálogo ni en la gestión.
+class RecompensaRetirada extends ResultadoRetiradaRecompensa {
+  const RecompensaRetirada();
+}
+
+/// No se pudo retirar. Todo sigue como estaba.
+class RecompensaNoRetirada extends ResultadoRetiradaRecompensa {
+  const RecompensaNoRetirada(this.mensaje);
+
+  final String mensaje;
+}
+
+/// Eliminación de recompensas (SCRUM-385).
+final retiradaRecompensaProvider = Provider<RetiradaRecompensa>(
+  RetiradaRecompensa.new,
+);
+
+/// El administrador elimina una recompensa (SCRUM-385). Eliminar es retirar:
+/// la fila se queda para el historial de canjes (criterio 3).
+class RetiradaRecompensa {
+  const RetiradaRecompensa(this._ref);
+
+  final Ref _ref;
+
+  static const sinSesion = 'Inicia sesión para eliminar recompensas.';
+  static const soloAdministrador =
+      'Solo el administrador puede eliminar recompensas.';
+  static const noSePudo =
+      'No se pudo eliminar la recompensa. Inténtalo de nuevo.';
+
+  Future<ResultadoRetiradaRecompensa> retirar(Recompensa recompensa) async {
+    try {
+      await _ref.read(recompensasRepositoryProvider).retirar(recompensa);
+      // Criterio 2: deja de verse en el catálogo y en la gestión. Solo si se
+      // retiró: si falló, todo sigue como estaba.
+      _ref
+        ..invalidate(catalogoRecompensasProvider)
+        ..invalidate(gestionRecompensasProvider);
+      return const RecompensaRetirada();
+    } on SesionRequeridaParaRecompensasException {
+      return const RecompensaNoRetirada(sinSesion);
+    } on SoloAdministradorException {
+      return const RecompensaNoRetirada(soloAdministrador);
+    } catch (error) {
+      debugPrint('No se pudo eliminar la recompensa: $error');
+      return const RecompensaNoRetirada(noSePudo);
     }
   }
 }

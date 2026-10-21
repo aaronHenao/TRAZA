@@ -17,6 +17,7 @@ import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/home/inicio_screen.dart';
 import 'package:traza/screens/home/mapa_progresion_screen.dart';
+import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/historial_service.dart';
@@ -180,6 +181,7 @@ void main() {
     ExperienciaFalsa? experiencia,
     Future<List<RetoDelUsuario>> Function()? retos,
     List<Ruta>? rutas,
+    Object? errorDeRutas,
     int sinLeer = 0,
     EstadoPermiso ubicacion = EstadoPermiso.concedido,
     // La portada ya no cabe entera en un celular: lo que queda abajo no se
@@ -230,6 +232,11 @@ void main() {
           builder: (_, _) => const Scaffold(body: Text('Pantalla Rutas')),
         ),
         GoRoute(
+          path: DetalleRutaScreen.ruta,
+          builder: (_, state) =>
+              Scaffold(body: Text('Detalle ${state.pathParameters['rutaId']}')),
+        ),
+        GoRoute(
           path: NotificacionesScreen.ruta,
           builder: (_, _) =>
               const Scaffold(body: Text('Pantalla Notificaciones')),
@@ -269,7 +276,10 @@ void main() {
           // El carrusel de rutas (SCRUM-289) y el permiso que necesita para
           // decir cuáles están cerca (SCRUM-290).
           rutasRepositoryProvider.overrideWithValue(
-            RutasRepositorioFalso(rutas: rutas ?? [_rutaPublicada]),
+            RutasRepositorioFalso(
+              rutas: rutas ?? [_rutaPublicada],
+              error: errorDeRutas,
+            ),
           ),
           permisosServiceProvider.overrideWithValue(permisos),
           permisosUsuarioRepositoryProvider.overrideWithValue(
@@ -621,6 +631,150 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Notificaciones'), findsOneWidget);
+    });
+  });
+
+  group('la portada completa (SCRUM-291)', () {
+    /// Los cinco bloques del prototipo, en el orden en que van.
+    const bloques = [
+      'NIVEL 1',
+      'ESTA SEMANA',
+      'RETO ACTIVO',
+      'RUTAS CERCANAS',
+      'ÚLTIMOS ENTRENAMIENTOS',
+    ];
+
+    testWidgets('con datos muestra los cinco bloques, en su orden', (
+      tester,
+    ) async {
+      await abrirPortada(tester, tamano: _pantallaAlta);
+
+      var anterior = -1.0;
+      for (final bloque in bloques) {
+        expect(find.text(bloque), findsOneWidget, reason: bloque);
+        final alto = tester.getTopLeft(find.text(bloque)).dy;
+        expect(alto, greaterThan(anterior), reason: '$bloque fuera de orden');
+        anterior = alto;
+      }
+    });
+
+    testWidgets('una cuenta recién creada ve los cinco bloques, cada uno '
+        'diciendo qué falta', (tester) async {
+      // Sin niveles configurados, sin XP, sin meta, sin entrenamientos, sin
+      // retos y sin rutas: la portada no se queda en blanco ni se rompe.
+      await abrirPortada(
+        tester,
+        tamano: _pantallaAlta,
+        niveles: NivelesFalso(),
+        experiencia: ExperienciaFalsa(),
+        objetivos: () async => {},
+        historial: () async => [],
+        retos: () async => const [],
+        rutas: const [],
+      );
+
+      expect(find.text('Todavía no hay niveles'), findsOneWidget);
+      expect(find.text('ESTA SEMANA'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(IndicadoresSemana.claveKilometros)).data,
+        '0.0',
+      );
+      expect(
+        find.textContaining('Ponte una meta de distancia'),
+        findsOneWidget,
+      );
+      expect(find.text('Activa un reto y empieza a ganar XP.'), findsOneWidget);
+      expect(
+        find.textContaining('Todavía no hay rutas publicadas'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Todavía no has entrenado'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('sin datos la portada sigue siendo usable', (tester) async {
+      await abrirPortada(
+        tester,
+        tamano: _pantallaAlta,
+        niveles: NivelesFalso(),
+        experiencia: ExperienciaFalsa(),
+        historial: () async => [],
+        retos: () async => const [],
+        rutas: const [],
+      );
+
+      // El "+", la campana y la barra no dependen de que haya datos.
+      expect(find.byKey(NavegacionPrincipal.claveBoton), findsOneWidget);
+      expect(find.byKey(InicioScreen.claveNotificaciones), findsOneWidget);
+      expect(find.text('Perfil'), findsOneWidget);
+    });
+
+    testWidgets('si todas las consultas fallan, cada bloque lo dice y la '
+        'portada no se cae', (tester) async {
+      await abrirPortada(
+        tester,
+        tamano: _pantallaAlta,
+        niveles: NivelesFalso()..errorAlListar = Exception('sin red'),
+        experiencia: ExperienciaFalsa()..error = Exception('sin red'),
+        historial: () async => throw Exception('sin red'),
+        retos: () async => throw Exception('sin red'),
+        errorDeRutas: Exception('sin red'),
+      );
+
+      expect(find.text('No pudimos cargar tu nivel'), findsOneWidget);
+      expect(
+        find.textContaining('No pudimos cargar tu semana'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('No pudimos cargar tus retos'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('No pudimos cargar las rutas'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('No pudimos cargar tus entrenamientos.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(NavegacionPrincipal.claveBoton), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cada bloque lleva a su sección', (tester) async {
+      // Las cuatro salidas de los bloques, cada una en su propia portada: con
+      // `go` no hay a dónde volver, y es así a propósito.
+      final destinos = <String, String>{
+        'Bronce': 'Pantalla Mapa',
+        'Corre 20 km esta semana': 'Pantalla Retos',
+        'Ver todas': 'Pantalla Rutas',
+        'Ver todos': 'Pantalla Perfil',
+      };
+
+      for (final (toque, destino) in destinos.entries.map(
+        (e) => (e.key, e.value),
+      )) {
+        await abrirPortada(tester, tamano: _pantallaAlta);
+
+        await tester.tap(find.text(toque));
+        await tester.pumpAndSettle();
+
+        expect(find.text(destino), findsOneWidget, reason: 'tocando "$toque"');
+      }
+    });
+
+    testWidgets('tocar una ruta del carrusel abre su detalle y deja volver', (
+      tester,
+    ) async {
+      final router = await abrirPortada(tester);
+
+      await tester.tap(find.text('Vuelta al estadio'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detalle r-1'), findsOneWidget);
+      // `push`: la portada sigue debajo.
+      expect(router.routerDelegate.currentConfiguration.matches.length, 2);
     });
   });
 

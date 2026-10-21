@@ -197,9 +197,15 @@ class _Carrusel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // El alto es fijo —una lista horizontal no mide a lo alto—, así que con el
+    // texto del sistema en grande crece con él: si no, el nombre en dos
+    // líneas, la pastilla y la distancia no caben y algo se pierde. Acotado,
+    // porque pasado de ahí el carrusel se comería la pantalla.
+    final escala = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
+
     return SizedBox(
       key: CarruselRutasCercanas.clave,
-      height: CarruselRutasCercanas.alto,
+      height: CarruselRutasCercanas.alto * escala,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         // El carrusel va de borde a borde de la tarjeta, sin huecos a los

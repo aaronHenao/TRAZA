@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/moderacion_foro.dart';
 import '../../models/publicacion_foro.dart';
+import '../../models/reporte_foro.dart';
 import '../../services/foro_provider.dart';
 import '../foro/detalle_publicacion_screen.dart';
 import '../foro/nueva_publicacion_screen.dart';
@@ -16,6 +17,7 @@ import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/tarjeta_moderacion.dart';
 import '../../widgets/tarjeta_publicacion.dart';
+import '../../widgets/traza_card.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
@@ -27,7 +29,9 @@ import '../../widgets/traza_top_bar.dart';
 /// analiza y lo rechazado, con quién lo rechazó, cuándo y por qué
 /// (SCRUM-322).
 ///
-/// Desde aquí el administrador también publica (SCRUM-354).
+/// Desde aquí el administrador también publica (SCRUM-354), y en
+/// "Reportadas" ve lo que los corredores reportaron, sin saber quién
+/// (SCRUM-369).
 class ModeracionForoScreen extends ConsumerWidget {
   const ModeracionForoScreen({super.key});
 
@@ -36,6 +40,8 @@ class ModeracionForoScreen extends ConsumerWidget {
   static const claveNueva = Key('moderacion-nueva-publicacion');
   static const claveMotivo = Key('moderacion-motivo');
   static const claveConfirmarRechazo = Key('moderacion-confirmar-rechazo');
+  static Key claveReportada(String publicacionId) =>
+      Key('moderacion-reportada-$publicacionId');
 
   static Key claveVista(VistaModeracionForo vista) =>
       Key('moderacion-${vista.name}');
@@ -49,12 +55,14 @@ class ModeracionForoScreen extends ConsumerWidget {
     ref.watch(foroEnVivoProvider);
     final publicaciones = ref.watch(moderacionForoProvider);
     final moderaciones = ref.watch(moderacionesAdminProvider);
+    final reportadas = ref.watch(publicacionesReportadasProvider);
     final vista = ref.watch(vistaModeracionForoProvider);
 
     void recargar() {
       ref
         ..invalidate(moderacionForoProvider)
-        ..invalidate(moderacionesAdminProvider);
+        ..invalidate(moderacionesAdminProvider)
+        ..invalidate(reportesForoProvider);
     }
 
     Future<void> nueva() async {
@@ -62,13 +70,18 @@ class ModeracionForoScreen extends ConsumerWidget {
       recargar();
     }
 
-    int cuantas(VistaModeracionForo opcion) => switch (opcion.estado) {
-      null => switch (publicaciones) {
+    int cuantas(VistaModeracionForo opcion) => switch (opcion) {
+      VistaModeracionForo.publicadas => switch (publicaciones) {
         AsyncData(value: final lista) =>
           lista.where((p) => p.estado == EstadoPublicacion.publicada).length,
         _ => 0,
       },
-      final estado => switch (moderaciones) {
+      // Publicaciones distintas, no reportes: es lo que hay que revisar.
+      VistaModeracionForo.reportadas => switch (reportadas) {
+        AsyncData(value: final lista) => lista.length,
+        _ => 0,
+      },
+      VistaModeracionForo(:final estado) => switch (moderaciones) {
         AsyncData(value: final lista) =>
           lista.where((m) => m.estado == estado).length,
         _ => 0,
@@ -100,9 +113,15 @@ class ModeracionForoScreen extends ConsumerWidget {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async => recargar(),
-                  child: vista == VistaModeracionForo.publicadas
-                      ? _Publicadas(onRecargar: recargar)
-                      : _Moderaciones(vista: vista, onRecargar: recargar),
+                  child: switch (vista) {
+                    VistaModeracionForo.publicadas => _Publicadas(
+                      onRecargar: recargar,
+                    ),
+                    VistaModeracionForo.reportadas => _Reportadas(
+                      onRecargar: recargar,
+                    ),
+                    _ => _Moderaciones(vista: vista, onRecargar: recargar),
+                  },
                 ),
               ),
             ],
@@ -203,6 +222,113 @@ class _Moderaciones extends ConsumerWidget {
       AsyncError() => _ErrorDeCarga(onReintentar: onRecargar),
       _ => const Center(child: CircularProgressIndicator()),
     };
+  }
+}
+
+/// Lo que reportaron los corredores, una tarjeta por publicación
+/// (SCRUM-369). Lo reportado más recientemente va primero.
+class _Reportadas extends ConsumerWidget {
+  const _Reportadas({required this.onRecargar});
+
+  final VoidCallback onRecargar;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reportadas = ref.watch(publicacionesReportadasProvider);
+
+    return switch (reportadas) {
+      AsyncData(value: final lista) when lista.isEmpty => const EstadoVacio(
+        icono: Icons.flag_outlined,
+        titulo: 'Nada reportado',
+        detalle:
+            'Cuando un corredor reporte una publicación, aparecerá aquí con '
+            'el motivo.',
+      ),
+      AsyncData(value: final lista) => _Lista(
+        cuantos: lista.length,
+        item: (context, i) => _TarjetaReportada(
+          reportada: lista[i],
+          onTap: () => context.push(
+            DetallePublicacionScreen.rutaAdminDe(lista[i].publicacionId),
+          ),
+        ),
+      ),
+      AsyncError() => _ErrorDeCarga(onReintentar: onRecargar),
+      _ => const Center(child: CircularProgressIndicator()),
+    };
+  }
+}
+
+/// Una publicación reportada: cuántas veces y por qué. Nunca dice quién la
+/// reportó (criterio 2 de SCRUM-369).
+class _TarjetaReportada extends StatelessWidget {
+  const _TarjetaReportada({required this.reportada, required this.onTap});
+
+  final PublicacionReportada reportada;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cuantos = reportada.cuantos;
+
+    return TrazaCard(
+      key: ModeracionForoScreen.claveReportada(reportada.publicacionId),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.flag_outlined,
+                size: 16,
+                color: AppColors.danger,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                cuantos == 1 ? '1 reporte' : '$cuantos reportes',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.danger,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            reportada.titulo,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Por ${reportada.autorNombre}',
+            style: const TextStyle(fontSize: 12, color: AppColors.ink2),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            reportada.motivos.map((m) => m.etiqueta).join(' · '),
+            style: const TextStyle(fontSize: 13, color: AppColors.ink),
+          ),
+          // Lo que contó cada corredor: con "Otro" es el motivo entero.
+          for (final detalle in reportada.detalles) ...[
+            const SizedBox(height: 4),
+            Text(
+              '“$detalle”',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontStyle: FontStyle.italic,
+                color: AppColors.ink2,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

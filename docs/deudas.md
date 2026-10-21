@@ -142,6 +142,19 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
 - **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.
 
+## SCRUM-369: reportes de publicaciones del foro
+
+**Qué quedó hecho:**
+
+- `0036_foro_reportes.sql`: tabla `reportes_foro` con un reporte por usuario y publicación (`unique`), solo sobre lo `publicada` y ajeno. El autor no tiene ninguna policy sobre la tabla y la app nunca pide `reportante_id`. Trae su script de verificación para el SQL Editor.
+- Botón "Reportar" en el detalle de una publicación ajena (motivo + detalle opcional, obligatorio con "Otro") y vista "Reportadas" en `/admin/foro`, con cuántos reportes tiene cada publicación y por qué.
+
+**Qué falta:**
+
+- **Actuar sobre lo reportado** es de SCRUM-242 (eliminar publicaciones). Hoy el administrador ve la bandeja y abre el detalle, pero no puede retirar la publicación ni descartar los reportes. Cuando exista la eliminación, conviene que la tarjeta de `_TarjetaReportada` (`lib/screens/admin/moderacion_foro_screen.dart`) ofrezca la misma acción, y que lo retirado deje de contar en "Reportadas" (filtrar por `publicaciones_foro.estado` en `reportes()` o en `PublicacionReportada.agrupar`).
+- **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
+- **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
+
 ## SCRUM-289: el carrusel de rutas de la portada
 
 **Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, con su distancia, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240).

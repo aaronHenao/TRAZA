@@ -154,3 +154,12 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Actuar sobre lo reportado** es de SCRUM-242 (eliminar publicaciones). Hoy el administrador ve la bandeja y abre el detalle, pero no puede retirar la publicación ni descartar los reportes. Cuando exista la eliminación, conviene que la tarjeta de `_TarjetaReportada` (`lib/screens/admin/moderacion_foro_screen.dart`) ofrezca la misma acción, y que lo retirado deje de contar en "Reportadas" (filtrar por `publicaciones_foro.estado` en `reportes()` o en `PublicacionReportada.agrupar`).
 - **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
 - **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
+
+## SCRUM-289: el carrusel de rutas de la portada
+
+**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, con su distancia, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240).
+
+**Qué falta, y de quién depende:**
+
+- **La cercanía (HU-29, SCRUM-243).** Hoy el carrusel muestra las últimas publicadas, no las más cercanas: falta calcular la distancia del usuario a cada trazado. El permiso de ubicación ya se pide y se explica (SCRUM-290), y sin él el bloque no muestra rutas; lo que falta es usar la posición para ordenarlas. El orden se arregla en `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) y el widget no cambia. Mientras eso falte, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
+- **La dificultad (HU-34, y su revisión en HU-35 / SCRUM-259).** La tabla `rutas` no tiene esa columna, así que la pastilla de cada tarjeta dice "Sin clasificar", que es la verdad de hoy. Cuando la columna exista, se lee en `_TarjetaCorta` y se quita la constante `CarruselRutasCercanas.sinDificultad`. Es el mismo pendiente que anotó SCRUM-240 para el detalle de la ruta.

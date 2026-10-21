@@ -50,6 +50,16 @@ class ResumenSemana {
     return '$kilometrosTexto / ${_sinCerosSobrantes(meta)} km';
   }
 
+  /// Lo mismo sin la unidad: `9.2 / 15`, o `9.2` sin objetivo.
+  ///
+  /// Es lo que va en la caja de kilómetros de la portada (SCRUM-287), que
+  /// lleva el "km" en su etiqueta y no necesita repetirlo.
+  String get avanceSinUnidad {
+    final meta = metaKilometros;
+    if (meta == null) return kilometrosTexto;
+    return '$kilometrosTexto / ${_sinCerosSobrantes(meta)}';
+  }
+
   /// Arma el resumen con los entrenamientos de la semana de [ahora].
   static ResumenSemana desde(
     List<ResumenEntrenamiento> historial, {

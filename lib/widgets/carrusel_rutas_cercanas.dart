@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/estado_permisos.dart';
 import '../models/ruta.dart';
 import '../screens/rutas/detalle_ruta_screen.dart';
 import '../screens/rutas/rutas_screen.dart';
 import '../services/inicio_provider.dart';
+import '../services/permisos_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
 import 'tarjeta_reto.dart' show InsigniaReto, TarjetaReto;
@@ -32,9 +34,16 @@ class CarruselRutasCercanas extends ConsumerWidget {
 
   static const clave = Key('inicio-rutas-cercanas');
   static const claveVerTodas = Key('inicio-rutas-ver-todas');
+  static const claveSinPermiso = Key('inicio-rutas-sin-permiso');
+  static const claveAceptarUbicacion = Key('inicio-rutas-aceptar-ubicacion');
 
   /// Lo que dice la pastilla mientras nadie clasifica las rutas (HU-34).
   static const sinDificultad = 'Sin clasificar';
+
+  /// Por qué se pide la ubicación aquí (SCRUM-290). Lo mismo que pedirá la
+  /// sección de Rutas: sin ella no se puede saber qué está cerca.
+  static const porQueLaUbicacion =
+      'Concede el permiso de ubicación para ver las rutas que tienes cerca.';
 
   /// Alto del carrusel. Fijo porque una lista horizontal no puede medir a sus
   /// hijos a lo alto.
@@ -42,7 +51,9 @@ class CarruselRutasCercanas extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final permisos = ref.watch(permisosProvider);
     final rutas = ref.watch(rutasCercanasProvider);
+    final hayUbicacion = permisos.ubicacion == EstadoPermiso.concedido;
     final hayRutas = rutas.valueOrNull?.isNotEmpty ?? false;
 
     return Column(
@@ -61,9 +72,9 @@ class CarruselRutasCercanas extends ConsumerWidget {
                 ),
               ),
             ),
-            // Sin rutas no hay nada que ver: el acceso aparece cuando sirve,
-            // como el del historial.
-            if (hayRutas)
+            // Sin rutas que mirar, o sin permiso para saber cuáles están
+            // cerca, el acceso no aparece: primero hay algo que resolver aquí.
+            if (hayRutas && hayUbicacion)
               GestureDetector(
                 key: claveVerTodas,
                 // `go`: Rutas es una sección de la barra inferior.
@@ -80,19 +91,101 @@ class CarruselRutasCercanas extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.md),
-        switch (rutas) {
-          AsyncData(value: final lista) when lista.isEmpty => const _Aviso(
-            'Todavía no hay rutas publicadas. Cuando la comunidad publique '
-            'alguna, la verás aquí.',
-          ),
-          AsyncData(value: final lista) => _Carrusel(rutas: lista),
-          AsyncError() => const _Aviso(
-            'No pudimos cargar las rutas. Desliza hacia abajo para volver a '
-            'intentarlo.',
-          ),
-          _ => const _Aviso('Cargando las rutas cercanas…'),
-        },
+        // El permiso se resuelve antes que las rutas: sin él, la lista no
+        // puede decir qué está cerca, así que ni se muestra ni se consulta en
+        // balde (criterio 4 de SCRUM-283 y criterio 3 de HU-29).
+        if (!permisos.consultado)
+          const _Aviso('Cargando las rutas cercanas…')
+        else if (!hayUbicacion)
+          _SinPermiso(
+            bloqueado: permisos.ubicacion == EstadoPermiso.bloqueado,
+            solicitando: permisos.solicitandoUbicacion,
+          )
+        else
+          switch (rutas) {
+            AsyncData(value: final lista) when lista.isEmpty => const _Aviso(
+              'Todavía no hay rutas publicadas. Cuando la comunidad publique '
+              'alguna, la verás aquí.',
+            ),
+            AsyncData(value: final lista) => _Carrusel(rutas: lista),
+            AsyncError() => const _Aviso(
+              'No pudimos cargar las rutas. Desliza hacia abajo para volver a '
+              'intentarlo.',
+            ),
+            _ => const _Aviso('Cargando las rutas cercanas…'),
+          },
       ],
+    );
+  }
+}
+
+/// Sin permiso de ubicación: se explica para qué hace falta y se ofrece
+/// concederlo, en vez de dejar el hueco o mostrar rutas que no se sabe si
+/// están cerca.
+///
+/// Es la misma idea de `RequierePermisoUbicacion`, pero dentro de la portada:
+/// aquí no se bloquea la pantalla, solo este bloque.
+class _SinPermiso extends ConsumerWidget {
+  const _SinPermiso({required this.bloqueado, required this.solicitando});
+
+  /// El usuario lo negó para siempre: el sistema ya no muestra su ventana y lo
+  /// único que queda es ir a los ajustes del teléfono.
+  final bool bloqueado;
+
+  final bool solicitando;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final permisos = ref.read(permisosProvider.notifier);
+
+    return TrazaCard(
+      key: CarruselRutasCercanas.claveSinPermiso,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryTint,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.location_off_outlined,
+                  size: 20,
+                  color: AppColors.secondaryDark,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  bloqueado
+                      ? 'Activa la ubicación en los ajustes del teléfono para '
+                            'ver las rutas que tienes cerca.'
+                      : CarruselRutasCercanas.porQueLaUbicacion,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.ink2,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(
+            key: CarruselRutasCercanas.claveAceptarUbicacion,
+            onPressed: solicitando
+                ? null
+                : () => bloqueado
+                      ? permisos.abrirAjustes()
+                      : permisos.solicitarUbicacion(),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
     );
   }
 }

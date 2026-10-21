@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/resumen_entrenamiento.dart';
 import '../../services/inicio_provider.dart';
 import '../../services/notificaciones_provider.dart';
+import '../../services/permisos_provider.dart';
 import '../../services/progresion_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
@@ -48,6 +49,9 @@ class InicioScreen extends ConsumerWidget {
               // Las rutas del carrusel: la comunidad publica mientras el
               // usuario hace otra cosa (SCRUM-289).
               ..invalidate(rutasCercanasProvider)
+              // Y el permiso de ubicación, que el usuario pudo conceder en los
+              // ajustes del teléfono (SCRUM-290).
+              ..read(permisosProvider.notifier).actualizar()
               // La XP y los niveles de la tarjeta (SCRUM-286).
               ..invalidate(progresionProvider)
               // Y la campana, que es lo que puede haber cambiado sin que el

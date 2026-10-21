@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/models/periodicidad_reto.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
@@ -24,6 +26,8 @@ import 'package:traza/services/foro_service.dart' show usuarioActualProvider;
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/notificaciones_service.dart';
 import 'package:traza/services/objetivos_service.dart';
+import 'package:traza/services/permisos_service.dart';
+import 'package:traza/services/permisos_usuario_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
 import 'package:traza/services/rutas_service.dart';
@@ -70,6 +74,14 @@ class _ObjetivosFalsos implements ObjetivosRepository {
 
   @override
   Future<void> guardar(Map<TipoObjetivo, num> objetivos) async {}
+}
+
+class _MockPermisosService extends Mock implements PermisosService {}
+
+/// Lo que la app guarda en `permisos_usuario`: aquí no interesa.
+class _PermisosGuardadosFalso implements PermisosUsuarioRepository {
+  @override
+  Future<void> guardar(TipoPermiso tipo, {required bool concedido}) async {}
 }
 
 /// Retos de mentira: solo se le preguntan los que el corredor activó, para el
@@ -169,6 +181,7 @@ void main() {
     Future<List<RetoDelUsuario>> Function()? retos,
     List<Ruta>? rutas,
     int sinLeer = 0,
+    EstadoPermiso ubicacion = EstadoPermiso.concedido,
     // La portada ya no cabe entera en un celular: lo que queda abajo no se
     // construye hasta arrastrar. Las pruebas que comparan el orden de los
     // bloques, o que miran dos a la vez, piden una pantalla alta.
@@ -181,6 +194,16 @@ void main() {
 
     avisos = NotificacionesFalso(sinLeer: sinLeer);
     cambiosAvisos = FuenteCambiosNotificacionesFalsa();
+
+    final permisos = _MockPermisosService();
+    when(() => permisos.estadoUbicacion()).thenAnswer((_) async => ubicacion);
+    when(
+      () => permisos.estadoSalud(),
+    ).thenAnswer((_) async => EstadoPermiso.desconocido);
+    when(() => permisos.abrirAjustes()).thenAnswer((_) async {});
+    when(
+      () => permisos.solicitarUbicacion(),
+    ).thenAnswer((_) async => EstadoPermiso.concedido);
 
     final router = GoRouter(
       initialLocation: '/inicio',
@@ -243,9 +266,14 @@ void main() {
           retosRepositoryProvider.overrideWithValue(
             _RetosFalsos(retos ?? () async => [_retoEnCurso]),
           ),
-          // El carrusel de rutas (SCRUM-289).
+          // El carrusel de rutas (SCRUM-289) y el permiso que necesita para
+          // decir cuáles están cerca (SCRUM-290).
           rutasRepositoryProvider.overrideWithValue(
             RutasRepositorioFalso(rutas: rutas ?? [_rutaPublicada]),
+          ),
+          permisosServiceProvider.overrideWithValue(permisos),
+          permisosUsuarioRepositoryProvider.overrideWithValue(
+            _PermisosGuardadosFalso(),
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -501,6 +529,19 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(CarruselRutasCercanas.claveVerTodas), findsNothing);
+    });
+
+    testWidgets('sin permiso de ubicación pide concederlo (SCRUM-290)', (
+      tester,
+    ) async {
+      await abrirPortada(tester, ubicacion: EstadoPermiso.denegado);
+
+      expect(find.byKey(CarruselRutasCercanas.claveSinPermiso), findsOneWidget);
+      expect(find.text('Vuelta al estadio'), findsNothing);
+      // El resto de la portada sigue en su sitio: el permiso solo afecta a
+      // este bloque.
+      expect(find.byKey(TarjetaNivel.clave), findsOneWidget);
+      expect(find.text('RETO ACTIVO'), findsOneWidget);
     });
   });
 

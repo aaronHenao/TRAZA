@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/estado_permisos.dart';
 import '../models/punto_gps.dart';
+import 'permisos_provider.dart';
 import 'reloj_provider.dart';
 import 'ubicacion_service.dart';
 
@@ -51,4 +54,84 @@ final posicionEnVivoProvider = StreamProvider.autoDispose<PuntoGps>((ref) {
   });
 
   return controlador.stream;
+});
+
+/// Dónde está el usuario, o por qué no se sabe (SCRUM-245).
+///
+/// Es un tipo cerrado para que quien lo use tenga que contemplar los cuatro
+/// casos: cada uno se le cuenta distinto al usuario —no es lo mismo no
+/// haber dado el permiso que tener el GPS apagado—, y un `null` a secas
+/// obligaría a adivinar cuál de ellos pasó.
+sealed class UbicacionUsuario {
+  const UbicacionUsuario();
+}
+
+/// Se sabe dónde está.
+class UbicacionConocida extends UbicacionUsuario {
+  const UbicacionConocida(this.punto);
+
+  final PuntoGps punto;
+}
+
+/// El usuario no ha concedido el permiso de ubicación. No se le pregunta
+/// nada al GPS: pedirlo es de la pantalla, que es quien puede explicarle
+/// para qué sirve (SCRUM-82 y SCRUM-290).
+class UbicacionSinPermiso extends UbicacionUsuario {
+  const UbicacionSinPermiso();
+}
+
+/// Hay permiso, pero la ubicación del teléfono está apagada. El usuario la
+/// enciende desde los ajustes del sistema, no desde la app.
+class UbicacionApagada extends UbicacionUsuario {
+  const UbicacionApagada();
+}
+
+/// El GPS no respondió a tiempo o el plugin falló. Pasa bajo techo, y lo
+/// que toca es reintentar.
+class UbicacionNoSePudo extends UbicacionUsuario {
+  const UbicacionNoSePudo();
+}
+
+/// Cuánto se espera una lectura antes de rendirse.
+///
+/// Diez segundos: bajo techo el primer fix puede tardar mucho más, y una
+/// lista de rutas no puede quedarse en blanco esperándolo.
+const tiempoMaximoUbicacion = Duration(seconds: 10);
+
+/// La ubicación del dispositivo ahora mismo, para el resto de la app
+/// (SCRUM-245).
+///
+/// No pide permisos ni los gestiona: lee los que ya maneja
+/// [permisosProvider] (SCRUM-37) y, si no están concedidos, ni toca el GPS.
+/// Cuando el usuario los concede desde la pantalla, este provider se entera
+/// solo —observa ese estado— y vuelve a leer.
+///
+/// Mientras la consulta de permisos del arranque no haya terminado, el
+/// estado es `desconocido` y esto responde [UbicacionSinPermiso]. Las
+/// pantallas esperan a `EstadoPermisos.consultado` antes de pintar nada,
+/// así que ese instante no se ve.
+///
+/// `autoDispose`: la ubicación de hace media hora no sirve para decir qué
+/// hay cerca, así que se vuelve a leer cada vez que alguien la necesita.
+final ubicacionActualProvider = FutureProvider.autoDispose<UbicacionUsuario>((
+  ref,
+) async {
+  final permiso = ref.watch(permisosProvider.select((e) => e.ubicacion));
+  if (permiso != EstadoPermiso.concedido) return const UbicacionSinPermiso();
+
+  final fuente = ref.watch(fuenteUbicacionProvider);
+  // El permiso no basta: se puede tener y estar la ubicación del teléfono
+  // apagada, y entonces no hay GPS al que preguntarle.
+  if (!await fuente.servicioActivo()) return const UbicacionApagada();
+
+  try {
+    return UbicacionConocida(
+      await fuente.ubicacionActual(tiempoMaximo: tiempoMaximoUbicacion),
+    );
+  } catch (error) {
+    // Un fallo del GPS no es un error de la app: la pantalla lo cuenta y
+    // ofrece reintentar, en vez de romperse.
+    debugPrint('No se pudo leer la ubicación: $error');
+    return const UbicacionNoSePudo();
+  }
 });

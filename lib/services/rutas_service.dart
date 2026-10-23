@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/ruta.dart';
+import '../models/ruta_cercana.dart';
 // `usuarioActualProvider` vive ahí desde el foro, pero no es del foro: dice
 // quién tiene la sesión abierta. Se reutiliza en vez de declarar otro, para
 // que una prueba que sustituya la sesión la sustituya para toda la app.
@@ -113,6 +114,19 @@ abstract interface class RutasRepository {
   /// Runner Experto lo que tiene que revisar y el administrador todo. Lo
   /// publicado lo ve cualquiera.
   Future<Ruta?> ruta(String id);
+
+  /// Las rutas publicadas que arrancan a menos de [radioKm] de unas
+  /// coordenadas, de la más cercana a la más lejana (SCRUM-246).
+  ///
+  /// La cuenta la hace la base con `rutas_cercanas` (0037): mide hasta el
+  /// punto de inicio de cada ruta y respeta RLS, así que lo que está en
+  /// revisión no sale ni para su autor. Sin el trazado, como los demás
+  /// listados.
+  Future<List<RutaCercana>> cercanas({
+    required double latitud,
+    required double longitud,
+    required double radioKm,
+  });
 }
 
 /// Lee y escribe en `rutas`.
@@ -134,9 +148,14 @@ class SupabaseRutasRepository implements RutasRepository {
 
   /// Lo que se lee de una ruta cuando no hace falta su trazado. Pedir `*`
   /// traería cientos de coordenadas por fila para no dibujar ninguna.
+  ///
+  /// `miniatura` no es una columna: es un campo calculado (0038) que
+  /// devuelve 32 puntos del trazado, lo justo para dibujar la ruta en
+  /// pequeño en una tarjeta (SCRUM-247).
   static const _columnas =
       'id,autor_id,autor_nombre,entrenamiento_id,nombre,descripcion,'
-      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion';
+      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion,'
+      'miniatura';
 
   static const _columnasConTrazado = '$_columnas,trazado';
 
@@ -256,5 +275,31 @@ class SupabaseRutasRepository implements RutasRepository {
         .maybeSingle();
 
     return fila == null ? null : Ruta.desdeSupabase(fila);
+  }
+
+  @override
+  Future<List<RutaCercana>> cercanas({
+    required double latitud,
+    required double longitud,
+    required double radioKm,
+  }) async {
+    _usuarioId();
+
+    // El orden y la distancia vienen hechos de la base: ordenar aquí
+    // obligaría a traer todas las rutas para quedarse con las de cerca.
+    final filas = await _cliente.rpc<List<dynamic>>(
+      'rutas_cercanas',
+      params: {
+        'p_latitud': latitud,
+        'p_longitud': longitud,
+        'p_radio_km': radioKm,
+        'p_limite': limite,
+      },
+    );
+
+    return [
+      for (final fila in filas)
+        RutaCercana.desdeSupabase(Map<String, dynamic>.from(fila as Map)),
+    ];
   }
 }

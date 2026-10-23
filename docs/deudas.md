@@ -155,11 +155,12 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
 - **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
 
-## SCRUM-289: el carrusel de rutas de la portada
+## SCRUM-289 y SCRUM-247: las rutas de la portada y de Explorar rutas
 
-**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, con su distancia, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240).
+**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240). Desde SCRUM-247, cada ruta va en `TarjetaRutaExplorar` (`lib/widgets/tarjeta_ruta_explorar.dart`), la misma tarjeta de la lista de Explorar rutas: miniatura del recorrido, nombre, dificultad, distancia, desnivel y quién la creó.
 
 **Qué falta, y de quién depende:**
 
-- **La cercanía (HU-29, SCRUM-243).** Hoy el carrusel muestra las últimas publicadas, no las más cercanas: falta calcular la distancia del usuario a cada trazado. El permiso de ubicación ya se pide y se explica (SCRUM-290), y sin él el bloque no muestra rutas; lo que falta es usar la posición para ordenarlas. El orden se arregla en `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) y el widget no cambia. Mientras eso falte, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
-- **La dificultad (HU-34, y su revisión en HU-35 / SCRUM-259).** La tabla `rutas` no tiene esa columna, así que la pastilla de cada tarjeta dice "Sin clasificar", que es la verdad de hoy. Cuando la columna exista, se lee en `_TarjetaCorta` y se quita la constante `CarruselRutasCercanas.sinDificultad`. Es el mismo pendiente que anotó SCRUM-240 para el detalle de la ruta.
+- **La cercanía en el carrusel.** Explorar rutas ya ordena por cercanía (SCRUM-246, con `rutas_cercanas` de 0037), pero el carrusel todavía muestra las últimas publicadas. Lo que falta es que `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) use la misma consulta y la ubicación del usuario; el widget no cambia. Mientras tanto, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
+- **La dificultad (HU-34, y su revisión en HU-35 / SCRUM-259).** La tabla `rutas` no tiene esa columna, así que la tarjeta dice "Sin clasificar", que es la verdad de hoy (acordado con el equipo). Cuando la columna exista, se lee en `_Dificultad` de `TarjetaRutaExplorar` y se quita la constante `TarjetaRutaExplorar.sinDificultad`. Es el mismo pendiente que anotó SCRUM-240 para el detalle de la ruta.
+- **El desnivel.** No hay historia que lo produzca: los puntos GPS que guarda la app no llevan altitud, así que haría falta guardarla al entrenar o pedírsela a un servicio de elevación. Hasta entonces la tarjeta dice "Desnivel no disponible" (`TarjetaRutaExplorar.sinDesnivel`).

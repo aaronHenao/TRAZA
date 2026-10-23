@@ -28,9 +28,18 @@ import '../../widgets/traza_top_bar.dart';
 /// estimado: el primero necesitaría la altitud, que no se guarda a propósito
 /// desde el Sprint 1, y el segundo depende de él.
 class DetalleRutaScreen extends ConsumerWidget {
-  const DetalleRutaScreen({required this.rutaId, super.key});
+  const DetalleRutaScreen({required this.rutaId, this.vistaPrevia, super.key});
 
   final String rutaId;
+
+  /// La ruta tal como se eligió en un listado (SCRUM-250), o null si se
+  /// llegó sin ella: desde un enlace o desde el foro.
+  ///
+  /// Los listados no traen el trazado —pesa, y a la tarjeta le basta la
+  /// miniatura—, así que el detalle igual pide la ruta completa. Mientras
+  /// llega, con esta se muestra lo que ya se sabe —el nombre, de quién es,
+  /// cuánto mide— en vez de una pantalla en blanco.
+  final Ruta? vistaPrevia;
 
   static const ruta = '/rutas/:rutaId';
 
@@ -39,10 +48,12 @@ class DetalleRutaScreen extends ConsumerWidget {
 
   static const claveDistancia = Key('detalle-ruta-distancia');
   static const claveReintentar = Key('detalle-ruta-reintentar');
+  static const claveCargandoTrazado = Key('detalle-ruta-cargando-trazado');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ruta = ref.watch(rutaProvider(rutaId));
+    final vistaPrevia = this.vistaPrevia;
 
     return Scaffold(
       body: SafeArea(
@@ -77,6 +88,13 @@ class DetalleRutaScreen extends ConsumerWidget {
                       child: const Text('Reintentar'),
                     ),
                   ),
+                  // Mientras llega el trazado, lo que ya se sabe por el
+                  // listado (SCRUM-250).
+                  _ when vistaPrevia != null => _Contenido(
+                    ruta: vistaPrevia,
+                    ahora: ref.read(relojProvider)(),
+                    cargandoTrazado: true,
+                  ),
                   _ => const Center(child: CircularProgressIndicator()),
                 },
               ),
@@ -89,10 +107,17 @@ class DetalleRutaScreen extends ConsumerWidget {
 }
 
 class _Contenido extends StatelessWidget {
-  const _Contenido({required this.ruta, required this.ahora});
+  const _Contenido({
+    required this.ruta,
+    required this.ahora,
+    this.cargandoTrazado = false,
+  });
 
   final Ruta ruta;
   final DateTime ahora;
+
+  /// Si [ruta] es la del listado y su trazado todavía no llega (SCRUM-250).
+  final bool cargandoTrazado;
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +132,7 @@ class _Contenido extends StatelessWidget {
         AppSpacing.xl,
       ),
       children: [
-        _Mapa(trazado: ruta.trazado),
+        _Mapa(trazado: ruta.trazado, cargando: cargandoTrazado),
         const SizedBox(height: AppSpacing.md),
         Text(
           ruta.nombre,
@@ -215,9 +240,13 @@ class _Distancia extends StatelessWidget {
 
 /// El trazado sobre el mapa.
 class _Mapa extends StatelessWidget {
-  const _Mapa({required this.trazado});
+  const _Mapa({required this.trazado, this.cargando = false});
 
   final List<PuntoRuta> trazado;
+
+  /// El trazado viene en camino. Sin esto, el de la ruta del listado —que no
+  /// lo trae— se tomaría por uno que no se guardó (SCRUM-250).
+  final bool cargando;
 
   /// Los puntos como los pide el mapa, que está hecho para el recorrido de un
   /// entrenamiento. El instante no se usa para dibujar —una ruta no tiene
@@ -239,7 +268,18 @@ class _Mapa extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: SizedBox(
         height: 220,
-        child: trazado.isEmpty
+        child: cargando
+            ? const DecoratedBox(
+                key: DetalleRutaScreen.claveCargandoTrazado,
+                decoration: BoxDecoration(gradient: trazaTrackingGradient),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    semanticsLabel: 'Cargando el recorrido',
+                  ),
+                ),
+              )
+            : trazado.isEmpty
             ? const DecoratedBox(
                 decoration: BoxDecoration(gradient: trazaTrackingGradient),
                 child: Center(

@@ -91,6 +91,7 @@ class Ruta {
     this.entrenamientoId,
     this.descripcion,
     this.trazado = const [],
+    this.miniatura = const [],
     this.distanciaKm,
     this.motivoRechazo,
     this.fechaPublicacion,
@@ -115,6 +116,12 @@ class Ruta {
   /// Por dónde pasa, en orden. Vacío en las consultas que no lo piden: un
   /// listado no necesita el trazado de cada ruta para pintarse.
   final List<PuntoRuta> trazado;
+
+  /// Unos pocos puntos del trazado, repartidos a lo largo del recorrido y
+  /// con la partida y la llegada, para dibujar la ruta en pequeño en un
+  /// listado sin traer el trazado entero (SCRUM-247). Los calcula la base
+  /// (`miniatura`, 0038). Vacía si la consulta no la pidió.
+  final List<PuntoRuta> miniatura;
 
   /// Cuántos km mide, o null si no está registrada (criterio 4 de
   /// SCRUM-240). La calcula la base al guardar la ruta.
@@ -168,6 +175,7 @@ class Ruta {
       entrenamientoId: entrenamiento as String?,
       descripcion: descripcion as String?,
       trazado: trazadoDesdeJson(fila['trazado']),
+      miniatura: trazadoDesdeJson(fila['miniatura']),
       distanciaKm: _comoDouble(fila['distancia_km']),
       motivoRechazo: motivo as String?,
       fechaPublicacion: publicacion is String

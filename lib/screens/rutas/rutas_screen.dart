@@ -7,6 +7,7 @@ import '../../services/ubicacion_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
+import '../../widgets/aviso_permiso_ubicacion.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/tarjeta_ruta_explorar.dart';
@@ -18,6 +19,10 @@ import '../../widgets/traza_top_bar.dart';
 /// (criterio 1 de HU-29). Si no se sabe dónde está el usuario —sin permiso,
 /// con la ubicación apagada o sin respuesta del GPS—, muestra las más
 /// recientes y lo dice en el rótulo, para que la sección no se quede vacía.
+///
+/// Sin permiso, además, explica para qué hace falta y ofrece concederlo
+/// ([AvisoPermisoUbicacion], SCRUM-248). Al concederlo, aquí mismo o en los
+/// ajustes del teléfono, la lista vuelve a salir por cercanía sola.
 ///
 /// Cada ruta va en una [TarjetaRutaExplorar] (SCRUM-247), la misma del
 /// carrusel de la portada, así una ruta se reconoce igual en los dos sitios.
@@ -129,6 +134,23 @@ class _Lista extends StatelessWidget {
       );
     }
 
+    // Sin permiso, la lista va por fecha y arriba se explica para qué hace
+    // falta la ubicación (criterio 3 de HU-29). Al concederlo, la lista se
+    // vuelve a pedir sola —la ubicación depende del permiso— y el aviso se
+    // va. Con la ubicación apagada o sin respuesta del GPS el permiso sí
+    // está, así que este aviso no es el que toca.
+    final pedirPermiso = switch (datos) {
+      RutasRecientes(motivo: UbicacionSinPermiso()) => true,
+      _ => false,
+    };
+
+    // Lo que va antes de las rutas: el aviso, si hace falta, y el rótulo que
+    // dice cómo va ordenada.
+    final encabezado = [
+      if (pedirPermiso) const AvisoPermisoUbicacion(),
+      _Orden(porCercania: datos is RutasPorCercania),
+    ];
+
     return ListView.separated(
       key: RutasScreen.claveLista,
       // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
@@ -139,15 +161,16 @@ class _Lista extends StatelessWidget {
         AppSpacing.lg,
         AppSpacing.xl,
       ),
-      // La primera fila es el rótulo que dice cómo va ordenada.
-      itemCount: rutas.length + 1,
+      itemCount: encabezado.length + rutas.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (_, i) => i == 0
-          ? _Orden(porCercania: datos is RutasPorCercania)
-          : TarjetaRutaExplorar(
-              key: TarjetaRutaExplorar.claveDe(rutas[i - 1].id),
-              ruta: rutas[i - 1],
-            ),
+      itemBuilder: (_, i) {
+        if (i < encabezado.length) return encabezado[i];
+        final ruta = rutas[i - encabezado.length];
+        return TarjetaRutaExplorar(
+          key: TarjetaRutaExplorar.claveDe(ruta.id),
+          ruta: ruta,
+        );
+      },
     );
   }
 }

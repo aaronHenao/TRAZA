@@ -15,6 +15,7 @@ import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
+import 'package:traza/widgets/aviso_permiso_ubicacion.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
 
@@ -254,6 +255,127 @@ void main() {
     });
   });
 
+  group('el permiso de ubicación (SCRUM-248)', () {
+    /// El usuario sale a los ajustes del teléfono y vuelve a la app, pasando
+    /// por cada estado intermedio como lo hace el sistema.
+    Future<void> irYVolverDeLosAjustes(WidgetTester tester) async {
+      for (final estado in const [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(estado);
+      }
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('sin él, explica para qué hace falta arriba de la lista', (
+      tester,
+    ) async {
+      await montar(tester, ubicacion: EstadoPermiso.denegado);
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsOneWidget);
+      expect(find.text(AvisoPermisoUbicacion.porQue), findsOneWidget);
+      // Las rutas siguen ahí, por fecha: se puede explorar igual.
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+      expect(
+        tester.getTopLeft(find.byKey(AvisoPermisoUbicacion.clave)).dy,
+        lessThan(tester.getTopLeft(find.text(RutasScreen.rotuloRecientes)).dy),
+      );
+    });
+
+    testWidgets('con él, no hay nada que pedir', (tester) async {
+      await montar(tester);
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsNothing);
+    });
+
+    testWidgets('con la ubicación del teléfono apagada el permiso sí está: '
+        'este aviso no es el que toca', (tester) async {
+      fuente.servicio = false;
+
+      await montar(tester);
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsNothing);
+      expect(find.text(RutasScreen.rotuloRecientes), findsOneWidget);
+    });
+
+    testWidgets('al concederlo, la lista vuelve por cercanía sola', (
+      tester,
+    ) async {
+      when(
+        () => permisos.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await montar(tester, ubicacion: EstadoPermiso.denegado);
+      expect(repositorio.consultasCercanas, 0);
+
+      await tester.tap(find.text('Aceptar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsNothing);
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      expect(find.text(RutasScreen.rotuloRecientes), findsNothing);
+      // Ahora la subida, que es la más cercana, va primero.
+      expect(
+        altoDe(tester, 'Subida al Nutibara'),
+        lessThan(altoDe(tester, 'Vuelta al estadio')),
+      );
+      expect(repositorio.consultasCercanas, 1);
+      expect(fuente.lecturasPuntuales, 1);
+    });
+
+    testWidgets('si lo vuelve a negar, sigue el aviso con las recientes', (
+      tester,
+    ) async {
+      when(
+        () => permisos.solicitarUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await montar(tester, ubicacion: EstadoPermiso.denegado);
+
+      await tester.tap(find.text('Aceptar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsOneWidget);
+      expect(find.text(RutasScreen.rotuloRecientes), findsOneWidget);
+      expect(repositorio.consultasCercanas, 0);
+      // Sin permiso no se le pregunta nada al GPS.
+      expect(fuente.lecturasPuntuales, 0);
+    });
+
+    testWidgets('bloqueado, manda a los ajustes y al volver con el permiso '
+        'la lista se recupera sola', (tester) async {
+      await montar(tester, ubicacion: EstadoPermiso.bloqueado);
+
+      await tester.tap(find.text('Abrir ajustes'));
+      await tester.pumpAndSettle();
+      verify(() => permisos.abrirAjustes()).called(1);
+
+      // Allá lo concedió.
+      when(
+        () => permisos.estadoUbicacion(),
+      ).thenAnswer((_) async => EstadoPermiso.concedido);
+      await irYVolverDeLosAjustes(tester);
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsNothing);
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      expect(repositorio.consultasCercanas, 1);
+    });
+
+    testWidgets('si vuelve de los ajustes sin concederlo, todo sigue igual', (
+      tester,
+    ) async {
+      await montar(tester, ubicacion: EstadoPermiso.bloqueado);
+
+      await irYVolverDeLosAjustes(tester);
+
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsOneWidget);
+      expect(find.text(RutasScreen.rotuloRecientes), findsOneWidget);
+    });
+  });
+
   group('carga y error', () {
     testWidgets('mientras consulta, se ve que está cargando', (tester) async {
       final espera = Completer<List<RutaCercana>>();
@@ -343,6 +465,19 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+    });
+
+    testWidgets('el aviso de permiso tampoco, ni bloqueado, que es el texto '
+        'más largo', (tester) async {
+      await montar(
+        tester,
+        ubicacion: EstadoPermiso.bloqueado,
+        tamano: const Size(320, 568),
+        escalaTexto: 1.3,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Abrir ajustes'), findsOneWidget);
     });
 
     testWidgets('en una tableta las tarjetas no se estiran de borde a borde', (

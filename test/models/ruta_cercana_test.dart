@@ -75,9 +75,19 @@ void main() {
   });
 
   test('dos con la misma ruta y la misma distancia son iguales', () {
+    final una = RutaCercana.desdeSupabase(fila());
+    final otra = RutaCercana.desdeSupabase(fila());
+
+    expect(una, otra);
+    // Y dan el mismo hash: si no, un Set o un Map las tomarían por distintas
+    // (SCRUM-251).
+    expect(una.hashCode, otra.hashCode);
+  });
+
+  test('la misma ruta a otra distancia ya no es la misma (SCRUM-251)', () {
     expect(
       RutaCercana.desdeSupabase(fila()),
-      RutaCercana.desdeSupabase(fila()),
+      isNot(RutaCercana.desdeSupabase(fila(distanciaUsuario: 9.9))),
     );
   });
 }

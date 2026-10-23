@@ -141,6 +141,33 @@ void main() {
       expect(find.byKey(MiniaturaRuta.claveSinForma), findsOneWidget);
     });
 
+    testWidgets('no se vuelve a pintar si la forma es la misma (SCRUM-251)', (
+      tester,
+    ) async {
+      CustomPainter pintor() => tester
+          .widgetList<CustomPaint>(
+            find.descendant(
+              of: find.byType(MiniaturaRuta),
+              matching: find.byType(CustomPaint),
+            ),
+          )
+          .map((pintura) => pintura.painter)
+          .whereType<CustomPainter>()
+          .single;
+
+      await montar(tester, [p(6.24, -75.58), p(6.25, -75.57)]);
+      final antes = pintor();
+
+      // Los mismos puntos en una lista nueva, como llegan al recargar: al
+      // desplazar el carrusel no hay por qué volver a dibujarla.
+      await montar(tester, [p(6.24, -75.58), p(6.25, -75.57)]);
+      expect(pintor().shouldRepaint(antes), isFalse);
+
+      final igual = pintor();
+      await montar(tester, [p(6.24, -75.58), p(6.26, -75.56)]);
+      expect(pintor().shouldRepaint(igual), isTrue);
+    });
+
     testWidgets('un lector de pantalla no la anuncia', (tester) async {
       // El nombre y los datos de la ruta ya van en texto al lado.
       final semantica = tester.ensureSemantics();

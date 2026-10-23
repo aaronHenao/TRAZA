@@ -1,4 +1,5 @@
 import 'package:traza/models/ruta.dart';
+import 'package:traza/models/ruta_cercana.dart';
 import 'package:traza/services/rutas_service.dart';
 
 /// Repositorio de rutas en memoria para las pruebas (SCRUM-241).
@@ -22,6 +23,16 @@ class RutasRepositorioFalso implements RutasRepository {
   int creaciones = 0;
   int consultasDeEntrenamiento = 0;
 
+  /// Lo que devuelve `cercanas` (SCRUM-246). Sin esto, las publicadas en el
+  /// orden en que están, a 1, 2, 3… km del usuario.
+  List<RutaCercana>? rutasCercanas;
+
+  /// Desde dónde y con qué radio se pidió la última consulta por cercanía.
+  ({double latitud, double longitud, double radioKm})? ultimaConsultaCercana;
+
+  int consultasCercanas = 0;
+  int consultasPublicadas = 0;
+
   @override
   Future<Ruta> crear(NuevaRuta ruta) async {
     recibida = ruta;
@@ -43,9 +54,33 @@ class RutasRepositorioFalso implements RutasRepository {
 
   @override
   Future<List<Ruta>> publicadas() async {
+    consultasPublicadas++;
     final error = this.error;
     if (error != null) throw error;
     return rutas.where((ruta) => ruta.publicada).toList();
+  }
+
+  @override
+  Future<List<RutaCercana>> cercanas({
+    required double latitud,
+    required double longitud,
+    required double radioKm,
+  }) async {
+    consultasCercanas++;
+    ultimaConsultaCercana = (
+      latitud: latitud,
+      longitud: longitud,
+      radioKm: radioKm,
+    );
+
+    final error = this.error;
+    if (error != null) throw error;
+
+    return rutasCercanas ??
+        [
+          for (final (i, ruta) in rutas.where((r) => r.publicada).indexed)
+            RutaCercana(ruta: ruta, distanciaKm: i + 1.0),
+        ];
   }
 
   @override

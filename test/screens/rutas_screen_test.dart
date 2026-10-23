@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
@@ -250,8 +252,197 @@ void main() {
 
       await montar(tester);
 
-      expect(find.text('Todavía no hay rutas para mostrarte'), findsOneWidget);
+      expect(find.text(RutasScreen.sinRutasCerca), findsOneWidget);
       expect(find.byType(TarjetaRutaExplorar), findsNothing);
+    });
+  });
+
+  group('estados vacío y de error (SCRUM-249)', () {
+    testWidgets('sin rutas cerca, dice que no las encontró y a qué '
+        'distancia buscó', (tester) async {
+      // Hay rutas en la comunidad, pero ninguna a menos de 50 km.
+      repositorio.rutasCercanas = const [];
+
+      await montar(tester);
+
+      expect(find.byKey(RutasScreen.claveSinRutasCerca), findsOneWidget);
+      expect(find.text(RutasScreen.sinRutasCerca), findsOneWidget);
+      expect(find.textContaining('a menos de 50 km'), findsOneWidget);
+      // Ni el rótulo ni una lista vacía: el mensaje en su lugar.
+      expect(find.byKey(RutasScreen.claveOrden), findsNothing);
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
+    });
+
+    testWidgets('sin ninguna ruta publicada, dice eso otro y cómo publicar '
+        'una', (tester) async {
+      repositorio = RutasRepositorioFalso(rutas: const []);
+
+      // Sin permiso, se ven las recientes de toda la comunidad: no hay.
+      await montar(tester, ubicacion: EstadoPermiso.denegado);
+
+      expect(find.byKey(RutasScreen.claveSinRutas), findsOneWidget);
+      expect(find.text(RutasScreen.sinRutas), findsOneWidget);
+      expect(find.textContaining('desde el resumen'), findsOneWidget);
+      expect(find.text(RutasScreen.sinRutasCerca), findsNothing);
+    });
+
+    testWidgets('sin rutas cerca, deslizar hacia abajo vuelve a buscar', (
+      tester,
+    ) async {
+      repositorio.rutasCercanas = const [];
+      await montar(tester);
+
+      // Ya hay una publicada por aquí.
+      repositorio.rutasCercanas = [RutaCercana(ruta: vuelta, distanciaKm: 2)];
+      await tester.fling(
+        find.byKey(RutasScreen.claveSinRutasCerca),
+        const Offset(0, 400),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vuelta al estadio'), findsOneWidget);
+      expect(repositorio.consultasCercanas, 2);
+    });
+
+    testWidgets('sin conexión, pide revisarla', (tester) async {
+      // Lo que lanza el cliente HTTP cuando la petición no llega.
+      repositorio.error = http.ClientException('Failed host lookup');
+
+      await montar(tester);
+
+      expect(find.byKey(RutasScreen.claveError), findsOneWidget);
+      expect(find.text(RutasScreen.errorTitulo), findsOneWidget);
+      expect(find.text(RutasScreen.errorDeConexion), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveReintentar), findsOneWidget);
+    });
+
+    testWidgets('si la base responde con un error, no culpa a la conexión', (
+      tester,
+    ) async {
+      repositorio.error = const PostgrestException(
+        message: 'Error de prueba',
+        code: '500',
+      );
+
+      await montar(tester);
+
+      expect(find.text(RutasScreen.errorDeLaBase), findsOneWidget);
+      expect(find.text(RutasScreen.errorDeConexion), findsNothing);
+    });
+
+    testWidgets('si los datos no se entienden, tampoco', (tester) async {
+      repositorio.error = const FormatException('fila rara');
+
+      await montar(tester);
+
+      expect(find.text(RutasScreen.errorDeLaBase), findsOneWidget);
+    });
+
+    testWidgets('tras un error de la base, "Reintentar" recupera la lista', (
+      tester,
+    ) async {
+      repositorio.error = const PostgrestException(message: 'Error de prueba');
+      await montar(tester);
+
+      repositorio.error = null;
+      await tester.tap(find.byKey(RutasScreen.claveReintentar));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(RutasScreen.claveError), findsNothing);
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+    });
+
+    group('sin saber dónde está, aunque el permiso esté', () {
+      testWidgets('con la ubicación apagada, lo dice arriba de las '
+          'recientes', (tester) async {
+        fuente.servicio = false;
+
+        await montar(tester);
+
+        expect(find.byKey(RutasScreen.claveAvisoUbicacion), findsOneWidget);
+        expect(find.text(RutasScreen.ubicacionApagada), findsOneWidget);
+        expect(find.textContaining('Enciéndela'), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.byKey(RutasScreen.claveAvisoUbicacion)).dy,
+          lessThan(
+            tester.getTopLeft(find.text(RutasScreen.rotuloRecientes)).dy,
+          ),
+        );
+      });
+
+      testWidgets('si el GPS no responde, lo dice y sugiere qué hacer', (
+        tester,
+      ) async {
+        fuente.errorAlLeer = Exception('sin fix');
+
+        await montar(tester);
+
+        expect(find.text(RutasScreen.ubicacionSinRespuesta), findsOneWidget);
+        expect(find.textContaining('acércate a una ventana'), findsOneWidget);
+        expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+      });
+
+      testWidgets('al encenderla y reintentar, la lista vuelve por cercanía', (
+        tester,
+      ) async {
+        fuente.servicio = false;
+        await montar(tester);
+
+        fuente.servicio = true;
+        await tester.tap(find.byKey(RutasScreen.claveReintentarUbicacion));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(RutasScreen.claveAvisoUbicacion), findsNothing);
+        expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+        expect(find.text(RutasScreen.todaviaSinUbicacion), findsNothing);
+      });
+
+      testWidgets('si al reintentar sigue sin ubicarse, lo dice', (
+        tester,
+      ) async {
+        fuente.errorAlLeer = Exception('sin fix');
+        await montar(tester);
+
+        await tester.tap(find.byKey(RutasScreen.claveReintentarUbicacion));
+        await tester.pumpAndSettle();
+
+        // El toque no se pierde sin respuesta.
+        expect(find.text(RutasScreen.todaviaSinUbicacion), findsOneWidget);
+        expect(find.byKey(RutasScreen.claveAvisoUbicacion), findsOneWidget);
+      });
+
+      testWidgets('el aviso del permiso no sale: el permiso sí está', (
+        tester,
+      ) async {
+        fuente.servicio = false;
+
+        await montar(tester);
+
+        expect(find.byKey(AvisoPermisoUbicacion.clave), findsNothing);
+      });
+    });
+
+    testWidgets('en la pantalla más estrecha y con texto grande, ningún '
+        'estado desborda', (tester) async {
+      for (final preparar in <void Function()>[
+        // Sin rutas cerca.
+        () => repositorio.rutasCercanas = const [],
+        // Sin conexión.
+        () => repositorio.error = http.ClientException('sin red'),
+        // GPS sin respuesta, con su aviso arriba.
+        () => fuente.errorAlLeer = Exception('sin fix'),
+      ]) {
+        repositorio = RutasRepositorioFalso(rutas: [vuelta, subida]);
+        fuente
+          ..servicio = true
+          ..errorAlLeer = null;
+        preparar();
+
+        await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+        expect(tester.takeException(), isNull);
+      }
     });
   });
 

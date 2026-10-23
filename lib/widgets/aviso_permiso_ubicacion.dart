@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/estado_permisos.dart';
 import '../services/permisos_provider.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import 'traza_card.dart';
+import 'tarjeta_aviso.dart';
 import 'traza_toast.dart';
 
 /// Explica para qué hace falta la ubicación y ofrece concederla.
@@ -121,64 +119,16 @@ class _AvisoPermisoUbicacionState extends ConsumerState<AvisoPermisoUbicacion> {
       accion = notificador.abrirAjustes;
     }
 
-    return TrazaCard(
+    return TarjetaAviso(
       key: AvisoPermisoUbicacion.clave,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.secondaryTint,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.location_off_outlined,
-                  size: 20,
-                  color: AppColors.secondaryDark,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      AvisoPermisoUbicacion.titulo,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      explicacion,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.ink2,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          FilledButton(
-            key: AvisoPermisoUbicacion.claveBoton,
-            // Mientras la ventana del sistema está abierta no se puede pedir
-            // otra vez: el segundo toque no haría nada útil.
-            onPressed: permisos.solicitandoUbicacion ? null : accion,
-            child: Text(etiqueta),
-          ),
-        ],
-      ),
+      icono: Icons.location_off_outlined,
+      titulo: AvisoPermisoUbicacion.titulo,
+      texto: explicacion,
+      etiquetaBoton: etiqueta,
+      claveBoton: AvisoPermisoUbicacion.claveBoton,
+      // Mientras la ventana del sistema está abierta no se puede pedir otra
+      // vez: el segundo toque no haría nada útil.
+      onBoton: permisos.solicitandoUbicacion ? null : accion,
     );
   }
 }

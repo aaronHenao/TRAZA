@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../services/explorar_rutas_provider.dart';
@@ -15,6 +16,7 @@ import '../../widgets/tarjeta_aviso.dart';
 import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/traza_toast.dart';
+import 'detalle_ruta_screen.dart';
 
 /// Explorar rutas: la sección de Rutas de la barra inferior (SCRUM-246).
 ///
@@ -34,6 +36,8 @@ import '../../widgets/traza_toast.dart';
 ///
 /// Cada ruta va en una [TarjetaRutaExplorar] (SCRUM-247), la misma del
 /// carrusel de la portada, así una ruta se reconoce igual en los dos sitios.
+/// Tocarla abre su detalle ([DetalleRutaScreen], SCRUM-250, criterio 5 de
+/// HU-29).
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -246,6 +250,12 @@ class _Lista extends StatelessWidget {
         return TarjetaRutaExplorar(
           key: TarjetaRutaExplorar.claveDe(ruta.id),
           ruta: ruta,
+          // Criterio 5 de HU-29 (SCRUM-250). Con `push`, al cerrar el detalle
+          // se vuelve a la lista donde estaba, sin consultarla otra vez. La
+          // ruta va en `extra` para que el detalle muestre lo que ya se sabe
+          // de ella mientras llega su trazado.
+          onTap: () =>
+              context.push(DetalleRutaScreen.rutaDe(ruta.id), extra: ruta),
         );
       },
     );

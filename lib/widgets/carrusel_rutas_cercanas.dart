@@ -140,8 +140,13 @@ class _Carrusel extends StatelessWidget {
         itemBuilder: (context, i) => TarjetaRutaExplorar.compacta(
           key: TarjetaRutaExplorar.claveDe(rutas[i].id),
           ruta: rutas[i],
-          // `push`: al cerrar el detalle se vuelve a la portada.
-          onTap: () => context.push(DetalleRutaScreen.rutaDe(rutas[i].id)),
+          // `push`: al cerrar el detalle se vuelve a la portada. La ruta va
+          // en `extra`, como desde Explorar rutas (SCRUM-250): el detalle
+          // muestra lo que ya se sabe de ella mientras llega su trazado.
+          onTap: () => context.push(
+            DetalleRutaScreen.rutaDe(rutas[i].id),
+            extra: rutas[i],
+          ),
         ),
       ),
     );

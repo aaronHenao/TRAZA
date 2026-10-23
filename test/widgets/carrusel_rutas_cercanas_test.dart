@@ -45,7 +45,11 @@ void main() {
 
   late _MockPermisosService permisos;
 
+  /// Lo que le llegó al detalle en `extra` la última vez que se abrió.
+  Object? extraDelDetalle;
+
   setUp(() {
+    extraDelDetalle = null;
     permisos = _MockPermisosService();
     when(
       () => permisos.estadoSalud(),
@@ -84,8 +88,12 @@ void main() {
         ),
         GoRoute(
           path: DetalleRutaScreen.ruta,
-          builder: (_, state) =>
-              Scaffold(body: Text('Detalle ${state.pathParameters['rutaId']}')),
+          builder: (_, state) {
+            extraDelDetalle = state.extra;
+            return Scaffold(
+              body: Text('Detalle ${state.pathParameters['rutaId']}'),
+            );
+          },
         ),
       ],
     );
@@ -231,6 +239,18 @@ void main() {
       expect(find.text('Detalle r-1'), findsOneWidget);
       // `push`: la portada sigue debajo.
       expect(router.routerDelegate.currentConfiguration.matches.length, 2);
+    });
+
+    testWidgets('al detalle le llega la ruta tocada, como desde Explorar '
+        'rutas (SCRUM-250)', (tester) async {
+      final vuelta = publicada();
+      await montar(tester, rutas: [vuelta]);
+
+      await tester.tap(find.text('Vuelta al estadio'));
+      await tester.pumpAndSettle();
+
+      // Con ella muestra lo que ya se sabe mientras llega el trazado.
+      expect(extraDelDetalle, same(vuelta));
     });
   });
 

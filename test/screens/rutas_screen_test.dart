@@ -10,7 +10,11 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
+import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
+import 'package:traza/screens/rutas/publicar_ruta_screen.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
+import 'package:traza/screens/rutas/seccion_rutas.dart';
+import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
 import 'package:traza/services/reloj_provider.dart';
@@ -18,10 +22,12 @@ import 'package:traza/services/rutas_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
 import 'package:traza/widgets/aviso_permiso_ubicacion.dart';
+import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
 class _MockPermisosService extends Mock implements PermisosService {}
@@ -44,6 +50,17 @@ class _RutasLentas extends RutasRepositorioFalso {
     required double longitud,
     required double radioKm,
   }) => espera.future;
+}
+
+/// Rutas cuyo detalle completo no llega hasta que la prueba lo decida
+/// (SCRUM-250).
+class _DetalleLento extends RutasRepositorioFalso {
+  _DetalleLento({super.rutas});
+
+  final espera = Completer<Ruta?>();
+
+  @override
+  Future<Ruta?> ruta(String id) => espera.future;
 }
 
 /// Pruebas de Explorar rutas, la sección de Rutas (SCRUM-246).
@@ -110,7 +127,9 @@ void main() {
     final router = GoRouter(
       initialLocation: RutasScreen.ruta,
       routes: [
-        GoRoute(path: RutasScreen.ruta, builder: (_, _) => const RutasScreen()),
+        // La sección tal como la registra la app, con el detalle y publicar
+        // (SCRUM-250).
+        seccionRutas,
         // Las demás secciones, de mentira: aquí solo importa poder salir.
         for (final seccion in SeccionPrincipal.values)
           if (seccion != SeccionPrincipal.rutas)
@@ -132,6 +151,8 @@ void main() {
           fuenteUbicacionProvider.overrideWithValue(fuente),
           rutasRepositoryProvider.overrideWithValue(rutas ?? repositorio),
           relojProvider.overrideWithValue(() => ahora),
+          // El mapa del detalle no descarga tiles reales.
+          proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
         ],
         child: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(escalaTexto)),
@@ -679,6 +700,199 @@ void main() {
       // El mismo ancho máximo que el resto de la app en pantallas grandes.
       final tarjeta = tester.getRect(find.byType(TarjetaRutaExplorar).first);
       expect(tarjeta.width, lessThanOrEqualTo(AnchoContenido.maximo));
+    });
+  });
+
+  group('abrir el detalle (SCRUM-250, criterio 5 de HU-29)', () {
+    DetalleRutaScreen detalle(WidgetTester tester) =>
+        tester.widget<DetalleRutaScreen>(find.byType(DetalleRutaScreen));
+
+    testWidgets('al tocar una ruta cercana se abre el detalle de esa ruta', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await tester.tap(find.byKey(TarjetaRutaExplorar.claveDe('r-2')));
+      await tester.pumpAndSettle();
+
+      expect(detalle(tester).rutaId, 'r-2');
+      expect(find.text('Subida al Nutibara'), findsOneWidget);
+      expect(find.text('12.4 km'), findsOneWidget);
+      // La otra se quedó en la lista, debajo.
+      expect(find.text('Vuelta al estadio'), findsNothing);
+    });
+
+    testWidgets('también desde las más recientes, sin ubicación', (
+      tester,
+    ) async {
+      await montar(tester, ubicacion: EstadoPermiso.denegado);
+
+      await tester.tap(find.byKey(TarjetaRutaExplorar.claveDe('r-1')));
+      await tester.pumpAndSettle();
+
+      expect(detalle(tester).rutaId, 'r-1');
+      expect(find.text('Vuelta al estadio'), findsOneWidget);
+    });
+
+    testWidgets('la ruta elegida viaja al detalle, que la muestra mientras '
+        'llega su trazado', (tester) async {
+      final lento = _DetalleLento(rutas: [vuelta, subida])
+        ..rutasCercanas = repositorio.rutasCercanas;
+      await montar(tester, rutas: lento);
+
+      await tester.tap(find.byKey(TarjetaRutaExplorar.claveDe('r-2')));
+      await tester.pump();
+      // La transición. Con el indicador del mapa girando no se asienta.
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(detalle(tester).vistaPrevia, same(subida));
+      // Sin el trazado todavía, ya dice qué ruta es y cuánto mide.
+      expect(find.text('Subida al Nutibara'), findsOneWidget);
+      expect(find.text('12.4 km'), findsOneWidget);
+      expect(
+        find.byKey(DetalleRutaScreen.claveCargandoTrazado),
+        findsOneWidget,
+      );
+
+      lento.espera.complete(
+        rutaDePrueba(
+          id: 'r-2',
+          nombre: 'Subida al Nutibara',
+          estado: EstadoRuta.publicada,
+          distanciaKm: 12.4,
+          fechaPublicacion: DateTime(2026, 10, 15, 9),
+          trazado: const [
+            PuntoRuta(latitud: 6.2442, longitud: -75.5812),
+            PuntoRuta(latitud: 6.2450, longitud: -75.5800),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(DetalleRutaScreen.claveCargandoTrazado), findsNothing);
+      expect(find.byType(MapaTrayecto), findsOneWidget);
+    });
+
+    testWidgets('"atrás" vuelve a la lista donde estaba, sin consultarla otra '
+        'vez', (tester) async {
+      final muchas = [
+        for (var i = 0; i < 12; i++)
+          rutaDePrueba(
+            id: 'r-$i',
+            nombre: 'Ruta $i',
+            estado: EstadoRuta.publicada,
+          ),
+      ];
+      repositorio = RutasRepositorioFalso(rutas: muchas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in muchas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: i + 1.0),
+        ];
+      await montar(tester);
+
+      final lista = find
+          .descendant(
+            of: find.byKey(RutasScreen.claveLista),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      final septima = find.byKey(TarjetaRutaExplorar.claveDe('r-7'));
+      await tester.scrollUntilVisible(septima, 300, scrollable: lista);
+      await tester.pumpAndSettle();
+      final antes = tester.state<ScrollableState>(lista).position.pixels;
+      expect(antes, greaterThan(0));
+
+      await tester.tap(septima);
+      await tester.pumpAndSettle();
+      expect(detalle(tester).rutaId, 'r-7');
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DetalleRutaScreen), findsNothing);
+      expect(tester.state<ScrollableState>(lista).position.pixels, antes);
+      expect(septima, findsOneWidget);
+      expect(repositorio.consultasCercanas, 1);
+    });
+
+    testWidgets('el "atrás" del sistema también vuelve a la lista', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await tester.tap(find.byKey(TarjetaRutaExplorar.claveDe('r-2')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DetalleRutaScreen), findsOneWidget);
+
+      // El botón atrás de Android.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DetalleRutaScreen), findsNothing);
+      expect(find.byKey(RutasScreen.claveLista), findsOneWidget);
+    });
+  });
+
+  group('la ruta de navegación (SCRUM-250)', () {
+    testWidgets('el detalle cuelga de Explorar rutas: si se llega por un '
+        'enlace, al cerrarlo queda la lista', (tester) async {
+      final router = await montar(tester);
+      router.go(SeccionPrincipal.foro.ruta);
+      await tester.pumpAndSettle();
+
+      router.go(DetalleRutaScreen.rutaDe('r-1'));
+      await tester.pumpAndSettle();
+
+      final abierto = tester.widget<DetalleRutaScreen>(
+        find.byType(DetalleRutaScreen),
+      );
+      expect(abierto.rutaId, 'r-1');
+      // Sin la ruta del listado, el detalle la pide por su id.
+      expect(abierto.vistaPrevia, isNull);
+      expect(find.text('Vuelta al estadio'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DetalleRutaScreen), findsNothing);
+      expect(find.byType(RutasScreen), findsOneWidget);
+      expect(
+        router.routerDelegate.currentConfiguration.uri.path,
+        RutasScreen.ruta,
+      );
+    });
+
+    testWidgets('abierto con `push` desde otra pantalla, como lo abre el '
+        'foro, se apila solo y al cerrarlo vuelve a ella', (tester) async {
+      final router = await montar(tester);
+      router.go(SeccionPrincipal.foro.ruta);
+      await tester.pumpAndSettle();
+
+      router.push(DetalleRutaScreen.rutaDe('r-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DetalleRutaScreen), findsOneWidget);
+      // Debajo no se armó la lista: solo el detalle encima del foro.
+      expect(find.byType(RutasScreen, skipOffstage: false), findsNothing);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('En ${SeccionPrincipal.foro.etiqueta}'), findsOneWidget);
+    });
+
+    testWidgets('publicar una ruta no se toma por el id de una', (
+      tester,
+    ) async {
+      // Antes, con el detalle registrado primero, '/rutas/publicar' abría el
+      // detalle de una ruta llamada "publicar".
+      final router = await montar(tester);
+
+      router.push(PublicarRutaScreen.ruta);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PublicarRutaScreen), findsOneWidget);
+      expect(find.byType(DetalleRutaScreen), findsNothing);
     });
   });
 }

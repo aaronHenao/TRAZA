@@ -148,9 +148,14 @@ class SupabaseRutasRepository implements RutasRepository {
 
   /// Lo que se lee de una ruta cuando no hace falta su trazado. Pedir `*`
   /// traería cientos de coordenadas por fila para no dibujar ninguna.
+  ///
+  /// `miniatura` no es una columna: es un campo calculado (0038) que
+  /// devuelve 32 puntos del trazado, lo justo para dibujar la ruta en
+  /// pequeño en una tarjeta (SCRUM-247).
   static const _columnas =
       'id,autor_id,autor_nombre,entrenamiento_id,nombre,descripcion,'
-      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion';
+      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion,'
+      'miniatura';
 
   static const _columnasConTrazado = '$_columnas,trazado';
 

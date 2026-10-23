@@ -12,7 +12,9 @@ import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/widgets/carrusel_rutas_cercanas.dart';
+import 'package:traza/widgets/miniatura_ruta.dart';
 import 'package:traza/widgets/tarjeta_ruta.dart';
+import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
 
 import '../utiles/rutas_repository_falso.dart';
 
@@ -117,7 +119,23 @@ void main() {
       expect(find.text('5.23 km'), findsOneWidget);
       // La dificultad la asigna HU-34: hasta entonces, ninguna está
       // clasificada y la pastilla lo dice.
-      expect(find.text(CarruselRutasCercanas.sinDificultad), findsOneWidget);
+      expect(find.text(TarjetaRutaExplorar.sinDificultad), findsOneWidget);
+    });
+
+    testWidgets('en la tarjeta compacta de Explorar rutas (SCRUM-247)', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      // La misma tarjeta de la lista, con los mismos datos: la miniatura,
+      // quién la creó y el desnivel también salen en la portada.
+      final tarjeta = tester.widget<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      );
+      expect(tarjeta.compacta, isTrue);
+      expect(find.byType(MiniaturaRuta), findsOneWidget);
+      expect(find.text('Por Ana'), findsOneWidget);
+      expect(find.text(TarjetaRutaExplorar.sinDesnivel), findsOneWidget);
     });
 
     testWidgets('una ruta sin distancia lo dice como el listado', (

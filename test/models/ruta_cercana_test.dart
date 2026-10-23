@@ -39,6 +39,28 @@ void main() {
     expect(cercana.distanciaKm, 2.37);
   });
 
+  test('trae la miniatura del recorrido (SCRUM-247)', () {
+    final cercana = RutaCercana.desdeSupabase({
+      ...fila(),
+      'miniatura': [
+        {'lat': 6.2566, 'lng': -75.5900},
+        {'lat': 6.2580, 'lng': -75.5885},
+        {'lat': 6.2566, 'lng': -75.5870},
+      ],
+    });
+
+    expect(cercana.ruta.miniatura, const [
+      PuntoRuta(latitud: 6.2566, longitud: -75.5900),
+      PuntoRuta(latitud: 6.2580, longitud: -75.5885),
+      PuntoRuta(latitud: 6.2566, longitud: -75.5870),
+    ]);
+  });
+
+  test('sin miniatura, la ruta se lee igual', () {
+    // Una consulta que no la pidió: la tarjeta pone el icono de ruta.
+    expect(RutaCercana.desdeSupabase(fila()).ruta.miniatura, isEmpty);
+  });
+
   test('una distancia entera también se lee', () {
     expect(RutaCercana.desdeSupabase(fila(distanciaUsuario: 3)).distanciaKm, 3);
   });

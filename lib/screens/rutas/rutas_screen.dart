@@ -3,14 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/explorar_rutas_provider.dart';
 import '../../services/permisos_provider.dart';
-import '../../services/reloj_provider.dart';
 import '../../services/ubicacion_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/navegacion_principal.dart';
-import '../../widgets/tarjeta_ruta.dart';
+import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_top_bar.dart';
 
 /// Explorar rutas: la sección de Rutas de la barra inferior (SCRUM-246).
@@ -20,8 +19,8 @@ import '../../widgets/traza_top_bar.dart';
 /// con la ubicación apagada o sin respuesta del GPS—, muestra las más
 /// recientes y lo dice en el rótulo, para que la sección no se quede vacía.
 ///
-/// Las tarjetas son las de los demás listados de rutas ([TarjetaRuta]), así
-/// una ruta se ve igual aquí que en el foro.
+/// Cada ruta va en una [TarjetaRutaExplorar] (SCRUM-247), la misma del
+/// carrusel de la portada, así una ruta se reconoce igual en los dos sitios.
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -111,13 +110,13 @@ class _Contenido extends ConsumerWidget {
   }
 }
 
-class _Lista extends ConsumerWidget {
+class _Lista extends StatelessWidget {
   const _Lista({required this.datos});
 
   final RutasParaExplorar datos;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final rutas = datos.rutas;
 
     if (rutas.isEmpty) {
@@ -129,10 +128,6 @@ class _Lista extends ConsumerWidget {
             'lista.',
       );
     }
-
-    // El mismo instante para todas las tarjetas, para que dos rutas del
-    // mismo día no digan "Hoy" y "Ayer" al cruzar la medianoche.
-    final ahora = ref.read(relojProvider)();
 
     return ListView.separated(
       key: RutasScreen.claveLista,
@@ -149,17 +144,16 @@ class _Lista extends ConsumerWidget {
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (_, i) => i == 0
           ? _Orden(porCercania: datos is RutasPorCercania)
-          : TarjetaRuta(
-              key: TarjetaRuta.claveDe(rutas[i - 1].id),
+          : TarjetaRutaExplorar(
+              key: TarjetaRutaExplorar.claveDe(rutas[i - 1].id),
               ruta: rutas[i - 1],
-              ahora: ahora,
             ),
     );
   }
 }
 
 /// Cómo va ordenada la lista. Sin esto, el orden por cercanía no se nota:
-/// las tarjetas no dicen a cuánto queda cada ruta.
+/// las tarjetas dicen cuánto mide cada ruta, no a cuánto queda.
 class _Orden extends StatelessWidget {
   const _Orden({required this.porCercania});
 

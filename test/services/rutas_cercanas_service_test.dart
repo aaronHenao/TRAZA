@@ -95,6 +95,50 @@ void main() {
     expect(supabase.peticiones, isEmpty);
   });
 
+  group('la miniatura (SCRUM-247)', () {
+    final miniatura = [
+      {'lat': 6.2566, 'lng': -75.5900},
+      {'lat': 6.2580, 'lng': -75.5885},
+    ];
+
+    test('la consulta por cercanía la trae en cada ruta', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila('a', 1.2), 'miniatura': miniatura},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final cercanas = await supabase.repositorio.cercanas(
+        latitud: 6.2442,
+        longitud: -75.5812,
+        radioKm: 50,
+      );
+
+      final ruta = cercanas.single.ruta;
+      expect(ruta.miniatura, hasLength(2));
+      expect(ruta.miniatura.first.latitud, 6.2566);
+      // La miniatura no es el trazado: ese sigue sin venir en un listado.
+      expect(ruta.trazado, isEmpty);
+    });
+
+    test('el listado de publicadas la pide sin pedir el trazado', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila('a', 1.2), 'miniatura': miniatura},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final publicadas = await supabase.repositorio.publicadas();
+
+      final columnas = supabase.peticiones.single.url.queryParameters['select'];
+      expect(columnas, contains('miniatura'));
+      expect(columnas, isNot(contains('trazado')));
+      expect(publicadas.single.miniatura, hasLength(2));
+    });
+  });
+
   test('un error de la base llega a quien preguntó', () async {
     // Coordenadas fuera de rango: la función las rechaza con 22023. Desde la
     // app no deberían llegar, porque salen del GPS.

@@ -16,7 +16,7 @@ import 'package:traza/services/rutas_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
-import 'package:traza/widgets/tarjeta_ruta.dart';
+import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/rutas_repository_falso.dart';
@@ -197,11 +197,24 @@ void main() {
     ) async {
       await montar(tester);
 
-      expect(find.byType(TarjetaRuta), findsNWidgets(2));
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
       expect(find.text('Vuelta al estadio'), findsOneWidget);
       expect(find.textContaining('Por Ana'), findsNWidgets(2));
       expect(find.text('5.23 km'), findsOneWidget);
       expect(find.text('12.4 km'), findsOneWidget);
+    });
+
+    testWidgets('cada ruta va en la tarjeta de lado, con su dificultad y su '
+        'desnivel (SCRUM-247)', (tester) async {
+      await montar(tester);
+
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      )) {
+        expect(tarjeta.compacta, isFalse);
+      }
+      expect(find.text(TarjetaRutaExplorar.sinDificultad), findsNWidgets(2));
+      expect(find.text(TarjetaRutaExplorar.sinDesnivel), findsNWidgets(2));
     });
 
     testWidgets('sin permiso de ubicación, las más recientes y lo dice', (
@@ -226,7 +239,7 @@ void main() {
       await montar(tester);
 
       expect(find.text(RutasScreen.rotuloRecientes), findsOneWidget);
-      expect(find.byType(TarjetaRuta), findsNWidgets(2));
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
     });
 
     testWidgets('sin rutas, lo dice en vez de dejar la lista en blanco', (
@@ -237,7 +250,7 @@ void main() {
       await montar(tester);
 
       expect(find.text('Todavía no hay rutas para mostrarte'), findsOneWidget);
-      expect(find.byType(TarjetaRuta), findsNothing);
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
     });
   });
 
@@ -251,7 +264,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.byType(TarjetaRuta), findsNothing);
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
 
       espera.complete([RutaCercana(ruta: vuelta, distanciaKm: 2)]);
       await tester.pumpAndSettle();
@@ -291,7 +304,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No pudimos cargar las rutas'), findsNothing);
-      expect(find.byType(TarjetaRuta), findsNWidgets(2));
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
       expect(repositorio.consultasCercanas, 2);
     });
 
@@ -312,7 +325,7 @@ void main() {
       // El usuario pudo moverse: se le pregunta otra vez dónde está.
       expect(fuente.lecturasPuntuales, 2);
       expect(repositorio.consultasCercanas, 2);
-      expect(find.byType(TarjetaRuta), findsNWidgets(2));
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
     });
   });
 
@@ -338,7 +351,7 @@ void main() {
       await montar(tester, tamano: const Size(768, 1024));
 
       // El mismo ancho máximo que el resto de la app en pantallas grandes.
-      final tarjeta = tester.getRect(find.byType(TarjetaRuta).first);
+      final tarjeta = tester.getRect(find.byType(TarjetaRutaExplorar).first);
       expect(tarjeta.width, lessThanOrEqualTo(AnchoContenido.maximo));
     });
   });

@@ -106,6 +106,7 @@ Ruta rutaDePrueba({
   EstadoRuta estado = EstadoRuta.enRevision,
   double? distanciaKm = 5.23,
   List<PuntoRuta> trazado = const [],
+  List<PuntoRuta> miniatura = const [],
   DateTime? fechaPublicacion,
 }) => Ruta(
   id: id,
@@ -117,6 +118,7 @@ Ruta rutaDePrueba({
   estado: estado,
   distanciaKm: distanciaKm,
   trazado: trazado,
+  miniatura: miniatura,
   fechaCreacion: DateTime(2026, 10, 17, 9),
   fechaPublicacion: fechaPublicacion,
 );

@@ -552,6 +552,13 @@ class _BaseFalsa {
       return _json(cercanas, peticion);
     }
 
+    // El detalle pregunta si el usuario puede revisar la clasificación
+    // (SCRUM-261). Aquí nadie es Runner Experto.
+    if (peticion.method == 'POST' &&
+        url.path == '/rest/v1/rpc/puede_revisar_clasificacion') {
+      return _json(false, peticion);
+    }
+
     if (peticion.method == 'GET' && url.path == '/rest/v1/rutas') {
       final filtroId = url.queryParameters['id'];
       if (filtroId != null) {

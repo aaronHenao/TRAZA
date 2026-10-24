@@ -456,7 +456,13 @@ void main() {
 
       expect(find.byType(TarjetaRutaExplorar), findsNothing);
       expect(find.text('Ninguna ruta fácil'), findsOneWidget);
-      expect(find.text(RutasScreen.pruebaOtraDificultad), findsOneWidget);
+      // No sugiere otra dificultad: ninguna tendría rutas (SCRUM-270).
+      expect(find.text(RutasScreen.sinClasificarTodavia), findsOneWidget);
+      expect(find.text(RutasScreen.pruebaOtraDificultad), findsNothing);
+
+      // "Todas", que es lo que sugiere, las devuelve.
+      await elegirDificultad(tester, null);
+      expect(enPantalla(tester), nombres);
     });
   });
 

@@ -3101,4 +3101,174 @@ void main() {
       expect(enPantalla(tester), ['facil-corta']);
     });
   });
+
+  group(
+    'sin resultados con la dificultad (SCRUM-270, criterio 5 de HU-36)',
+    () {
+      // Como hoy: nadie clasifica todavía (SCRUM-363), así que ninguna ruta
+      // tiene dificultad.
+      final parque = rutaDePrueba(
+        id: 'parque',
+        nombre: 'Vuelta al parque',
+        estado: EstadoRuta.publicada,
+        distanciaKm: 3.2,
+      );
+      final volador = rutaDePrueba(
+        id: 'volador',
+        nombre: 'Subida al Volador',
+        estado: EstadoRuta.publicada,
+        distanciaKm: 7.5,
+      );
+      final sinClasificar = [parque, volador];
+
+      // Cuando ya haya alguna clasificada.
+      final facilCorta = rutaDePrueba(
+        id: 'facil-corta',
+        nombre: 'Vuelta al lago',
+        estado: EstadoRuta.publicada,
+        distanciaKm: 4,
+        dificultad: Dificultad.facil,
+      );
+
+      void conRutas(List<Ruta> rutas) {
+        repositorio = RutasRepositorioFalso(rutas: rutas)
+          ..rutasCercanas = [
+            for (final (i, ruta) in rutas.indexed)
+              RutaCercana(ruta: ruta, distanciaKm: 0.5 + i),
+          ];
+      }
+
+      setUp(() => conRutas(sinClasificar));
+
+      List<String> enPantalla(WidgetTester tester) => [
+        for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+          find.byType(TarjetaRutaExplorar),
+        ))
+          tarjeta.ruta.id,
+      ];
+
+      test('si ninguna está clasificada, lo dice en vez de sugerir otra '
+          'dificultad, con o sin rango', () {
+        for (final filtros in const [
+          FiltrosRutas(dificultad: Dificultad.facil),
+          FiltrosRutas(
+            dificultad: Dificultad.facil,
+            distancia: RangoDistancia.de5a10,
+          ),
+        ]) {
+          expect(
+            RutasScreen.queHacerSinRutasCon(filtros, sinClasificar),
+            RutasScreen.sinClasificarTodavia,
+            reason: '$filtros',
+          );
+        }
+      });
+
+      test('con alguna clasificada, sí sugiere probar con otra dificultad', () {
+        expect(
+          RutasScreen.queHacerSinRutasCon(
+            const FiltrosRutas(dificultad: Dificultad.dificil),
+            [...sinClasificar, facilCorta],
+          ),
+          RutasScreen.pruebaOtraDificultad,
+        );
+      });
+
+      test(
+        'con solo un rango elegido, la dificultad no tiene nada que ver',
+        () {
+          expect(
+            RutasScreen.queHacerSinRutasCon(
+              const FiltrosRutas(distancia: RangoDistancia.masDe20),
+              sinClasificar,
+            ),
+            RutasScreen.pruebaOtroRango,
+          );
+        },
+      );
+
+      testWidgets('hoy, sin rutas clasificadas: dice que no hay rutas con esa '
+          'dificultad y por qué', (tester) async {
+        await montar(tester);
+
+        await elegirDificultad(tester, Dificultad.facil);
+
+        expect(find.byType(TarjetaRutaExplorar), findsNothing);
+        expect(find.text('Ninguna ruta fácil'), findsOneWidget);
+        expect(find.text(RutasScreen.sinClasificarTodavia), findsOneWidget);
+        expect(find.text(RutasScreen.pruebaOtraDificultad), findsNothing);
+        expect(find.text('Quitar el filtro'), findsOneWidget);
+      });
+
+      testWidgets('con alguna clasificada de otra dificultad, sugiere probar '
+          'con otra', (tester) async {
+        conRutas([...sinClasificar, facilCorta]);
+        await montar(tester);
+
+        await elegirDificultad(tester, Dificultad.dificil);
+
+        expect(find.text('Ninguna ruta difícil'), findsOneWidget);
+        expect(find.text(RutasScreen.pruebaOtraDificultad), findsOneWidget);
+        expect(find.text(RutasScreen.sinClasificarTodavia), findsNothing);
+      });
+
+      testWidgets('con un rango también elegido, sigue diciendo por qué, y '
+          '«Todas» devuelve las del rango sin quitarlo', (tester) async {
+        await montar(tester);
+        await tocarChip(tester, RutasScreen.claveRango(RangoDistancia.de5a10));
+
+        await elegirDificultad(tester, Dificultad.facil);
+
+        expect(find.text('Ninguna ruta fácil de 5 a 10 km'), findsOneWidget);
+        expect(find.text(RutasScreen.sinClasificarTodavia), findsOneWidget);
+
+        await elegirDificultad(tester, null);
+
+        expect(enPantalla(tester), ['volador']);
+        expect(
+          tester
+              .widget<ChipFiltro>(
+                find.byKey(RutasScreen.claveRango(RangoDistancia.de5a10)),
+              )
+              .activo,
+          isTrue,
+        );
+      });
+
+      testWidgets('en los resultados de una búsqueda, igual: debajo del rótulo '
+          'de resultados', (tester) async {
+        await montar(tester);
+        await tester.enterText(find.byKey(RutasScreen.claveBusqueda), 'vuelta');
+        await tester.pump(esperaBusquedaRutas);
+        await tester.pumpAndSettle();
+
+        await elegirDificultad(tester, Dificultad.moderada);
+
+        expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+        expect(find.text('Ninguna ruta moderada'), findsOneWidget);
+        expect(find.text(RutasScreen.sinClasificarTodavia), findsOneWidget);
+      });
+
+      testWidgets('se le anuncia al lector de pantalla', (tester) async {
+        final anuncios = escucharAnuncios(tester);
+        await montar(tester);
+
+        await elegirDificultad(tester, Dificultad.facil);
+
+        expect(anuncios, [
+          'Ninguna ruta fácil. ${RutasScreen.sinClasificarTodavia}',
+        ]);
+      });
+
+      testWidgets('en la pantalla más estrecha con el texto más grande no '
+          'desborda', (tester) async {
+        await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.6);
+
+        await elegirDificultad(tester, Dificultad.facil);
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsOneWidget);
+      });
+    },
+  );
 }

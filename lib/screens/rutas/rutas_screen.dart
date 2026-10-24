@@ -146,9 +146,19 @@ class RutasScreen extends ConsumerWidget {
   /// fuera las rutas, mirando qué saldría con cada uno por separado: que
   /// haya fáciles y que haya de 5 a 10 km no quiere decir que haya fáciles
   /// de 5 a 10 km, y sin saberlo el usuario no sabe cuál cambiar.
+  ///
+  /// Pero si ninguna de [rutas] está clasificada, ninguna dificultad va a
+  /// tener rutas, y sugerir otra mandaría al usuario a probarlas todas en
+  /// vano: se dice eso (SCRUM-270, criterio 5 de HU-36). Hasta que un
+  /// Runner Experto las clasifique (SCRUM-363), es lo que pasa siempre.
   static String queHacerSinRutasCon(FiltrosRutas filtros, List<Ruta> rutas) {
     final dificultad = filtros.dificultad;
     final distancia = filtros.distancia;
+    if (dificultad != null &&
+        rutas.isNotEmpty &&
+        rutas.every((ruta) => ruta.dificultad == null)) {
+      return sinClasificarTodavia;
+    }
     if (dificultad == null) return pruebaOtroRango;
     if (distancia == null) return pruebaOtraDificultad;
 
@@ -180,6 +190,12 @@ class RutasScreen extends ConsumerWidget {
       'Prueba con otro rango o quita el filtro para verlas todas.';
   static const pruebaOtraDificultad =
       'Prueba con otra dificultad o quita el filtro para verlas todas.';
+
+  /// Ninguna ruta de la lista tiene dificultad todavía (SCRUM-270). "Todas"
+  /// las vuelve a mostrar sin quitar el rango de distancia, si hay uno.
+  static const sinClasificarTodavia =
+      'Ninguna de estas rutas tiene dificultad todavía: la asigna un Runner '
+      'Experto. Elige «Todas» para verlas.';
 
   static const errorTitulo = 'No pudimos cargar las rutas';
   static const errorDeConexion =

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -1463,6 +1464,167 @@ void main() {
       expect(enPantalla(tester), ['Cerro de las tres cruces']);
       expect(find.byKey(RutasScreen.claveNotaZona), findsNothing);
       expect(find.byKey(RutasScreen.claveSinResultados), findsNothing);
+    });
+  });
+
+  group('sin resultados (SCRUM-257, criterio 4 de HU-30)', () {
+    Future<void> buscar(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    /// Lo que la app le anuncia al lector de pantalla.
+    List<String> escucharAnuncios(WidgetTester tester) {
+      final anuncios = <String>[];
+      final mensajero = tester.binding.defaultBinaryMessenger;
+      mensajero.setMockDecodedMessageHandler<Object?>(
+        SystemChannels.accessibility,
+        (mensaje) async {
+          if (mensaje case {
+            'type': 'announce',
+            'data': {'message': final String texto},
+          }) {
+            anuncios.add(texto);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => mensajero.setMockDecodedMessageHandler<Object?>(
+          SystemChannels.accessibility,
+          null,
+        ),
+      );
+      return anuncios;
+    }
+
+    testWidgets('cuando termina de escribir sin coincidencias, lo dice y '
+        'sugiere revisar lo escrito', (tester) async {
+      await montar(tester);
+
+      await buscar(tester, 'zzz');
+
+      expect(find.text(RutasScreen.sinResultados), findsOneWidget);
+      expect(find.textContaining('«zzz»'), findsOneWidget);
+      expect(find.textContaining(RutasScreen.revisaLoEscrito), findsOneWidget);
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
+    });
+
+    testWidgets('mientras sigue escribiendo todavía no lo dice', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), 'zzz');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byKey(RutasScreen.claveSinResultados), findsNothing);
+
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+
+      // Tras una búsqueda vacía, el mensaje no se adelanta a la siguiente:
+      // no dice que no hay nada con lo nuevo antes de haberlo buscado.
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), 'zzzy');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('«zzzy»'), findsNothing);
+
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('«zzzy»'), findsOneWidget);
+    });
+
+    testWidgets('con varias palabras sugiere probar con menos', (tester) async {
+      await montar(tester);
+
+      await buscar(tester, 'subida zzz');
+
+      expect(
+        find.textContaining(RutasScreen.revisaLoEscritoVariasPalabras),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('antes de confirmar sugiere buscarlo como lugar; '
+        'confirmado y sin lugar, ya no', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'zzz');
+      expect(find.textContaining(RutasScreen.buscaloComoLugar), findsOneWidget);
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('no encontramos un lugar con ese nombre'),
+        findsOneWidget,
+      );
+      expect(find.textContaining(RutasScreen.buscaloComoLugar), findsNothing);
+      // Lo escrito puede estar mal: la sugerencia sigue.
+      expect(find.textContaining(RutasScreen.revisaLoEscrito), findsOneWidget);
+    });
+
+    testWidgets('si el lugar existe pero no arranca ninguna ruta allá, lo '
+        'dice', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'envigado');
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('ni arranca en Envigado, Antioquia'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('se lo anuncia al lector de pantalla, y otra vez si la '
+        'siguiente búsqueda tampoco encuentra nada', (tester) async {
+      final anuncios = escucharAnuncios(tester);
+      await montar(tester);
+
+      await buscar(tester, 'zzz');
+      await buscar(tester, 'yyy');
+
+      expect(anuncios, hasLength(2));
+      expect(anuncios.first, startsWith('${RutasScreen.sinResultados}. '));
+      expect(anuncios.first, contains('«zzz»'));
+      expect(anuncios.last, contains('«yyy»'));
+    });
+
+    testWidgets('con resultados no anuncia nada', (tester) async {
+      final anuncios = escucharAnuncios(tester);
+      await montar(tester);
+
+      await buscar(tester, 'nutibara');
+
+      expect(anuncios, isEmpty);
+    });
+
+    testWidgets('al encontrar algo, el mensaje se va', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'zzz');
+
+      await buscar(tester, 'nutibara');
+
+      expect(find.byKey(RutasScreen.claveSinResultados), findsNothing);
+      expect(find.text('Subida al Nutibara'), findsOneWidget);
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto más grande, el '
+        'mensaje entero se puede leer sin desbordar', (tester) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.6);
+
+      await buscar(tester, 'subida zzz');
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
     });
   });
 }

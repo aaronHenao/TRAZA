@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
@@ -11,6 +12,7 @@ import '../../services/permisos_provider.dart';
 import '../../services/ubicacion_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../utils/texto_para_buscar.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/aviso_permiso_ubicacion.dart';
 import '../../widgets/estado_vacio.dart';
@@ -85,6 +87,16 @@ class RutasScreen extends ConsumerWidget {
 
   /// Una búsqueda que no encontró nada (SCRUM-254).
   static const sinResultados = 'No encontramos rutas';
+
+  /// Lo que se sugiere sin resultados (SCRUM-257, criterio 4 de HU-30).
+  static const revisaLoEscrito =
+      'Revisa cómo lo escribiste: basta con el comienzo del nombre de una '
+      'ruta o de quien la publicó.';
+  static const revisaLoEscritoVariasPalabras =
+      'Revisa cómo lo escribiste o prueba con menos palabras: todas tienen '
+      'que estar en el nombre de la ruta o en el de quien la publicó.';
+  static const buscaloComoLugar = 'Si es un lugar, búscalo como lugar.';
+  static const revisaLaConexion = 'Revisa tu conexión e inténtalo de nuevo.';
 
   /// Sin rutas a menos del radio de cercanía (criterio 4 de HU-29).
   static const sinRutasCerca = 'No encontramos rutas cerca de ti';
@@ -240,47 +252,129 @@ class _Resultados extends ConsumerWidget {
           ],
           rutas: rutas,
         ),
-      // Vacío y sin nada en camino: de verdad no hay coincidencias.
-      AsyncValue(valueOrNull: _?) when !busqueda.isLoading => EstadoVacio(
-        key: RutasScreen.claveSinResultados,
-        icono: Icons.search_off_rounded,
-        titulo: RutasScreen.sinResultados,
-        detalle: switch ((confirmada, lugar, lugarNoDisponible)) {
-          (false, _, _) =>
-            'Ninguna ruta publicada coincide con «$termino». Si es un '
-                'lugar, búscalo como lugar para ver las rutas que arrancan '
-                'ahí.',
-          (true, final lugar?, _) =>
-            'Ninguna ruta publicada coincide con «$termino» ni arranca en '
-                '${lugar.nombreCompleto}.',
-          (true, null, true) =>
-            'Ninguna ruta publicada coincide con «$termino», y no pudimos '
-                'buscarlo como lugar. Revisa tu conexión e inténtalo de '
-                'nuevo.',
-          (true, null, false) =>
-            'Ninguna ruta publicada coincide con «$termino», y no '
-                'encontramos un lugar con ese nombre.',
-        },
-        accion: !confirmada
-            // Lo mismo que la tecla de buscar, para quien no la ve: en el
-            // navegador es Enter.
-            ? OutlinedButton(
-                key: RutasScreen.claveBuscarComoLugar,
-                onPressed: () =>
-                    ref.read(busquedaConfirmadaProvider.notifier).state =
-                        termino,
-                child: const Text('Buscar como lugar'),
-              )
-            : lugarNoDisponible
-            ? OutlinedButton(
-                key: RutasScreen.claveReintentarZona,
-                onPressed: () => ref.invalidate(zonaBuscadaProvider),
-                child: const Text('Reintentar'),
-              )
-            : null,
+      // Vacío y sin nada en camino: de verdad no hay coincidencias. Sale
+      // cuando el usuario termina de escribir, no con cada letra: antes se
+      // ven los resultados de antes o el indicador.
+      AsyncValue(valueOrNull: _?) when !busqueda.isLoading => _SinResultados(
+        termino: termino,
+        confirmada: confirmada,
+        lugar: lugar,
+        lugarNoDisponible: lugarNoDisponible,
       ),
       _ => const Center(child: CircularProgressIndicator()),
     };
+  }
+}
+
+/// La búsqueda no encontró ninguna ruta (SCRUM-257, criterio 4 de HU-30).
+///
+/// Dice que no hay resultados y sugiere revisar lo escrito, con lo que de
+/// verdad hace fallar una búsqueda: cada palabra tiene que ser el comienzo
+/// de una del nombre de la ruta o de quien la publicó (0041), así que una
+/// letra cambiada o una palabra de más dejan la lista vacía.
+///
+/// Aparece sin que el usuario toque nada, cuando termina de escribir, así
+/// que también se le anuncia al lector de pantalla: quien no ve la
+/// pantalla no tendría cómo saber que la lista quedó vacía.
+class _SinResultados extends ConsumerStatefulWidget {
+  const _SinResultados({
+    required this.termino,
+    required this.confirmada,
+    required this.lugar,
+    required this.lugarNoDisponible,
+  });
+
+  final String termino;
+  final bool confirmada;
+
+  /// El lugar que nombra lo escrito, si se confirmó y se encontró.
+  final Zona? lugar;
+
+  /// Se confirmó, pero no se pudo preguntar por el lugar.
+  final bool lugarNoDisponible;
+
+  /// Qué no se encontró y qué hacer.
+  String get detalle {
+    final buscado = 'Ninguna ruta publicada coincide con «$termino»';
+    final lugar = this.lugar;
+    final queNo = switch ((confirmada, lugar, lugarNoDisponible)) {
+      (true, final lugar?, _) =>
+        '$buscado ni arranca en ${lugar.nombreCompleto}.',
+      (true, null, true) => '$buscado, y no pudimos buscarlo como lugar.',
+      (true, null, false) =>
+        '$buscado, y no encontramos un lugar con ese nombre.',
+      (false, _, _) => '$buscado.',
+    };
+
+    // Sin poder preguntar por el lugar, lo que hay que revisar es la
+    // conexión, no lo escrito.
+    if (lugarNoDisponible) {
+      return '$queNo ${RutasScreen.revisaLaConexion}';
+    }
+
+    final variasPalabras = textoParaBuscar(termino).contains(' ');
+    final sugerencia = variasPalabras
+        ? RutasScreen.revisaLoEscritoVariasPalabras
+        : RutasScreen.revisaLoEscrito;
+    final comoLugar = confirmada ? '' : ' ${RutasScreen.buscaloComoLugar}';
+    return '$queNo $sugerencia$comoLugar';
+  }
+
+  @override
+  ConsumerState<_SinResultados> createState() => _SinResultadosState();
+}
+
+class _SinResultadosState extends ConsumerState<_SinResultados> {
+  @override
+  void initState() {
+    super.initState();
+    _anunciarDespuesDelCuadro();
+  }
+
+  @override
+  void didUpdateWidget(_SinResultados anterior) {
+    super.didUpdateWidget(anterior);
+    // Otra búsqueda que tampoco encontró nada: el mensaje cambió.
+    if (anterior.detalle != widget.detalle) _anunciarDespuesDelCuadro();
+  }
+
+  /// Después del cuadro, cuando ya se sabe en qué vista está.
+  void _anunciarDespuesDelCuadro() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        '${RutasScreen.sinResultados}. ${widget.detalle}',
+        Directionality.of(context),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return EstadoVacio(
+      key: RutasScreen.claveSinResultados,
+      icono: Icons.search_off_rounded,
+      titulo: RutasScreen.sinResultados,
+      detalle: widget.detalle,
+      accion: !widget.confirmada
+          // Lo mismo que la tecla de buscar, para quien no la ve: en el
+          // navegador es Enter.
+          ? OutlinedButton(
+              key: RutasScreen.claveBuscarComoLugar,
+              onPressed: () =>
+                  ref.read(busquedaConfirmadaProvider.notifier).state =
+                      widget.termino,
+              child: const Text('Buscar como lugar'),
+            )
+          : widget.lugarNoDisponible
+          ? OutlinedButton(
+              key: RutasScreen.claveReintentarZona,
+              onPressed: () => ref.invalidate(zonaBuscadaProvider),
+              child: const Text('Reintentar'),
+            )
+          : null,
+    );
   }
 }
 

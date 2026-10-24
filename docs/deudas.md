@@ -167,7 +167,7 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 ## SCRUM-259 (HU-35): revisar la clasificación del Runner Experto
 
-**Qué quedó hecho:** la regla de quién puede revisar está en la base: `puede_revisar_clasificacion(ruta_id)` (0042, SCRUM-260) dice que sí a un Runner Experto que no sea el autor de la ruta. La pantalla de revisión (`lib/screens/rutas/revisar_clasificacion_screen.dart`, SCRUM-261) muestra la ruta, su dificultad propuesta y los datos en que se basa, y se abre desde el detalle de la ruta solo para quien puede revisar. El botón de confirmar (SCRUM-262) ya está y llama a `confirmar_clasificacion`; aparece solo si la ruta tiene una dificultad propuesta, así que hoy no se ve.
+**Qué quedó hecho:** la regla de quién puede revisar está en la base: `puede_revisar_clasificacion(ruta_id)` (0042, SCRUM-260) dice que sí a un Runner Experto que no sea el autor de la ruta. La pantalla de revisión (`lib/screens/rutas/revisar_clasificacion_screen.dart`, SCRUM-261) muestra la ruta, su dificultad propuesta y los datos en que se basa, y se abre desde el detalle de la ruta solo para quien puede revisar. Los botones de confirmar (SCRUM-262) y de elegir otra dificultad (SCRUM-263) ya están, y llaman a `confirmar_clasificacion` y a `corregir_clasificacion`; aparecen solo si la ruta tiene una dificultad propuesta, así que hoy no se ven.
 
 **Qué falta, y de quién depende:**
 
@@ -177,5 +177,9 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
   - Si la ruta no tiene dificultad, no hay nada que confirmar: error `22023`.
   - Deja la ruta marcada como revisada, con quién y cuándo, sin cambiar la dificultad. Dónde se guarda eso —columnas nuevas en `rutas` o la fila de `revisiones_ruta` de la etapa `experto` (SCRUM-321)— está por acordar con el equipo.
   - Solo con sesión: quitársela a `public` y a `anon`, y dársela a `authenticated`.
+- **La función `corregir_clasificacion` en la base**, con la misma dependencia. La app la llama así y espera esto:
+  - `corregir_clasificacion(p_ruta_id uuid, p_dificultad text)`, que no devuelve nada. `p_dificultad` llega como `facil`, `moderada` o `dificil`; cualquier otro valor es error `22023`.
+  - Los mismos permisos que `confirmar_clasificacion`: `puede_revisar_clasificacion(p_ruta_id)`, o error `42501`.
+  - Reemplaza `rutas.dificultad` por `p_dificultad` y deja la ruta marcada como revisada, con quién y cuándo, donde se acuerde. Esa es su clasificación definitiva.
 - **Quién propone la dificultad.** HU-35 dice que el experto revisa una dificultad ya propuesta; SCRUM-363 dice que el experto la asigna. Está por decidir con el equipo, y define qué muestra la pantalla como "propuesta".
 - **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en la sección anterior).

@@ -242,11 +242,29 @@ void main() {
     });
 
     testWidgets('en la pantalla más estrecha con el texto más grande no '
-        'desborda', (tester) async {
+        'desborda, y deslizando se llega a todo', (tester) async {
       await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.6);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Subida al Volador'), findsOneWidget);
+      // El pie con sus botones queda fijo; lo de arriba se recorre.
+      final lista = find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      for (final clave in [
+        RevisarClasificacionScreen.claveDificultad,
+        RevisarClasificacionScreen.claveDesnivel,
+      ]) {
+        await tester.scrollUntilVisible(
+          find.byKey(clave),
+          100,
+          scrollable: lista,
+        );
+        expect(find.byKey(clave), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -467,6 +485,237 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(boton().hitTestable(), findsOneWidget);
+    });
+  });
+
+  group('corregir la dificultad (SCRUM-263, criterio 4 de HU-35)', () {
+    Finder elegirOtra() =>
+        find.byKey(RevisarClasificacionScreen.claveElegirOtra);
+    Finder guardar() => find.byKey(RevisarClasificacionScreen.claveGuardar);
+    Finder opcion(Dificultad dificultad) =>
+        find.byKey(RevisarClasificacionScreen.claveOpcion(dificultad));
+
+    Future<void> abrirLaHoja(WidgetTester tester) async {
+      await tester.tap(elegirOtra());
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> elegirYGuardar(
+      WidgetTester tester,
+      Dificultad dificultad,
+    ) async {
+      await abrirLaHoja(tester);
+      await tester.tap(opcion(dificultad));
+      await tester.pumpAndSettle();
+      await tester.tap(guardar());
+    }
+
+    testWidgets('junto a confirmar, ofrece elegir otra dificultad', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      expect(
+        find.descendant(
+          of: elegirOtra(),
+          matching: find.text(RevisarClasificacionScreen.elegirOtra),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sin dificultad propuesta tampoco aparece', (tester) async {
+      repositorio = RutasRepositorioFalso(rutas: [enRevision(dificultad: null)])
+        ..puedeRevisar = true;
+      await montar(tester);
+
+      expect(elegirOtra(), findsNothing);
+    });
+
+    testWidgets('la hoja ofrece las otras dos dificultades, no la propuesta, '
+        'y no deja guardar sin elegir', (tester) async {
+      await montar(tester);
+
+      await abrirLaHoja(tester);
+
+      expect(
+        find.text(RevisarClasificacionScreen.queDificultad),
+        findsOneWidget,
+      );
+      expect(opcion(Dificultad.facil), findsOneWidget);
+      expect(opcion(Dificultad.dificil), findsOneWidget);
+      expect(opcion(Dificultad.moderada), findsNothing);
+      expect(tester.widget<FilledButton>(guardar()).onPressed, isNull);
+      expect(
+        find.descendant(
+          of: guardar(),
+          matching: find.text(RevisarClasificacionScreen.eligeUna),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al elegir una, el botón dice cómo va a quedar', (
+      tester,
+    ) async {
+      await montar(tester);
+      await abrirLaHoja(tester);
+
+      await tester.tap(opcion(Dificultad.dificil));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Guardar como difícil'), findsOneWidget);
+      expect(tester.widget<FilledButton>(guardar()).onPressed, isNotNull);
+    });
+
+    testWidgets('guardar se lo pide a la base con la elegida, avisa y vuelve '
+        'al detalle, que vuelve a pedir la ruta', (tester) async {
+      await montar(tester, ubicacion: DetalleRutaScreen.rutaDe('ruta-1'));
+      await tester.tap(find.byKey(RevisarClasificacionScreen.claveAbrir));
+      await tester.pumpAndSettle();
+      final consultas = repositorio.consultasDeRuta;
+
+      await elegirYGuardar(tester, Dificultad.facil);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.corregidas, [('ruta-1', Dificultad.facil)]);
+      expect(repositorio.confirmadas, isEmpty);
+      expect(
+        find.text(RevisarClasificacionScreen.corregida(Dificultad.facil)),
+        findsOneWidget,
+      );
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+      expect(repositorio.consultasDeRuta, greaterThan(consultas));
+    });
+
+    testWidgets('cerrar la hoja sin guardar no cambia nada', (tester) async {
+      await montar(tester);
+      await abrirLaHoja(tester);
+      await tester.tap(opcion(Dificultad.facil));
+      await tester.pumpAndSettle();
+
+      // Tocar por encima de la hoja la cierra.
+      await tester.tapAt(const Offset(195, 20));
+      await tester.pumpAndSettle();
+
+      expect(guardar(), findsNothing);
+      expect(repositorio.corregidas, isEmpty);
+      expect(
+        find.byKey(RevisarClasificacionScreen.claveDificultad),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('mientras guarda no se puede tocar ningún botón, y se ve cuál '
+        'está guardando', (tester) async {
+      repositorio.correccionPendiente = Completer<void>();
+      await montar(tester);
+
+      await elegirYGuardar(tester, Dificultad.dificil);
+      // Lo que tarda en cerrarse la hoja; el indicador no deja asentar.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(tester.widget<OutlinedButton>(elegirOtra()).onPressed, isNull);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(RevisarClasificacionScreen.claveConfirmar),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        find.descendant(
+          of: elegirOtra(),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      repositorio.correccionPendiente!.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+    });
+
+    testWidgets('si la base ya no lo deja, lo dice y se queda en la '
+        'revisión', (tester) async {
+      repositorio.errorCorregir = const SinPermisoParaRevisarException();
+      await montar(tester);
+
+      await elegirYGuardar(tester, Dificultad.facil);
+      await tester.pumpAndSettle();
+
+      expect(find.text(RevisarClasificacionScreen.yaNoPuedes), findsOneWidget);
+      expect(
+        find.byKey(RevisarClasificacionScreen.claveDificultad),
+        findsOneWidget,
+      );
+      expect(tester.widget<OutlinedButton>(elegirOtra()).onPressed, isNotNull);
+    });
+
+    testWidgets('si falla, lo dice y deja intentarlo otra vez', (tester) async {
+      repositorio.errorCorregir = StateError('sin red');
+      await montar(tester);
+
+      await elegirYGuardar(tester, Dificultad.facil);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(RevisarClasificacionScreen.noSeCorrigio),
+        findsOneWidget,
+      );
+
+      repositorio.errorCorregir = null;
+      await elegirYGuardar(tester, Dificultad.facil);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.corregidas, [
+        ('ruta-1', Dificultad.facil),
+        ('ruta-1', Dificultad.facil),
+      ]);
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+    });
+
+    testWidgets('un lector de pantalla sabe cuál eligió, y que se elige una '
+        'sola', (tester) async {
+      final semantica = tester.ensureSemantics();
+      await montar(tester);
+      await abrirLaHoja(tester);
+
+      await tester.tap(opcion(Dificultad.facil));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(opcion(Dificultad.facil)),
+        isSemantics(
+          label: 'Fácil',
+          isButton: true,
+          isSelected: true,
+          isInMutuallyExclusiveGroup: true,
+        ),
+      );
+      expect(
+        tester.getSemantics(opcion(Dificultad.dificil)),
+        isSemantics(label: 'Difícil', isSelected: false),
+      );
+      semantica.dispose();
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto más grande, ni el '
+        'pie ni la hoja desbordan', (tester) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.6);
+      expect(tester.takeException(), isNull);
+      expect(elegirOtra().hitTestable(), findsOneWidget);
+
+      await abrirLaHoja(tester);
+      await tester.tap(opcion(Dificultad.facil));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(guardar());
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(guardar().hitTestable(), findsOneWidget);
     });
   });
 }

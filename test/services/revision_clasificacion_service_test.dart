@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/services/rutas_service.dart';
 
 /// Pruebas de la pregunta "¿puedo revisar la clasificación de esta ruta?"
@@ -112,6 +113,60 @@ void main() {
 
       await expectLater(
         supabase.repositorio.confirmarClasificacion('ruta-1'),
+        throwsA(isA<SesionRequeridaParaRutasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
+
+  group('corregir la dificultad (SCRUM-263)', () {
+    test('se lo pide a corregir_clasificacion, con la ruta y la nueva '
+        'dificultad como la guarda la base', () async {
+      final supabase = _SupabaseFalso();
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.corregirClasificacion(
+        'ruta-1',
+        Dificultad.dificil,
+      );
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/corregir_clasificacion');
+      expect(jsonDecode(peticion.body), {
+        'p_ruta_id': 'ruta-1',
+        'p_dificultad': 'dificil',
+      });
+    });
+
+    test('si la base no lo deja, es falta de permiso', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        supabase.repositorio.corregirClasificacion('ruta-1', Dificultad.facil),
+        throwsA(isA<SinPermisoParaRevisarException>()),
+      );
+    });
+
+    test('cualquier otro error llega tal cual', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: '22023');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        supabase.repositorio.corregirClasificacion('ruta-1', Dificultad.facil),
+        throwsA(
+          isA<PostgrestException>().having((e) => e.code, 'code', '22023'),
+        ),
+      );
+    });
+
+    test('sin sesión no sale ninguna petición', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.corregirClasificacion('ruta-1', Dificultad.facil),
         throwsA(isA<SesionRequeridaParaRutasException>()),
       );
       expect(supabase.peticiones, isEmpty);

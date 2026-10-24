@@ -180,6 +180,27 @@ class RutasRepositorioFalso implements RutasRepository {
     await confirmacionPendiente?.future;
   }
 
+  /// Las correcciones de la clasificación que llegaron, en orden (SCRUM-263).
+  final corregidas = <(String, Dificultad)>[];
+
+  /// Lo que lanza `corregirClasificacion`, si algo.
+  Object? errorCorregir;
+
+  /// Si está, `corregirClasificacion` no termina hasta que la prueba lo
+  /// complete.
+  Completer<void>? correccionPendiente;
+
+  @override
+  Future<void> corregirClasificacion(
+    String rutaId,
+    Dificultad dificultad,
+  ) async {
+    corregidas.add((rutaId, dificultad));
+    final error = errorCorregir;
+    if (error != null) throw error;
+    await correccionPendiente?.future;
+  }
+
   /// Cuántas veces se pidió una ruta con su trazado.
   int consultasDeRuta = 0;
 

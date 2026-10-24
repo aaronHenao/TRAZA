@@ -28,8 +28,8 @@ import '../../widgets/traza_top_bar.dart';
 ///
 /// Enseña la ruta —por dónde va, cómo se llama y de quién es—, la
 /// dificultad propuesta y los datos en que se basa: la distancia y el
-/// desnivel acumulado (criterio 2). Al final deja confirmarla (SCRUM-262,
-/// criterio 3); corregirla viene en la subtarea que sigue.
+/// desnivel acumulado (criterio 2). Al pie deja confirmarla (SCRUM-262,
+/// criterio 3) o elegir otra (SCRUM-263, criterio 4).
 ///
 /// Solo la ve quien la base dice que puede (`puede_revisar_clasificacion`,
 /// 0042, criterio 1): un Runner Experto que no sea el autor. A los demás se
@@ -54,6 +54,12 @@ class RevisarClasificacionScreen extends ConsumerWidget {
   static const claveError = Key('revisar-clasificacion-error');
   static const claveReintentar = Key('revisar-clasificacion-reintentar');
   static const claveConfirmar = Key('revisar-clasificacion-confirmar');
+  static const claveElegirOtra = Key('revisar-clasificacion-elegir-otra');
+  static const claveGuardar = Key('revisar-clasificacion-guardar');
+
+  /// Una dificultad en la hoja de elegir otra (SCRUM-263).
+  static Key claveOpcion(Dificultad dificultad) =>
+      Key('revisar-clasificacion-opcion-${dificultad.name}');
 
   static const rotuloDificultad = 'DIFICULTAD PROPUESTA';
   static const rotuloDatos = 'EN QUÉ SE BASA';
@@ -77,6 +83,20 @@ class RevisarClasificacionScreen extends ConsumerWidget {
   static const yaNoPuedes = 'Ya no puedes revisar esta ruta.';
   static const noSeConfirmo =
       'No pudimos confirmar la dificultad. Inténtalo de nuevo.';
+
+  /// Elegir otra dificultad (SCRUM-263).
+  static const elegirOtra = 'Elegir otra dificultad';
+  static const queDificultad = '¿Qué dificultad tiene?';
+  static String reemplazaLaPropuesta(Dificultad propuesta) =>
+      'La que elijas reemplaza a «${propuesta.etiqueta}» y queda como la '
+      'clasificación de la ruta.';
+  static const eligeUna = 'Elige una dificultad';
+  static String guardarComo(Dificultad dificultad) =>
+      'Guardar como ${dificultad.etiqueta.toLowerCase()}';
+  static String corregida(Dificultad dificultad) =>
+      'La ruta quedó clasificada como ${dificultad.etiqueta.toLowerCase()}.';
+  static const noSeCorrigio =
+      'No pudimos guardar la dificultad. Inténtalo de nuevo.';
 
   static const sinPermisoTitulo = 'No puedes revisar esta clasificación';
   static const sinPermisoDetalle =
@@ -171,9 +191,10 @@ class _Contenido extends StatelessWidget {
     return Column(
       children: [
         Expanded(child: _datos(fecha)),
-        // Sin dificultad propuesta no hay nada que confirmar.
+        // Sin dificultad propuesta no hay nada que confirmar ni que
+        // corregir.
         if (dificultad != null)
-          _Confirmar(rutaId: ruta.id, dificultad: dificultad),
+          _Acciones(rutaId: ruta.id, propuesta: dificultad),
       ],
     );
   }
@@ -224,43 +245,74 @@ class _Contenido extends StatelessWidget {
   }
 }
 
-/// Confirmar la dificultad propuesta (SCRUM-262, criterio 3 de HU-35): la
-/// ruta queda revisada y su dificultad, a la vista de todos.
+/// Las dos salidas de la revisión: confirmar la dificultad propuesta
+/// (SCRUM-262, criterio 3 de HU-35) o elegir otra (SCRUM-263, criterio 4).
+/// Las dos dejan la ruta revisada y su dificultad, a la vista de todos.
 ///
-/// Va fijo al pie, como el botón de publicar una ruta: siempre a mano,
+/// Van fijas al pie, como el botón de publicar una ruta: siempre a mano,
 /// aunque los datos no quepan en la pantalla, y los avisos suben para no
-/// taparlo. Mientras se guarda no se puede volver a tocar, para que un doble
-/// toque no mande dos confirmaciones. Si sale bien, avisa y vuelve al detalle
-/// de la ruta, ya al día; si no, lo dice y deja intentarlo otra vez.
-class _Confirmar extends ConsumerStatefulWidget {
-  const _Confirmar({required this.rutaId, required this.dificultad});
+/// taparlas. Mientras se guarda no se puede tocar ninguna, para que un doble
+/// toque no mande dos revisiones. Si sale bien, avisa y vuelve al detalle de
+/// la ruta, ya al día; si no, lo dice y deja intentarlo otra vez.
+class _Acciones extends ConsumerStatefulWidget {
+  const _Acciones({required this.rutaId, required this.propuesta});
 
   final String rutaId;
-  final Dificultad dificultad;
+  final Dificultad propuesta;
 
   @override
-  ConsumerState<_Confirmar> createState() => _ConfirmarState();
+  ConsumerState<_Acciones> createState() => _AccionesState();
 }
 
-class _ConfirmarState extends ConsumerState<_Confirmar> {
-  var _guardando = false;
+/// Lo que se está guardando.
+enum _Revision { confirmar, corregir }
 
-  Future<void> _confirmar() async {
-    setState(() => _guardando = true);
+class _AccionesState extends ConsumerState<_Acciones> {
+  _Revision? _guardando;
+
+  Future<void> _confirmar() => _guardar(
+    _Revision.confirmar,
+    (rutas) => rutas.confirmarClasificacion(widget.rutaId),
+    exito: RevisarClasificacionScreen.confirmada(widget.propuesta),
+    fallo: RevisarClasificacionScreen.noSeConfirmo,
+  );
+
+  Future<void> _elegirOtra() async {
+    final elegida = await showModalBottomSheet<Dificultad>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ElegirOtra(propuesta: widget.propuesta),
+    );
+    if (elegida == null || !mounted) return;
+
+    await _guardar(
+      _Revision.corregir,
+      (rutas) => rutas.corregirClasificacion(widget.rutaId, elegida),
+      exito: RevisarClasificacionScreen.corregida(elegida),
+      fallo: RevisarClasificacionScreen.noSeCorrigio,
+    );
+  }
+
+  Future<void> _guardar(
+    _Revision revision,
+    Future<void> Function(RutasRepository rutas) accion, {
+    required String exito,
+    required String fallo,
+  }) async {
+    setState(() => _guardando = revision);
     try {
-      await ref
-          .read(rutasRepositoryProvider)
-          .confirmarClasificacion(widget.rutaId);
+      await accion(ref.read(rutasRepositoryProvider));
     } catch (error) {
       if (!mounted) return;
-      setState(() => _guardando = false);
+      setState(() => _guardando = null);
       mostrarToast(
         context,
         error is SinPermisoParaRevisarException
             ? RevisarClasificacionScreen.yaNoPuedes
-            : RevisarClasificacionScreen.noSeConfirmo,
-        // Por encima del pie: si no, taparía el botón para reintentar.
-        separacionInferior: 90,
+            : fallo,
+        // Por encima del pie y sus dos botones: si no, taparía el de
+        // reintentar.
+        separacionInferior: 150,
       );
       return;
     }
@@ -270,15 +322,14 @@ class _ConfirmarState extends ConsumerState<_Confirmar> {
     ref
       ..invalidate(rutaProvider(widget.rutaId))
       ..invalidate(puedeRevisarClasificacionProvider(widget.rutaId));
-    mostrarToast(
-      context,
-      RevisarClasificacionScreen.confirmada(widget.dificultad),
-    );
+    mostrarToast(context, exito);
     context.pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final libre = _guardando == null;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -290,20 +341,175 @@ class _ConfirmarState extends ConsumerState<_Confirmar> {
         color: AppColors.bg,
         border: Border(top: BorderSide(color: AppColors.line)),
       ),
-      child: FilledButton(
-        key: RevisarClasificacionScreen.claveConfirmar,
-        onPressed: _guardando ? null : _confirmar,
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        child: _guardando
-            ? const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                  semanticsLabel: 'Guardando',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton(
+            key: RevisarClasificacionScreen.claveConfirmar,
+            onPressed: libre ? _confirmar : null,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: _guardando == _Revision.confirmar
+                ? const _Guardando(color: Colors.white)
+                : Text(
+                    RevisarClasificacionScreen.confirmarComo(widget.propuesta),
+                  ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          OutlinedButton(
+            key: RevisarClasificacionScreen.claveElegirOtra,
+            onPressed: libre ? _elegirOtra : null,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: _guardando == _Revision.corregir
+                ? const _Guardando()
+                : const Text(RevisarClasificacionScreen.elegirOtra),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El indicador dentro del botón que está guardando.
+class _Guardando extends StatelessWidget {
+  const _Guardando({this.color});
+
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 20,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: color,
+        semanticsLabel: 'Guardando',
+      ),
+    );
+  }
+}
+
+/// La hoja para elegir otra dificultad (SCRUM-263): las dos que no son la
+/// propuesta, y el botón para guardar la elegida.
+///
+/// Elegir y guardar son dos pasos a propósito: lo que se guarda queda como
+/// la clasificación definitiva de la ruta, y un toque de más no debería
+/// decidirla. Devuelve la elegida, o null si se cierra sin guardar.
+class _ElegirOtra extends StatefulWidget {
+  const _ElegirOtra({required this.propuesta});
+
+  final Dificultad propuesta;
+
+  @override
+  State<_ElegirOtra> createState() => _ElegirOtraState();
+}
+
+class _ElegirOtraState extends State<_ElegirOtra> {
+  Dificultad? _elegida;
+
+  @override
+  Widget build(BuildContext context) {
+    final elegida = _elegida;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              RevisarClasificacionScreen.queDificultad,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              RevisarClasificacionScreen.reemplazaLaPropuesta(widget.propuesta),
+              style: const TextStyle(fontSize: 13, color: AppColors.ink2),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            for (final dificultad in Dificultad.values)
+              if (dificultad != widget.propuesta) ...[
+                _Opcion(
+                  dificultad: dificultad,
+                  elegida: dificultad == elegida,
+                  onTap: () => setState(() => _elegida = dificultad),
                 ),
-              )
-            : Text(RevisarClasificacionScreen.confirmarComo(widget.dificultad)),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+            const SizedBox(height: AppSpacing.sm),
+            FilledButton(
+              key: RevisarClasificacionScreen.claveGuardar,
+              onPressed: elegida == null
+                  ? null
+                  : () => Navigator.of(context).pop(elegida),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: Text(
+                elegida == null
+                    ? RevisarClasificacionScreen.eligeUna
+                    : RevisarClasificacionScreen.guardarComo(elegida),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Una dificultad para elegir en la hoja. El lector de pantalla sabe cuál
+/// está elegida, y que se elige una sola.
+class _Opcion extends StatelessWidget {
+  const _Opcion({
+    required this.dificultad,
+    required this.elegida,
+    required this.onTap,
+  });
+
+  final Dificultad dificultad;
+  final bool elegida;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      key: RevisarClasificacionScreen.claveOpcion(dificultad),
+      button: true,
+      selected: elegida,
+      inMutuallyExclusiveGroup: true,
+      child: TrazaCard(
+        seleccionada: elegida,
+        onTap: onTap,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              elegida
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: elegida ? AppColors.primary : AppColors.ink3,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              dificultad.etiqueta,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -442,7 +648,13 @@ class _Rotulo extends StatelessWidget {
   }
 }
 
-/// El trazado sobre el mapa, como en el detalle de la ruta.
+/// El trazado sobre el mapa, como en el detalle de la ruta, pero quieto.
+///
+/// Aquí el mapa es para ubicar la ruta: lo que se revisa son los datos de
+/// abajo. Si se pudiera mover, arrastrar sobre él lo movería en vez de
+/// deslizar la pantalla, y en un teléfono pequeño con el texto grande, donde
+/// el mapa ocupa todo lo que se ve, no habría cómo llegar a los datos. Para
+/// recorrerlo está el detalle.
 class _Mapa extends StatelessWidget {
   const _Mapa({required this.trazado});
 
@@ -467,7 +679,7 @@ class _Mapa extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: SizedBox(
-        height: 200,
+        height: 160,
         child: trazado.isEmpty
             ? const DecoratedBox(
                 decoration: BoxDecoration(gradient: trazaTrackingGradient),
@@ -478,7 +690,7 @@ class _Mapa extends StatelessWidget {
                   ),
                 ),
               )
-            : MapaTrayecto(puntos: _paraElMapa(trazado)),
+            : IgnorePointer(child: MapaTrayecto(puntos: _paraElMapa(trazado))),
       ),
     );
   }

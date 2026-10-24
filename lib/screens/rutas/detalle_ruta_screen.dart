@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/punto_gps.dart';
 import '../../models/ruta.dart';
 import '../../services/reloj_provider.dart';
+import '../../services/revision_clasificacion_provider.dart';
 import '../../services/rutas_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -17,6 +18,7 @@ import '../../widgets/tarjeta_reto.dart' show TarjetaReto;
 import '../../widgets/tarjeta_ruta.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_top_bar.dart';
+import 'revisar_clasificacion_screen.dart';
 
 /// El detalle de una ruta de la comunidad (SCRUM-240).
 ///
@@ -151,6 +153,7 @@ class _Contenido extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         _Distancia(ruta: ruta),
+        _RevisarClasificacion(rutaId: ruta.id),
         if (descripcion != null && descripcion.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
           const Text(
@@ -233,6 +236,32 @@ class _Distancia extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// La entrada a revisar la clasificación de la ruta (SCRUM-261), solo para
+/// quien la base dice que puede: un Runner Experto que no es su autor
+/// (0042). A los demás no se les muestra nada, ni mientras se pregunta.
+class _RevisarClasificacion extends ConsumerWidget {
+  const _RevisarClasificacion({required this.rutaId});
+
+  final String rutaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final puede = ref.watch(puedeRevisarClasificacionProvider(rutaId));
+    if (puede.valueOrNull != true) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: OutlinedButton.icon(
+        key: RevisarClasificacionScreen.claveAbrir,
+        onPressed: () =>
+            context.push(RevisarClasificacionScreen.rutaDe(rutaId)),
+        icon: const Icon(Icons.fact_check_outlined),
+        label: const Text(RevisarClasificacionScreen.titulo),
       ),
     );
   }

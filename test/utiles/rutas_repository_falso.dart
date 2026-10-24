@@ -142,6 +142,24 @@ class RutasRepositorioFalso implements RutasRepository {
     ];
   }
 
+  /// Lo que contesta `puedeRevisarClasificacion` (SCRUM-261). Por defecto,
+  /// que no: así es para casi todos los usuarios.
+  bool puedeRevisar = false;
+
+  /// Lo que lanza `puedeRevisarClasificacion`, si algo.
+  Object? errorPermisoRevision;
+
+  /// Las rutas por las que se preguntó si se podían revisar.
+  final permisosDeRevision = <String>[];
+
+  @override
+  Future<bool> puedeRevisarClasificacion(String rutaId) async {
+    permisosDeRevision.add(rutaId);
+    final error = errorPermisoRevision;
+    if (error != null) throw error;
+    return puedeRevisar;
+  }
+
   @override
   Future<Ruta?> ruta(String id) async {
     final error = this.error;

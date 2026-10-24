@@ -144,6 +144,11 @@ abstract interface class RutasRepository {
     double? longitud,
     Zona? zona,
   });
+
+  /// Si quien tiene la sesión abierta puede revisar la clasificación de la
+  /// ruta [rutaId] (SCRUM-261): es Runner Experto y no es su autor. Lo
+  /// decide la base, con `puede_revisar_clasificacion` (0042).
+  Future<bool> puedeRevisarClasificacion(String rutaId);
 }
 
 /// Lee y escribe en `rutas`.
@@ -354,5 +359,24 @@ class SupabaseRutasRepository implements RutasRepository {
       for (final fila in filas)
         Ruta.desdeSupabase(Map<String, dynamic>.from(fila as Map)),
     ];
+  }
+
+  @override
+  Future<bool> puedeRevisarClasificacion(String rutaId) async {
+    _usuarioId();
+
+    // Una función que devuelve un solo valor llega como ese valor, sin
+    // filas alrededor.
+    final puede = await _cliente.rpc<dynamic>(
+      'puede_revisar_clasificacion',
+      params: {'p_ruta_id': rutaId},
+    );
+    if (puede is! bool) {
+      throw FormatException(
+        'puede_revisar_clasificacion devolvió algo inesperado',
+        puede,
+      );
+    }
+    return puede;
   }
 }

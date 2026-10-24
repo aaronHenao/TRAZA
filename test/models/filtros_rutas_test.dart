@@ -120,16 +120,19 @@ void main() {
   });
 
   test('dos filtros con lo mismo elegido son iguales', () {
-    expect(
-      const FiltrosRutas(
-        dificultad: Dificultad.facil,
-        distancia: RangoDistancia.de5a10,
-      ),
-      const FiltrosRutas(
-        dificultad: Dificultad.facil,
-        distancia: RangoDistancia.de5a10,
-      ),
+    // No `const`: dos objetos distintos con lo mismo adentro.
+    final uno = FiltrosRutas(
+      dificultad: Dificultad.values[0],
+      distancia: RangoDistancia.de5a10,
     );
+    final otro = FiltrosRutas(
+      dificultad: Dificultad.values[0],
+      distancia: RangoDistancia.de5a10,
+    );
+
+    expect(identical(uno, otro), isFalse);
+    expect(uno, otro);
+    expect(uno.hashCode, otro.hashCode);
     expect(
       const FiltrosRutas(dificultad: Dificultad.facil),
       isNot(const FiltrosRutas(distancia: RangoDistancia.menosDe5)),

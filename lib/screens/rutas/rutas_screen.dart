@@ -842,8 +842,11 @@ class _FiltroDificultad extends ConsumerWidget {
             key: RutasScreen.claveDificultad(dificultad),
             texto: dificultad?.etiqueta ?? RutasScreen.todasLasDificultades,
             activo: dificultad == elegida,
-            onTap: () => ref.read(dificultadRutasProvider.notifier).state =
-                dificultad == elegida ? null : dificultad,
+            onTap: () {
+              _cerrarTeclado();
+              ref.read(dificultadRutasProvider.notifier).state =
+                  dificultad == elegida ? null : dificultad;
+            },
           ),
       ],
     );
@@ -873,13 +876,24 @@ class _FiltroDistancia extends ConsumerWidget {
             key: RutasScreen.claveRango(rango),
             texto: rango.etiqueta,
             activo: rango == elegido,
-            onTap: () => ref.read(rangoDistanciaProvider.notifier).state =
-                rango == elegido ? null : rango,
+            onTap: () {
+              _cerrarTeclado();
+              ref.read(rangoDistanciaProvider.notifier).state = rango == elegido
+                  ? null
+                  : rango;
+            },
           ),
       ],
     );
   }
 }
+
+/// Esconde el teclado de la búsqueda al elegir un filtro (SCRUM-269).
+///
+/// La búsqueda y los filtros se aplican juntos (criterio 4 de HU-36): lo
+/// escrito se queda, y lo que sigue es mirar los resultados filtrados, que
+/// el teclado taparía hasta la mitad.
+void _cerrarTeclado() => FocusManager.instance.primaryFocus?.unfocus();
 
 /// Una fila de chips de filtro en una sola línea, que se desliza de lado
 /// cuando no cabe (SCRUM-267), como la fila de chips del prototipo

@@ -2905,4 +2905,200 @@ void main() {
       expect(find.byType(AvisoPermisoUbicacion), findsOneWidget);
     });
   });
+
+  group('combinar filtro y búsqueda (SCRUM-269, criterio 4 de HU-36)', () {
+    final facilCorta = rutaDePrueba(
+      id: 'facil-corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+      dificultad: Dificultad.facil,
+    );
+    final moderadaMedia = rutaDePrueba(
+      id: 'moderada-media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+      dificultad: Dificultad.moderada,
+    );
+    final facilLarga = rutaDePrueba(
+      id: 'facil-larga',
+      nombre: 'Vuelta a Santa Elena',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 15,
+      dificultad: Dificultad.facil,
+    );
+    final sinClasificar = rutaDePrueba(
+      id: 'sin-clasificar',
+      nombre: 'Vuelta a la manzana',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 4.1,
+    );
+    final dificilCorta = rutaDePrueba(
+      id: 'dificil-corta',
+      nombre: 'Escaleras de la 70',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 2.1,
+      dificultad: Dificultad.dificil,
+    );
+    final todas = [
+      facilCorta,
+      moderadaMedia,
+      facilLarga,
+      sinClasificar,
+      dificilCorta,
+    ];
+
+    // Alta para que la lista construya todas las tarjetas.
+    const alta = Size(390, 2600);
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: todas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in todas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: 0.5 + i),
+        ];
+    });
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.id,
+    ];
+
+    Future<void> buscar(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    /// El campo de la búsqueda: lo que tiene escrito y si tiene el foco.
+    EditableText campo(WidgetTester tester) => tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(RutasScreen.claveBusqueda),
+        matching: find.byType(EditableText),
+      ),
+    );
+
+    testWidgets('con una búsqueda hecha, elegir una dificultad deja solo los '
+        'resultados que además la tienen, sin buscar otra vez ni borrar lo '
+        'escrito', (tester) async {
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'vuelta');
+      expect(enPantalla(tester), [
+        'facil-corta',
+        'facil-larga',
+        'sin-clasificar',
+      ]);
+      final busquedas = repositorio.busquedas.length;
+
+      await elegirDificultad(tester, Dificultad.facil);
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+      expect(campo(tester).controller.text, 'vuelta');
+      expect(repositorio.busquedas, hasLength(busquedas));
+    });
+
+    testWidgets('con una dificultad elegida, buscar muestra solo los '
+        'resultados que además la tienen, y la dificultad sigue elegida', (
+      tester,
+    ) async {
+      await montar(tester, tamano: alta);
+      await elegirDificultad(tester, Dificultad.facil);
+
+      await buscar(tester, 'vuelta');
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+      expect(dificultadElegida(tester), Dificultad.facil);
+    });
+
+    testWidgets('cambiar lo buscado no quita la dificultad, y cambiar la '
+        'dificultad no cambia lo buscado', (tester) async {
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'vuelta');
+      await elegirDificultad(tester, Dificultad.facil);
+
+      await buscar(tester, 'subida');
+      // La búsqueda sí encontró una, pero no es fácil: la deja fuera el
+      // filtro, y eso es lo que se dice.
+      expect(dificultadElegida(tester), Dificultad.facil);
+      expect(find.text('Ninguna ruta fácil'), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveSinResultados), findsNothing);
+
+      await elegirDificultad(tester, Dificultad.moderada);
+      expect(enPantalla(tester), ['moderada-media']);
+      expect(campo(tester).controller.text, 'subida');
+    });
+
+    testWidgets('también con la búsqueda por lugar: el filtro se aplica a las '
+        'que arrancan ahí', (tester) async {
+      repositorio.rutasEnZona = [dificilCorta, facilLarga];
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'envigado');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
+      expect(enPantalla(tester), ['dificil-corta', 'facil-larga']);
+
+      await elegirDificultad(tester, Dificultad.dificil);
+
+      expect(enPantalla(tester), ['dificil-corta']);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
+      expect(repositorio.busquedas.last.zona, envigado);
+    });
+
+    testWidgets('«Todas» devuelve todos los resultados de la búsqueda, sin '
+        'buscar otra vez', (tester) async {
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'vuelta');
+      await elegirDificultad(tester, Dificultad.facil);
+      final busquedas = repositorio.busquedas.length;
+
+      await elegirDificultad(tester, null);
+
+      expect(enPantalla(tester), [
+        'facil-corta',
+        'facil-larga',
+        'sin-clasificar',
+      ]);
+      expect(repositorio.busquedas, hasLength(busquedas));
+    });
+
+    testWidgets('si la búsqueda no encuentra nada, lo dice la búsqueda aunque '
+        'haya una dificultad elegida', (tester) async {
+      await montar(tester);
+      await elegirDificultad(tester, Dificultad.facil);
+
+      await buscar(tester, 'zzz');
+
+      expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsNothing);
+    });
+
+    testWidgets('elegir un filtro mientras se escribe esconde el teclado para '
+        'ver los resultados, sin perder lo escrito', (tester) async {
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'vuelta');
+      expect(campo(tester).focusNode.hasFocus, isTrue);
+
+      await elegirDificultad(tester, Dificultad.facil);
+
+      expect(campo(tester).focusNode.hasFocus, isFalse);
+      expect(campo(tester).controller.text, 'vuelta');
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+
+      // Lo mismo con un rango de distancia.
+      await tester.tap(find.byKey(RutasScreen.claveBusqueda));
+      await tester.pumpAndSettle();
+      expect(campo(tester).focusNode.hasFocus, isTrue);
+
+      await tocarChip(tester, RutasScreen.claveRango(RangoDistancia.menosDe5));
+
+      expect(campo(tester).focusNode.hasFocus, isFalse);
+      expect(enPantalla(tester), ['facil-corta']);
+    });
+  });
 }

@@ -33,6 +33,17 @@ class RutasRepositorioFalso implements RutasRepository {
   int consultasCercanas = 0;
   int consultasPublicadas = 0;
 
+  /// Lo que devuelve `buscar` (SCRUM-254). Sin esto, las publicadas cuyo
+  /// nombre o creador contienen lo buscado, sin mirar mayúsculas.
+  List<Ruta>? resultadosBusqueda;
+
+  /// Lo que lanza `buscar`, si algo. Va aparte de [error] para que pueda
+  /// fallar la búsqueda sin que falle la lista de siempre.
+  Object? errorBusqueda;
+
+  /// Cada búsqueda que llegó: qué se buscó y desde dónde.
+  final busquedas = <({String termino, double? latitud, double? longitud})>[];
+
   @override
   Future<Ruta> crear(NuevaRuta ruta) async {
     recibida = ruta;
@@ -84,6 +95,29 @@ class RutasRepositorioFalso implements RutasRepository {
   }
 
   @override
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+  }) async {
+    busquedas.add((termino: termino, latitud: latitud, longitud: longitud));
+
+    final error = errorBusqueda;
+    if (error != null) throw error;
+
+    final buscado = termino.toLowerCase();
+    return resultadosBusqueda ??
+        [
+          for (final ruta in rutas)
+            if (ruta.publicada &&
+                '${ruta.nombre} ${ruta.autorNombre}'.toLowerCase().contains(
+                  buscado,
+                ))
+              ruta,
+        ];
+  }
+
+  @override
   Future<Ruta?> ruta(String id) async {
     final error = this.error;
     if (error != null) throw error;
@@ -101,6 +135,7 @@ class RutasRepositorioFalso implements RutasRepository {
 Ruta rutaDePrueba({
   String id = 'ruta-1',
   String nombre = 'Vuelta al estadio',
+  String autorNombre = 'Ana',
   String? descripcion,
   String? entrenamientoId = 'e-123',
   EstadoRuta estado = EstadoRuta.enRevision,
@@ -111,7 +146,7 @@ Ruta rutaDePrueba({
 }) => Ruta(
   id: id,
   autorId: 'usuario-1',
-  autorNombre: 'Ana',
+  autorNombre: autorNombre,
   nombre: nombre,
   descripcion: descripcion,
   entrenamientoId: entrenamientoId,

@@ -14,6 +14,7 @@ import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
 import 'package:traza/screens/rutas/publicar_ruta_screen.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
 import 'package:traza/screens/rutas/seccion_rutas.dart';
+import 'package:traza/services/busqueda_rutas_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
@@ -61,6 +62,28 @@ class _DetalleLento extends RutasRepositorioFalso {
 
   @override
   Future<Ruta?> ruta(String id) => espera.future;
+}
+
+/// Búsquedas que no responden mientras la prueba tenga una [pendiente]
+/// (SCRUM-254).
+class _BusquedaLenta extends RutasRepositorioFalso {
+  _BusquedaLenta({super.rutas});
+
+  Completer<List<Ruta>>? pendiente;
+
+  @override
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+  }) async {
+    final enseguida = await super.buscar(
+      termino: termino,
+      latitud: latitud,
+      longitud: longitud,
+    );
+    return pendiente?.future ?? enseguida;
+  }
 }
 
 /// Pruebas de Explorar rutas, la sección de Rutas (SCRUM-246).
@@ -893,6 +916,262 @@ void main() {
 
       expect(find.byType(PublicarRutaScreen), findsOneWidget);
       expect(find.byType(DetalleRutaScreen), findsNothing);
+    });
+  });
+
+  group('la barra de búsqueda (SCRUM-254)', () {
+    /// Escribe en la barra y deja pasar la espera y la consulta.
+    Future<void> buscar(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    /// Los nombres de las rutas a la vista, de arriba abajo.
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.nombre,
+    ];
+
+    testWidgets('va encima de la lista y dice qué se puede buscar', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      expect(find.text(RutasScreen.pistaBusqueda), findsOneWidget);
+      expect(
+        tester.getBottomLeft(find.byKey(RutasScreen.claveBusqueda)).dy,
+        lessThanOrEqualTo(altoDe(tester, RutasScreen.rotuloCercania)),
+      );
+      // Nombres de lugares y de personas: sin corrector que los cambie.
+      expect(
+        tester
+            .widget<TextField>(find.byKey(RutasScreen.claveBusqueda))
+            .autocorrect,
+        isFalse,
+      );
+    });
+
+    testWidgets('al escribir, la lista muestra lo que coincide, con las '
+        'mismas tarjetas', (tester) async {
+      await montar(tester);
+
+      await buscar(tester, 'nutibara');
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(find.text(RutasScreen.rotuloCercania), findsNothing);
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+      // La tarjeta de lado de la lista de siempre, con sus datos.
+      expect(
+        tester
+            .widget<TarjetaRutaExplorar>(find.byType(TarjetaRutaExplorar))
+            .compacta,
+        isFalse,
+      );
+      expect(find.text('12.4 km'), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveResultados), findsOneWidget);
+    });
+
+    testWidgets('también encuentra por quien creó la ruta', (tester) async {
+      repositorio = RutasRepositorioFalso(
+        rutas: [
+          vuelta,
+          subida,
+          rutaDePrueba(
+            id: 'r-3',
+            nombre: 'Loma de Envigado',
+            autorNombre: 'Luis',
+            estado: EstadoRuta.publicada,
+            fechaPublicacion: DateTime(2026, 10, 16, 9),
+          ),
+        ],
+      );
+      await montar(tester);
+
+      await buscar(tester, 'luis');
+
+      expect(enPantalla(tester), ['Loma de Envigado']);
+      expect(find.text('Por Luis'), findsOneWidget);
+    });
+
+    testWidgets('con una sola letra siguen las cercanas y no consulta', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await buscar(tester, 'n');
+
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+      expect(repositorio.busquedas, isEmpty);
+    });
+
+    testWidgets('espera a que termine de escribir: sale una sola consulta', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      for (final texto in ['nu', 'nuti', 'nutibara']) {
+        await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+        // Un cuadro, como en el teléfono, y la siguiente letra a los 100 ms.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect([for (final b in repositorio.busquedas) b.termino], ['nutibara']);
+    });
+
+    testWidgets('con la ubicación, pide los resultados ordenados desde donde '
+        'está el usuario', (tester) async {
+      await montar(tester);
+
+      await buscar(tester, 'nutibara');
+
+      expect(repositorio.busquedas.single.latitud, 6.2442);
+      expect(repositorio.busquedas.single.longitud, -75.5812);
+    });
+
+    testWidgets('sin el permiso busca igual, y su aviso no se mete entre los '
+        'resultados', (tester) async {
+      await montar(tester, ubicacion: EstadoPermiso.denegado);
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsOneWidget);
+
+      await buscar(tester, 'nutibara');
+
+      expect(repositorio.busquedas.single.latitud, isNull);
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+      expect(find.byKey(AvisoPermisoUbicacion.clave), findsNothing);
+    });
+
+    testWidgets('al borrar lo escrito vuelven las cercanas al instante, sin '
+        'consultarlas otra vez', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'nutibara');
+
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), '');
+      await tester.pump();
+
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      expect(enPantalla(tester), ['Subida al Nutibara', 'Vuelta al estadio']);
+      expect(repositorio.consultasCercanas, 1);
+    });
+
+    testWidgets('tocar un resultado abre su detalle, y al volver la búsqueda '
+        'sigue ahí', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'nutibara');
+
+      await tester.tap(find.byKey(TarjetaRutaExplorar.claveDe('r-2')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<DetalleRutaScreen>(find.byType(DetalleRutaScreen)).rutaId,
+        'r-2',
+      );
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(find.text('nutibara'), findsOneWidget);
+      expect(repositorio.busquedas, hasLength(1));
+    });
+
+    testWidgets('si la búsqueda falla lo dice, y "Reintentar" la repite', (
+      tester,
+    ) async {
+      repositorio.errorBusqueda = StateError('sin red');
+      await montar(tester);
+
+      await buscar(tester, 'nutibara');
+
+      expect(find.byKey(RutasScreen.claveError), findsOneWidget);
+      expect(find.text(RutasScreen.errorDeConexion), findsOneWidget);
+
+      repositorio.errorBusqueda = null;
+      await tester.tap(find.byKey(RutasScreen.claveReintentar));
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+    });
+
+    testWidgets('mientras llega lo de la última letra se quedan los '
+        'resultados de antes', (tester) async {
+      final lenta = _BusquedaLenta(rutas: [vuelta, subida])
+        ..rutasCercanas = repositorio.rutasCercanas;
+      await montar(tester, rutas: lenta);
+      await buscar(tester, 'nutibara');
+
+      final pendiente = lenta.pendiente = Completer();
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), 'nutibar');
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pump();
+
+      // Los de antes siguen, con el indicador junto al rótulo.
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+      expect(find.byKey(RutasScreen.claveBuscando), findsOneWidget);
+
+      pendiente.complete([subida]);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(RutasScreen.claveBuscando), findsNothing);
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+    });
+
+    testWidgets('sin coincidencias lo dice, en vez de dejar la lista en '
+        'blanco', (tester) async {
+      await montar(tester);
+
+      await buscar(tester, 'zzz');
+
+      expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+      expect(find.text(RutasScreen.sinResultados), findsOneWidget);
+      expect(find.textContaining('«zzz»'), findsOneWidget);
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
+    });
+
+    testWidgets('deslizar hacia abajo repite la búsqueda', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'nutibara');
+
+      await tester.fling(
+        find.byKey(RutasScreen.claveResultados),
+        const Offset(0, 400),
+        1000,
+      );
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.busquedas, hasLength(2));
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+    });
+
+    testWidgets('al deslizar los resultados se esconde el teclado', (
+      tester,
+    ) async {
+      await montar(tester);
+      await buscar(tester, 'nutibara');
+
+      expect(
+        tester
+            .widget<ListView>(find.byKey(RutasScreen.claveResultados))
+            .keyboardDismissBehavior,
+        ScrollViewKeyboardDismissBehavior.onDrag,
+      );
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto grande, ni la '
+        'barra ni los resultados desbordan', (tester) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+      await buscar(tester, 'nutibara');
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
     });
   });
 }

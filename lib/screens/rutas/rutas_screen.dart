@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
+import '../../models/ruta.dart';
+import '../../services/busqueda_rutas_provider.dart';
 import '../../services/explorar_rutas_provider.dart';
 import '../../services/permisos_provider.dart';
 import '../../services/ubicacion_provider.dart';
@@ -38,6 +40,10 @@ import 'detalle_ruta_screen.dart';
 /// carrusel de la portada, así una ruta se reconoce igual en los dos sitios.
 /// Tocarla abre su detalle ([DetalleRutaScreen], SCRUM-250, criterio 5 de
 /// HU-29).
+///
+/// Arriba va una barra que busca por nombre o por quien creó la ruta
+/// (SCRUM-254, HU-30). Con lo escrito, la lista muestra lo que coincide,
+/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas.
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -53,10 +59,23 @@ class RutasScreen extends ConsumerWidget {
   static const claveSinRutas = Key('rutas-sin-rutas');
   static const claveAvisoUbicacion = Key('rutas-aviso-ubicacion');
   static const claveReintentarUbicacion = Key('rutas-reintentar-ubicacion');
+  static const claveBusqueda = Key('rutas-busqueda');
+  static const claveResultados = Key('rutas-resultados');
+  static const claveSinResultados = Key('rutas-sin-resultados');
+  static const claveBuscando = Key('rutas-buscando');
+
+  /// Lo que dice el campo de búsqueda vacío.
+  static const pistaBusqueda = 'Busca por nombre o creador';
 
   /// Lo que dice el rótulo según cómo se ordenó la lista.
   static const rotuloCercania = 'CERCA DE TI';
   static const rotuloRecientes = 'LAS MÁS RECIENTES';
+
+  /// El rótulo cuando la lista muestra lo que encontró una búsqueda.
+  static const rotuloResultados = 'RESULTADOS';
+
+  /// Una búsqueda que no encontró nada (SCRUM-254).
+  static const sinResultados = 'No encontramos rutas';
 
   /// Sin rutas a menos del radio de cercanía (criterio 4 de HU-29).
   static const sinRutasCerca = 'No encontramos rutas cerca de ti';
@@ -87,6 +106,7 @@ class RutasScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TrazaTopBar(titulo: titulo),
+              _BarraBusqueda(),
               Expanded(child: _Contenido()),
             ],
           ),
@@ -113,6 +133,15 @@ class _Contenido extends ConsumerWidget {
     } catch (_) {}
   }
 
+  /// Con una búsqueda escrita, deslizar hacia abajo la repite: pudo
+  /// publicarse algo que coincide.
+  Future<void> _recargarBusqueda(WidgetRef ref) async {
+    ref.invalidate(busquedaRutasProvider);
+    try {
+      await ref.read(busquedaRutasProvider.future);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Mientras no se sepa qué decidió el usuario sobre la ubicación, la
@@ -121,23 +150,77 @@ class _Contenido extends ConsumerWidget {
     final consultado = ref.watch(permisosProvider.select((p) => p.consultado));
     if (!consultado) return const Center(child: CircularProgressIndicator());
 
+    // La lista de siempre se sigue pidiendo aunque haya una búsqueda: al
+    // borrarla, las cercanas vuelven al instante, sin consultarlas otra vez.
     final rutas = ref.watch(rutasParaExplorarProvider);
+    final termino = ref.watch(
+      textoBusquedaRutasProvider.select(terminoDeBusqueda),
+    );
 
     return RefreshIndicator(
-      onRefresh: () => _recargar(ref),
-      child: switch (rutas) {
-        // Reintentando tras un error: se ve que está cargando, no el error
-        // de antes.
-        AsyncError() when rutas.isLoading => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        AsyncError(:final error) => _Error(error: error),
-        // Con datos, o recargando con los de antes: la lista no desaparece
-        // mientras se actualiza.
-        AsyncValue(valueOrNull: final datos?) => _Lista(datos: datos),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+      onRefresh: () =>
+          termino == null ? _recargar(ref) : _recargarBusqueda(ref),
+      child: termino != null
+          ? _Resultados(termino: termino)
+          : switch (rutas) {
+              // Reintentando tras un error: se ve que está cargando, no el
+              // error de antes.
+              AsyncError() when rutas.isLoading => const Center(
+                child: CircularProgressIndicator(),
+              ),
+              AsyncError(:final error) => _Error(
+                error: error,
+                onReintentar: () => ref.invalidate(rutasParaExplorarProvider),
+              ),
+              // Con datos, o recargando con los de antes: la lista no
+              // desaparece mientras se actualiza.
+              AsyncValue(valueOrNull: final datos?) => _Lista(datos: datos),
+              _ => const Center(child: CircularProgressIndicator()),
+            },
     );
+  }
+}
+
+/// Lo que encontró la búsqueda (SCRUM-254): en la misma lista y con la
+/// misma tarjeta que las cercanas, que es lo que el usuario ya sabe leer.
+class _Resultados extends ConsumerWidget {
+  const _Resultados({required this.termino});
+
+  /// Lo que se buscó, como lo recibió la base.
+  final String termino;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busqueda = ref.watch(busquedaRutasProvider);
+
+    return switch (busqueda) {
+      AsyncError() when busqueda.isLoading => const Center(
+        child: CircularProgressIndicator(),
+      ),
+      AsyncError(:final error) => _Error(
+        error: error,
+        onReintentar: () => ref.invalidate(busquedaRutasProvider),
+      ),
+      // Mientras llega lo de la última letra se quedan los resultados de
+      // antes, con un indicador junto al rótulo: la lista no parpadea con
+      // cada letra.
+      AsyncValue(valueOrNull: final rutas?) when rutas.isNotEmpty =>
+        _ListaDeRutas(
+          clave: RutasScreen.claveResultados,
+          encabezado: [
+            _Rotulo(RutasScreen.rotuloResultados, cargando: busqueda.isLoading),
+          ],
+          rutas: rutas,
+        ),
+      // Vacío y sin nada en camino: de verdad no hay coincidencias.
+      AsyncValue(valueOrNull: _?) when !busqueda.isLoading => EstadoVacio(
+        key: RutasScreen.claveSinResultados,
+        icono: Icons.search_off_rounded,
+        titulo: RutasScreen.sinResultados,
+        detalle: 'Ninguna ruta publicada coincide con «$termino».',
+      ),
+      _ => const Center(child: CircularProgressIndicator()),
+    };
   }
 }
 
@@ -147,10 +230,13 @@ class _Contenido extends ConsumerWidget {
 /// problema es de este lado y no sirve revisar el internet. Cualquier otra
 /// cosa es que no llegó a responder: la conexión. Los dos ofrecen
 /// reintentar, y deslizar hacia abajo también vuelve a consultar.
-class _Error extends ConsumerWidget {
-  const _Error({required this.error});
+class _Error extends StatelessWidget {
+  const _Error({required this.error, required this.onReintentar});
 
   final Object error;
+
+  /// Lo que se vuelve a pedir: las cercanas o la búsqueda (SCRUM-254).
+  final VoidCallback onReintentar;
 
   /// `PostgrestException` es la base contestando con un error, y
   /// `FormatException`, una fila que no encaja con lo que la app espera.
@@ -158,7 +244,7 @@ class _Error extends ConsumerWidget {
       error is PostgrestException || error is FormatException;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final deLaBase = _falloDeLaBase(error);
 
     return EstadoVacio(
@@ -170,7 +256,7 @@ class _Error extends ConsumerWidget {
           : RutasScreen.errorDeConexion,
       accion: OutlinedButton(
         key: RutasScreen.claveReintentar,
-        onPressed: () => ref.invalidate(rutasParaExplorarProvider),
+        onPressed: onReintentar,
         child: const Text('Reintentar'),
       ),
     );
@@ -230,12 +316,48 @@ class _Lista extends StatelessWidget {
 
     // Lo que va antes de las rutas: el aviso, si hace falta, y el rótulo que
     // dice cómo va ordenada.
-    final encabezado = [?aviso, _Orden(porCercania: datos is RutasPorCercania)];
+    final encabezado = [
+      ?aviso,
+      _Rotulo(
+        datos is RutasPorCercania
+            ? RutasScreen.rotuloCercania
+            : RutasScreen.rotuloRecientes,
+      ),
+    ];
 
+    return _ListaDeRutas(
+      clave: RutasScreen.claveLista,
+      encabezado: encabezado,
+      rutas: rutas,
+    );
+  }
+}
+
+/// Rutas en tarjetas, con lo que va encima de ellas.
+///
+/// La comparten las cercanas y los resultados de una búsqueda (SCRUM-254):
+/// mismas tarjetas, mismo espaciado y mismo toque para abrir el detalle.
+class _ListaDeRutas extends StatelessWidget {
+  const _ListaDeRutas({
+    required this.clave,
+    required this.encabezado,
+    required this.rutas,
+  });
+
+  /// Distinta para cada lista: al pasar de una a otra se empieza arriba.
+  final Key clave;
+  final List<Widget> encabezado;
+  final List<Ruta> rutas;
+
+  @override
+  Widget build(BuildContext context) {
     return ListView.separated(
-      key: RutasScreen.claveLista,
+      key: clave,
       // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
       physics: const AlwaysScrollableScrollPhysics(),
+      // Al deslizar se esconde el teclado de la búsqueda, que si no tapa
+      // media pantalla de resultados.
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.xs,
@@ -258,6 +380,40 @@ class _Lista extends StatelessWidget {
               context.push(DetalleRutaScreen.rutaDe(ruta.id), extra: ruta),
         );
       },
+    );
+  }
+}
+
+/// El campo para buscar rutas por su nombre o por quien la creó
+/// (SCRUM-254).
+///
+/// Va fijo debajo del título y no dentro de la lista: así sigue a mano
+/// mientras se recorren los resultados.
+class _BarraBusqueda extends ConsumerWidget {
+  const _BarraBusqueda();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.xs,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
+      child: TextField(
+        key: RutasScreen.claveBusqueda,
+        onChanged: (texto) =>
+            ref.read(textoBusquedaRutasProvider.notifier).state = texto,
+        textInputAction: TextInputAction.search,
+        // Nombres de lugares y de personas: el corrector los cambiaría por
+        // palabras del diccionario.
+        autocorrect: false,
+        decoration: const InputDecoration(
+          hintText: RutasScreen.pistaBusqueda,
+          prefixIcon: Icon(Icons.search_rounded, color: AppColors.ink3),
+        ),
+      ),
     );
   }
 }
@@ -304,24 +460,46 @@ class _AvisoUbicacion extends ConsumerWidget {
   }
 }
 
-/// Cómo va ordenada la lista. Sin esto, el orden por cercanía no se nota:
-/// las tarjetas dicen cuánto mide cada ruta, no a cuánto queda.
-class _Orden extends StatelessWidget {
-  const _Orden({required this.porCercania});
+/// El rótulo encima de las tarjetas: cómo va ordenada la lista, o que son
+/// los resultados de una búsqueda (SCRUM-254). Sin esto, el orden por
+/// cercanía no se nota: las tarjetas dicen cuánto mide cada ruta, no a
+/// cuánto queda.
+class _Rotulo extends StatelessWidget {
+  const _Rotulo(this.texto, {this.cargando = false});
 
-  final bool porCercania;
+  final String texto;
+
+  /// Vienen resultados nuevos mientras se ven los anteriores.
+  final bool cargando;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      porCercania ? RutasScreen.rotuloCercania : RutasScreen.rotuloRecientes,
-      key: RutasScreen.claveOrden,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.52,
-        color: AppColors.ink2,
-      ),
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            texto,
+            key: RutasScreen.claveOrden,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.52,
+              color: AppColors.ink2,
+            ),
+          ),
+        ),
+        if (cargando) ...[
+          const SizedBox(width: AppSpacing.sm),
+          const SizedBox.square(
+            key: RutasScreen.claveBuscando,
+            dimension: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              semanticsLabel: 'Buscando',
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

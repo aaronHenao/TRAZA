@@ -127,6 +127,20 @@ abstract interface class RutasRepository {
     required double longitud,
     required double radioKm,
   });
+
+  /// Las rutas publicadas cuyo nombre o creador coinciden con [termino],
+  /// estén donde estén (SCRUM-254).
+  ///
+  /// La búsqueda la hace la base con `buscar_rutas` (0040): sin tildes ni
+  /// mayúsculas, y con todas las palabras de [termino] en cualquier orden.
+  /// Con [latitud] y [longitud], de la más cercana a la más lejana; sin
+  /// ellas, de la más reciente a la más antigua. [termino] necesita al
+  /// menos dos letras: con menos, la base lo rechaza.
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+  });
 }
 
 /// Lee y escribe en `rutas`.
@@ -300,6 +314,35 @@ class SupabaseRutasRepository implements RutasRepository {
     return [
       for (final fila in filas)
         RutaCercana.desdeSupabase(Map<String, dynamic>.from(fila as Map)),
+    ];
+  }
+
+  @override
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+  }) async {
+    _usuarioId();
+
+    final filas = await _cliente.rpc<List<dynamic>>(
+      'buscar_rutas',
+      params: {
+        'p_termino': termino,
+        // Las dos o ninguna: con una sola, la base rechaza la consulta.
+        if (latitud != null && longitud != null) ...{
+          'p_latitud': latitud,
+          'p_longitud': longitud,
+        },
+        'p_limite': limite,
+      },
+    );
+
+    // Cada fila trae además a cuánto queda del usuario, que la tarjeta no
+    // muestra: solo sirvió para ordenarlas.
+    return [
+      for (final fila in filas)
+        Ruta.desdeSupabase(Map<String, dynamic>.from(fila as Map)),
     ];
   }
 }

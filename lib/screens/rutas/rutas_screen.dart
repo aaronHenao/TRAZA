@@ -49,8 +49,10 @@ import 'detalle_ruta_screen.dart';
 ///
 /// Arriba va una barra que busca por nombre o por quien creó la ruta
 /// (SCRUM-254, HU-30). Con lo escrito, la lista muestra lo que coincide,
-/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas. Debajo,
-/// los rangos de distancia para filtrarlas (SCRUM-273, HU-37).
+/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas. Debajo
+/// van los rangos de distancia (SCRUM-273, HU-37): con uno elegido, la
+/// lista —las cercanas o los resultados— muestra solo las rutas que miden
+/// eso (SCRUM-274).
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -75,6 +77,8 @@ class RutasScreen extends ConsumerWidget {
   static const claveBuscarComoLugar = Key('rutas-buscar-como-lugar');
   static const claveReintentarZona = Key('rutas-reintentar-zona');
   static const claveFiltroDistancia = Key('rutas-filtro-distancia');
+  static const claveSinRutasEnRango = Key('rutas-sin-rutas-en-rango');
+  static const claveQuitarFiltro = Key('rutas-quitar-filtro');
 
   /// El chip de un rango de distancia (SCRUM-273).
   static Key claveRango(RangoDistancia rango) =>
@@ -112,6 +116,12 @@ class RutasScreen extends ConsumerWidget {
 
   /// Sin ninguna ruta publicada en toda la comunidad.
   static const sinRutas = 'Todavía no hay rutas publicadas';
+
+  /// Ninguna ruta de la lista mide lo del rango elegido (SCRUM-274).
+  static String sinRutasEnRango(RangoDistancia rango) =>
+      'Ninguna ruta de ${rango.etiqueta.toLowerCase()}';
+  static const pruebaOtroRango =
+      'Prueba con otro rango o quita el filtro para verlas todas.';
 
   static const errorTitulo = 'No pudimos cargar las rutas';
   static const errorDeConexion =
@@ -557,8 +567,10 @@ class _Lista extends StatelessWidget {
 /// Rutas en tarjetas, con lo que va encima de ellas.
 ///
 /// La comparten las cercanas y los resultados de una búsqueda (SCRUM-254):
-/// mismas tarjetas, mismo espaciado y mismo toque para abrir el detalle.
-class _ListaDeRutas extends StatelessWidget {
+/// mismas tarjetas, mismo espaciado y mismo toque para abrir el detalle. Y
+/// el mismo filtro de distancia (SCRUM-274): se aplica aquí para que todas
+/// las listas de la sección se filtren igual.
+class _ListaDeRutas extends ConsumerWidget {
   const _ListaDeRutas({
     required this.clave,
     required this.encabezado,
@@ -568,39 +580,84 @@ class _ListaDeRutas extends StatelessWidget {
   /// Distinta para cada lista: al pasar de una a otra se empieza arriba.
   final Key clave;
   final List<Widget> encabezado;
+
+  /// Todas las de la lista, sin filtrar.
   final List<Ruta> rutas;
 
   @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      key: clave,
-      // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
-      physics: const AlwaysScrollableScrollPhysics(),
-      // Al deslizar se esconde el teclado de la búsqueda, que si no tapa
-      // media pantalla de resultados.
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.xs,
-        AppSpacing.lg,
-        AppSpacing.xl,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final distancia = ref.watch(rangoDistanciaProvider);
+    final visibles = filtrarRutas(rutas, distancia: distancia);
+    final encabezado = [
+      ...this.encabezado,
+      // Si el filtro la deja vacía, se dice debajo del rótulo, que sigue
+      // contando qué lista es.
+      if (distancia != null && visibles.isEmpty)
+        _SinRutasEnRango(rango: distancia),
+    ];
+
+    // Al cambiar de rango la lista vuelve arriba: si no, se quedaría a la
+    // altura por la que iba la anterior, en medio de otras rutas.
+    return KeyedSubtree(
+      key: ValueKey(distancia),
+      child: ListView.separated(
+        key: clave,
+        // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
+        physics: const AlwaysScrollableScrollPhysics(),
+        // Al deslizar se esconde el teclado de la búsqueda, que si no tapa
+        // media pantalla de resultados.
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.xs,
+          AppSpacing.lg,
+          AppSpacing.xl,
+        ),
+        itemCount: encabezado.length + visibles.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+        itemBuilder: (_, i) {
+          if (i < encabezado.length) return encabezado[i];
+          final ruta = visibles[i - encabezado.length];
+          return TarjetaRutaExplorar(
+            key: TarjetaRutaExplorar.claveDe(ruta.id),
+            ruta: ruta,
+            // Criterio 5 de HU-29 (SCRUM-250). Con `push`, al cerrar el
+            // detalle se vuelve a la lista donde estaba, sin consultarla otra
+            // vez. La ruta va en `extra` para que el detalle muestre lo que
+            // ya se sabe de ella mientras llega su trazado.
+            onTap: () =>
+                context.push(DetalleRutaScreen.rutaDe(ruta.id), extra: ruta),
+          );
+        },
       ),
-      itemCount: encabezado.length + rutas.length,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (_, i) {
-        if (i < encabezado.length) return encabezado[i];
-        final ruta = rutas[i - encabezado.length];
-        return TarjetaRutaExplorar(
-          key: TarjetaRutaExplorar.claveDe(ruta.id),
-          ruta: ruta,
-          // Criterio 5 de HU-29 (SCRUM-250). Con `push`, al cerrar el detalle
-          // se vuelve a la lista donde estaba, sin consultarla otra vez. La
-          // ruta va en `extra` para que el detalle muestre lo que ya se sabe
-          // de ella mientras llega su trazado.
-          onTap: () =>
-              context.push(DetalleRutaScreen.rutaDe(ruta.id), extra: ruta),
-        );
-      },
+    );
+  }
+}
+
+/// Ninguna ruta de la lista mide lo del rango elegido (SCRUM-274).
+///
+/// Va dentro de la lista y no ocupa la pantalla, como el hueco de un filtro
+/// en el catálogo de retos: arriba sigue el rótulo que dice qué lista es, y
+/// los rangos siguen a mano para probar con otro.
+class _SinRutasEnRango extends ConsumerWidget {
+  const _SinRutasEnRango({required this.rango});
+
+  final RangoDistancia rango;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MensajeVacio(
+      key: RutasScreen.claveSinRutasEnRango,
+      icono: Icons.filter_alt_outlined,
+      titulo: RutasScreen.sinRutasEnRango(rango),
+      detalle: RutasScreen.pruebaOtroRango,
+      // Lo mismo que volver a tocar el rango elegido, que no todos saben que
+      // lo quita.
+      accion: OutlinedButton(
+        key: RutasScreen.claveQuitarFiltro,
+        onPressed: () => ref.read(rangoDistanciaProvider.notifier).state = null,
+        child: const Text('Quitar el filtro'),
+      ),
     );
   }
 }
@@ -610,37 +667,6 @@ class _ListaDeRutas extends StatelessWidget {
 ///
 /// Va fijo debajo del título y no dentro de la lista: así sigue a mano
 /// mientras se recorren los resultados.
-/// Los rangos de distancia para filtrar las rutas (SCRUM-273, criterio 1 de
-/// HU-37).
-///
-/// Con los mismos chips que los demás filtros de la app —el catálogo de
-/// retos, el historial, el foro— y en el mismo lugar: fijos bajo lo de
-/// arriba, así siguen a mano mientras se recorre la lista. Cuando no caben,
-/// saltan de línea en vez de cortarse. Uno a la vez, y tocar el elegido lo
-/// quita (criterio 4).
-class _FiltroDistancia extends ConsumerWidget {
-  const _FiltroDistancia();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final elegido = ref.watch(rangoDistanciaProvider);
-
-    return FilaChips(
-      key: RutasScreen.claveFiltroDistancia,
-      children: [
-        for (final rango in RangoDistancia.values)
-          ChipFiltro(
-            key: RutasScreen.claveRango(rango),
-            texto: rango.etiqueta,
-            activo: rango == elegido,
-            onTap: () => ref.read(rangoDistanciaProvider.notifier).state =
-                rango == elegido ? null : rango,
-          ),
-      ],
-    );
-  }
-}
-
 class _BarraBusqueda extends ConsumerWidget {
   const _BarraBusqueda();
 
@@ -679,6 +705,37 @@ class _BarraBusqueda extends ConsumerWidget {
           prefixIcon: Icon(Icons.search_rounded, color: AppColors.ink3),
         ),
       ),
+    );
+  }
+}
+
+/// Los rangos de distancia para filtrar las rutas (SCRUM-273, criterio 1 de
+/// HU-37).
+///
+/// Con los mismos chips que los demás filtros de la app —el catálogo de
+/// retos, el historial, el foro— y en el mismo lugar: fijos bajo lo de
+/// arriba, así siguen a mano mientras se recorre la lista. Cuando no caben,
+/// saltan de línea en vez de cortarse. Uno a la vez, y tocar el elegido lo
+/// quita (criterio 4).
+class _FiltroDistancia extends ConsumerWidget {
+  const _FiltroDistancia();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elegido = ref.watch(rangoDistanciaProvider);
+
+    return FilaChips(
+      key: RutasScreen.claveFiltroDistancia,
+      children: [
+        for (final rango in RangoDistancia.values)
+          ChipFiltro(
+            key: RutasScreen.claveRango(rango),
+            texto: rango.etiqueta,
+            activo: rango == elegido,
+            onTap: () => ref.read(rangoDistanciaProvider.notifier).state =
+                rango == elegido ? null : rango,
+          ),
+      ],
     );
   }
 }

@@ -1,46 +1,52 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/models/dificultad.dart';
+import 'package:traza/models/filtros_rutas.dart';
 import 'package:traza/models/rango_distancia.dart';
-import 'package:traza/models/ruta.dart';
 import 'package:traza/services/filtros_rutas_provider.dart';
 
-import '../utiles/rutas_repository_falso.dart';
-
-/// Pruebas de filtrar las rutas de Explorar rutas (SCRUM-274).
+/// Pruebas de lo elegido para filtrar en Explorar rutas (SCRUM-273 a
+/// SCRUM-275).
 void main() {
-  final corta = rutaDePrueba(id: 'corta', distanciaKm: 3.2);
-  final media = rutaDePrueba(id: 'media', distanciaKm: 7.5);
-  final sinDistancia = rutaDePrueba(id: 'sin-distancia', distanciaKm: null);
-  final otraCorta = rutaDePrueba(id: 'otra-corta', distanciaKm: 4.1);
-  final rutas = [corta, media, sinDistancia, otraCorta];
+  late ProviderContainer contenedor;
 
-  List<String> ids(List<Ruta> rutas) => [for (final ruta in rutas) ruta.id];
-
-  test('sin rango deja la lista como estaba, también las que no tienen '
-      'distancia', () {
-    expect(filtrarRutas(rutas), same(rutas));
+  setUp(() {
+    contenedor = ProviderContainer();
+    // Como la pantalla: mientras alguien escucha, lo elegido no se borra.
+    contenedor.listen(filtrosRutasProvider, (_, _) {});
   });
 
-  test('con un rango, solo las que entran, en el orden en que venían', () {
-    expect(ids(filtrarRutas(rutas, distancia: RangoDistancia.menosDe5)), [
-      'corta',
-      'otra-corta',
-    ]);
-    expect(ids(filtrarRutas(rutas, distancia: RangoDistancia.de5a10)), [
-      'media',
-    ]);
+  tearDown(() => contenedor.dispose());
+
+  test('empieza sin nada elegido', () {
+    expect(contenedor.read(filtrosRutasProvider), const FiltrosRutas());
   });
 
-  test('si ninguna entra, la lista queda vacía', () {
-    expect(filtrarRutas(rutas, distancia: RangoDistancia.masDe20), isEmpty);
+  test('junta la dificultad y la distancia elegidas', () {
+    contenedor.read(dificultadRutasProvider.notifier).state =
+        Dificultad.moderada;
+    contenedor.read(rangoDistanciaProvider.notifier).state =
+        RangoDistancia.de10a20;
+
+    expect(
+      contenedor.read(filtrosRutasProvider),
+      const FiltrosRutas(
+        dificultad: Dificultad.moderada,
+        distancia: RangoDistancia.de10a20,
+      ),
+    );
   });
 
-  test('una ruta sin distancia registrada no sale con ningún rango', () {
-    for (final rango in RangoDistancia.values) {
-      expect(
-        ids(filtrarRutas(rutas, distancia: rango)),
-        isNot(contains('sin-distancia')),
-        reason: rango.etiqueta,
-      );
-    }
+  test('quitar uno deja el otro', () {
+    contenedor.read(dificultadRutasProvider.notifier).state = Dificultad.facil;
+    contenedor.read(rangoDistanciaProvider.notifier).state =
+        RangoDistancia.menosDe5;
+
+    contenedor.read(rangoDistanciaProvider.notifier).state = null;
+
+    expect(
+      contenedor.read(filtrosRutasProvider),
+      const FiltrosRutas(dificultad: Dificultad.facil),
+    );
   });
 }

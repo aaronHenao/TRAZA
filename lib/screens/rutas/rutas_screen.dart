@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
+import '../../models/filtros_rutas.dart';
 import '../../models/rango_distancia.dart';
 import '../../models/ruta.dart';
 import '../../models/zona.dart';
@@ -77,8 +78,8 @@ class RutasScreen extends ConsumerWidget {
   static const claveBuscarComoLugar = Key('rutas-buscar-como-lugar');
   static const claveReintentarZona = Key('rutas-reintentar-zona');
   static const claveFiltroDistancia = Key('rutas-filtro-distancia');
-  static const claveSinRutasEnRango = Key('rutas-sin-rutas-en-rango');
-  static const claveQuitarFiltro = Key('rutas-quitar-filtro');
+  static const claveSinRutasConFiltros = Key('rutas-sin-rutas-con-filtros');
+  static const claveQuitarFiltros = Key('rutas-quitar-filtros');
 
   /// El chip de un rango de distancia (SCRUM-273).
   static Key claveRango(RangoDistancia rango) =>
@@ -117,11 +118,57 @@ class RutasScreen extends ConsumerWidget {
   /// Sin ninguna ruta publicada en toda la comunidad.
   static const sinRutas = 'Todavía no hay rutas publicadas';
 
-  /// Ninguna ruta de la lista mide lo del rango elegido (SCRUM-274).
-  static String sinRutasEnRango(RangoDistancia rango) =>
-      'Ninguna ruta de ${rango.etiqueta.toLowerCase()}';
+  /// Ninguna ruta de la lista cumple los filtros elegidos (SCRUM-274 y
+  /// SCRUM-275): "Ninguna ruta fácil de 5 a 10 km".
+  static String sinRutasCon(FiltrosRutas filtros) => [
+    'Ninguna ruta',
+    if (filtros.dificultad case final dificultad?)
+      dificultad.etiqueta.toLowerCase(),
+    if (filtros.distancia case final distancia?)
+      'de ${distancia.etiqueta.toLowerCase()}',
+  ].join(' ');
+
+  /// Qué hacer cuando ninguna de [rutas] cumple [filtros] (SCRUM-275,
+  /// criterio 5 de HU-37).
+  ///
+  /// Con un filtro, probar con otro valor. Con los dos, se dice cuál deja
+  /// fuera las rutas, mirando qué saldría con cada uno por separado: que
+  /// haya fáciles y que haya de 5 a 10 km no quiere decir que haya fáciles
+  /// de 5 a 10 km, y sin saberlo el usuario no sabe cuál cambiar.
+  static String queHacerSinRutasCon(FiltrosRutas filtros, List<Ruta> rutas) {
+    final dificultad = filtros.dificultad;
+    final distancia = filtros.distancia;
+    if (dificultad == null) return pruebaOtroRango;
+    if (distancia == null) return pruebaOtraDificultad;
+
+    final hayDeEsaDificultad = FiltrosRutas(
+      dificultad: dificultad,
+    ).aplicar(rutas).isNotEmpty;
+    final hayDeEseRango = FiltrosRutas(
+      distancia: distancia,
+    ).aplicar(rutas).isNotEmpty;
+    final varias = dificultad.plural;
+    final una = dificultad.etiqueta.toLowerCase();
+    final rango = 'de ${distancia.etiqueta.toLowerCase()}';
+
+    return switch ((hayDeEsaDificultad, hayDeEseRango)) {
+      (true, true) =>
+        'Hay rutas $varias y rutas $rango, pero ninguna que cumpla las dos. '
+            'Prueba quitando uno de los filtros.',
+      (true, false) =>
+        'Hay rutas $varias, pero ninguna $rango. Prueba con otro rango.',
+      (false, true) =>
+        'Hay rutas $rango, pero ninguna $una. Prueba con otra dificultad.',
+      (false, false) =>
+        'No hay rutas $varias ni $rango. Prueba con otros filtros o quítalos '
+            'para verlas todas.',
+    };
+  }
+
   static const pruebaOtroRango =
       'Prueba con otro rango o quita el filtro para verlas todas.';
+  static const pruebaOtraDificultad =
+      'Prueba con otra dificultad o quita el filtro para verlas todas.';
 
   static const errorTitulo = 'No pudimos cargar las rutas';
   static const errorDeConexion =
@@ -137,6 +184,12 @@ class RutasScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Los filtros duran lo que la sección abierta, aunque la lista se cambie
+    // un momento por un indicador de carga: sin nadie que los escuche, se
+    // borrarían. La fila de rangos mantiene vivo el suyo, pero la dificultad
+    // todavía no tiene chips (SCRUM-266).
+    ref.listen(filtrosRutasProvider, (_, _) {});
+
     return const NavegacionPrincipal(
       seccion: SeccionPrincipal.rutas,
       child: SafeArea(
@@ -344,31 +397,12 @@ class _SinResultados extends ConsumerStatefulWidget {
   ConsumerState<_SinResultados> createState() => _SinResultadosState();
 }
 
-class _SinResultadosState extends ConsumerState<_SinResultados> {
+class _SinResultadosState extends ConsumerState<_SinResultados>
+    with _AnunciaAlAparecer<_SinResultados> {
+  // Otra búsqueda que tampoco encontró nada cambia el detalle, y se vuelve
+  // a anunciar.
   @override
-  void initState() {
-    super.initState();
-    _anunciarDespuesDelCuadro();
-  }
-
-  @override
-  void didUpdateWidget(_SinResultados anterior) {
-    super.didUpdateWidget(anterior);
-    // Otra búsqueda que tampoco encontró nada: el mensaje cambió.
-    if (anterior.detalle != widget.detalle) _anunciarDespuesDelCuadro();
-  }
-
-  /// Después del cuadro, cuando ya se sabe en qué vista está.
-  void _anunciarDespuesDelCuadro() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      SemanticsService.sendAnnouncement(
-        View.of(context),
-        '${RutasScreen.sinResultados}. ${widget.detalle}',
-        Directionality.of(context),
-      );
-    });
-  }
+  String get anuncio => '${RutasScreen.sinResultados}. ${widget.detalle}';
 
   @override
   Widget build(BuildContext context) {
@@ -395,6 +429,43 @@ class _SinResultadosState extends ConsumerState<_SinResultados> {
             )
           : null,
     );
+  }
+}
+
+/// Para lo que aparece sin que el usuario lo toque, como una lista que queda
+/// vacía: se le anuncia al lector de pantalla al aparecer y cada vez que
+/// cambia lo que dice (SCRUM-257 y SCRUM-275). Quien no ve la pantalla no
+/// tendría cómo saberlo.
+mixin _AnunciaAlAparecer<T extends StatefulWidget> on State<T> {
+  /// Lo que se le dice al lector de pantalla.
+  String get anuncio;
+
+  /// Lo último que se anunció, para no repetirlo.
+  String? _anunciado;
+
+  @override
+  void initState() {
+    super.initState();
+    _anunciarDespuesDelCuadro();
+  }
+
+  @override
+  void didUpdateWidget(T anterior) {
+    super.didUpdateWidget(anterior);
+    if (anuncio != _anunciado) _anunciarDespuesDelCuadro();
+  }
+
+  /// Después del cuadro, cuando ya se sabe en qué vista está.
+  void _anunciarDespuesDelCuadro() {
+    _anunciado = anuncio;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        anuncio,
+        Directionality.of(context),
+      );
+    });
   }
 }
 
@@ -568,8 +639,8 @@ class _Lista extends StatelessWidget {
 ///
 /// La comparten las cercanas y los resultados de una búsqueda (SCRUM-254):
 /// mismas tarjetas, mismo espaciado y mismo toque para abrir el detalle. Y
-/// el mismo filtro de distancia (SCRUM-274): se aplica aquí para que todas
-/// las listas de la sección se filtren igual.
+/// los mismos filtros (SCRUM-274 y SCRUM-275): se aplican aquí para que
+/// todas las listas de la sección se filtren igual.
 class _ListaDeRutas extends ConsumerWidget {
   const _ListaDeRutas({
     required this.clave,
@@ -586,20 +657,20 @@ class _ListaDeRutas extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final distancia = ref.watch(rangoDistanciaProvider);
-    final visibles = filtrarRutas(rutas, distancia: distancia);
+    final filtros = ref.watch(filtrosRutasProvider);
+    final visibles = filtros.aplicar(rutas);
     final encabezado = [
       ...this.encabezado,
-      // Si el filtro la deja vacía, se dice debajo del rótulo, que sigue
+      // Si los filtros la dejan vacía, se dice debajo del rótulo, que sigue
       // contando qué lista es.
-      if (distancia != null && visibles.isEmpty)
-        _SinRutasEnRango(rango: distancia),
+      if (!filtros.ninguno && visibles.isEmpty)
+        _SinRutasConFiltros(filtros: filtros, rutas: rutas),
     ];
 
-    // Al cambiar de rango la lista vuelve arriba: si no, se quedaría a la
+    // Al cambiar un filtro la lista vuelve arriba: si no, se quedaría a la
     // altura por la que iba la anterior, en medio de otras rutas.
     return KeyedSubtree(
-      key: ValueKey(distancia),
+      key: ValueKey(filtros),
       child: ListView.separated(
         key: clave,
         // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
@@ -634,29 +705,59 @@ class _ListaDeRutas extends ConsumerWidget {
   }
 }
 
-/// Ninguna ruta de la lista mide lo del rango elegido (SCRUM-274).
+/// Ninguna ruta de la lista cumple los filtros elegidos (SCRUM-274 y
+/// SCRUM-275, criterio 5 de HU-37).
+///
+/// Dice qué combinación no tiene rutas y qué hacer: con los dos filtros,
+/// cuál es el que las deja fuera ([RutasScreen.queHacerSinRutasCon]).
 ///
 /// Va dentro de la lista y no ocupa la pantalla, como el hueco de un filtro
 /// en el catálogo de retos: arriba sigue el rótulo que dice qué lista es, y
-/// los rangos siguen a mano para probar con otro.
-class _SinRutasEnRango extends ConsumerWidget {
-  const _SinRutasEnRango({required this.rango});
+/// los filtros siguen a mano para probar con otros. Aparece por un toque en
+/// otro lado de la pantalla, así que también se anuncia.
+class _SinRutasConFiltros extends ConsumerStatefulWidget {
+  const _SinRutasConFiltros({required this.filtros, required this.rutas});
 
-  final RangoDistancia rango;
+  final FiltrosRutas filtros;
+
+  /// Las de la lista sin filtrar, para saber qué filtro las deja fuera.
+  final List<Ruta> rutas;
+
+  String get titulo => RutasScreen.sinRutasCon(filtros);
+  String get detalle => RutasScreen.queHacerSinRutasCon(filtros, rutas);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SinRutasConFiltros> createState() =>
+      _SinRutasConFiltrosState();
+}
+
+class _SinRutasConFiltrosState extends ConsumerState<_SinRutasConFiltros>
+    with _AnunciaAlAparecer<_SinRutasConFiltros> {
+  @override
+  String get anuncio => '${widget.titulo}. ${widget.detalle}';
+
+  void _quitarFiltros() {
+    ref.read(rangoDistanciaProvider.notifier).state = null;
+    ref.read(dificultadRutasProvider.notifier).state = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MensajeVacio(
-      key: RutasScreen.claveSinRutasEnRango,
+      key: RutasScreen.claveSinRutasConFiltros,
       icono: Icons.filter_alt_outlined,
-      titulo: RutasScreen.sinRutasEnRango(rango),
-      detalle: RutasScreen.pruebaOtroRango,
-      // Lo mismo que volver a tocar el rango elegido, que no todos saben que
-      // lo quita.
+      titulo: widget.titulo,
+      detalle: widget.detalle,
+      // Lo mismo que volver a tocar lo elegido, que no todos saben que lo
+      // quita.
       accion: OutlinedButton(
-        key: RutasScreen.claveQuitarFiltro,
-        onPressed: () => ref.read(rangoDistanciaProvider.notifier).state = null,
-        child: const Text('Quitar el filtro'),
+        key: RutasScreen.claveQuitarFiltros,
+        onPressed: _quitarFiltros,
+        child: Text(
+          widget.filtros.cuantos == 1
+              ? 'Quitar el filtro'
+              : 'Quitar los filtros',
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/widgets/miniatura_ruta.dart';
 import 'package:traza/widgets/tarjeta_ruta.dart';
@@ -96,10 +97,24 @@ void main() {
         await montar(tester, crear(vuelta, null));
 
         expect(find.text('5.23 km'), findsOneWidget);
-        // Hasta HU-34 ninguna ruta tiene dificultad ni desnivel, y la
-        // tarjeta lo dice en vez de dejar el hueco o inventarse algo.
+        // Sin dificultad asignada (SCRUM-363) ni desnivel, la tarjeta lo
+        // dice en vez de dejar el hueco o inventarse algo.
         expect(find.text(TarjetaRutaExplorar.sinDificultad), findsOneWidget);
         expect(find.text(TarjetaRutaExplorar.sinDesnivel), findsOneWidget);
+      });
+
+      testWidgets('con dificultad asignada, la pastilla la dice (SCRUM-275)', (
+        tester,
+      ) async {
+        final clasificada = rutaDePrueba(
+          estado: EstadoRuta.publicada,
+          dificultad: Dificultad.moderada,
+        );
+
+        await montar(tester, crear(clasificada, null));
+
+        expect(find.text('Moderada'), findsOneWidget);
+        expect(find.text(TarjetaRutaExplorar.sinDificultad), findsNothing);
       });
 
       testWidgets('sin distancia lo dice como el resto de la app', (

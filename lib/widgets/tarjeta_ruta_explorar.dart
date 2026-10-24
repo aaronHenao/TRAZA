@@ -18,9 +18,10 @@ import 'traza_card.dart';
 /// de lado ([TarjetaRutaExplorar.new]) y en el carrusel, que es angosto,
 /// hacia abajo ([TarjetaRutaExplorar.compacta]).
 ///
-/// Dos datos todavía no existen y se dice así, como acordó el equipo hasta
-/// que llegue HU-34: la dificultad, que asigna esa historia, y el desnivel,
-/// que necesita una altitud que el GPS de la app no guarda.
+/// Dos datos pueden faltar y se dice así, como acordó el equipo: la
+/// dificultad, que asigna un Runner Experto (SCRUM-363) y que mientras no
+/// la tenga es "Sin clasificar", y el desnivel, que necesita una altitud que
+/// el GPS de la app no guarda.
 class TarjetaRutaExplorar extends StatelessWidget {
   /// De lado, para la lista de Explorar rutas.
   const TarjetaRutaExplorar({required this.ruta, this.onTap, super.key})
@@ -40,7 +41,8 @@ class TarjetaRutaExplorar extends StatelessWidget {
 
   final bool compacta;
 
-  /// Lo que dice la pastilla mientras nadie clasifica las rutas (HU-34).
+  /// Lo que dice la pastilla de una ruta que todavía no tiene dificultad
+  /// (SCRUM-363).
   static const sinDificultad = 'Sin clasificar';
 
   /// Lo que se dice del desnivel mientras no haya de dónde sacarlo.
@@ -94,7 +96,7 @@ class TarjetaRutaExplorar extends StatelessWidget {
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const _Dificultad(),
+                    _Dificultad(ruta: ruta),
                     _Distancia(ruta: ruta),
                     const _Desnivel(),
                   ],
@@ -128,7 +130,7 @@ class TarjetaRutaExplorar extends StatelessWidget {
             const SizedBox(height: 2),
             _Creador(ruta: ruta),
             const SizedBox(height: AppSpacing.sm),
-            const _Dificultad(),
+            _Dificultad(ruta: ruta),
             const SizedBox(height: AppSpacing.sm),
             _Distancia(ruta: ruta),
             const SizedBox(height: AppSpacing.xs),
@@ -178,14 +180,18 @@ class _Creador extends StatelessWidget {
   }
 }
 
-/// La dificultad. Hasta HU-34 ninguna ruta la tiene, y la pastilla lo dice
-/// en vez de inventarse una.
+/// La dificultad. Si la ruta todavía no la tiene, la pastilla lo dice en vez
+/// de inventarse una.
 class _Dificultad extends StatelessWidget {
-  const _Dificultad();
+  const _Dificultad({required this.ruta});
+
+  final Ruta ruta;
 
   @override
   Widget build(BuildContext context) {
-    return const InsigniaReto(texto: TarjetaRutaExplorar.sinDificultad);
+    return InsigniaReto(
+      texto: ruta.dificultad?.etiqueta ?? TarjetaRutaExplorar.sinDificultad,
+    );
   }
 }
 

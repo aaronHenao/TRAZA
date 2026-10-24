@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'dificultad.dart';
 import 'punto_gps.dart';
 
 /// En qué situación está una ruta de la comunidad.
@@ -93,6 +94,7 @@ class Ruta {
     this.trazado = const [],
     this.miniatura = const [],
     this.distanciaKm,
+    this.dificultad,
     this.motivoRechazo,
     this.fechaPublicacion,
   });
@@ -126,6 +128,11 @@ class Ruta {
   /// Cuántos km mide, o null si no está registrada (criterio 4 de
   /// SCRUM-240). La calcula la base al guardar la ruta.
   final double? distanciaKm;
+
+  /// La que le asignó un Runner Experto (SCRUM-363), o null si todavía no
+  /// tiene: "Sin clasificar". Hasta que la base guarde `rutas.dificultad`,
+  /// todas llegan así.
+  final Dificultad? dificultad;
 
   /// Por qué el experto no la aprobó. Null mientras no la rechace.
   final String? motivoRechazo;
@@ -177,6 +184,7 @@ class Ruta {
       trazado: trazadoDesdeJson(fila['trazado']),
       miniatura: trazadoDesdeJson(fila['miniatura']),
       distanciaKm: _comoDouble(fila['distancia_km']),
+      dificultad: Dificultad.desdeDb(fila['dificultad']),
       motivoRechazo: motivo as String?,
       fechaPublicacion: publicacion is String
           ? DateTime.parse(publicacion).toLocal()

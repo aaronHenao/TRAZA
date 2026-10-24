@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/zona.dart';
+import '../utils/texto_para_buscar.dart';
 
 /// No se pudo preguntar por la zona: sin conexión, sin respuesta a tiempo o
 /// con un error del servicio.
@@ -51,6 +52,9 @@ abstract class BuscadorDeZonas {
 /// Lo que se manda es lo que el usuario escribió y, si se sabe, una caja de
 /// unos 20 km alrededor de él, redondeada a la décima de grado: suficiente
 /// para preferir lo cercano, sin dar su posición exacta.
+///
+/// De lo que responde, solo cuenta como zona lo que de verdad es el lugar
+/// que se escribió (SCRUM-256): ver [_esLaZona].
 class NominatimBuscadorDeZonas implements BuscadorDeZonas {
   NominatimBuscadorDeZonas({
     http.Client? cliente,
@@ -85,6 +89,24 @@ class NominatimBuscadorDeZonas implements BuscadorDeZonas {
 
   /// TRAZA es para Colombia: buscar en otros países solo traería homónimos.
   static const pais = 'co';
+
+  /// Cuántos lugares se piden de una vez: si el primero es una tienda que
+  /// se llama así, el siguiente puede ser el barrio.
+  static const candidatos = 5;
+
+  /// El `place_rank` de Nominatim de un municipio. En Colombia los
+  /// municipios llegan con 12 y algunos con 16; los barrios, veredas y
+  /// caseríos, con más.
+  static const rangoMunicipio = 16;
+
+  /// Palabras que acompañan el nombre de un lugar sin ser su nombre: la
+  /// "Comuna 16 - Belén" se llama Belén, y el "Parque Arví", Arví.
+  static const _genericas = {
+    'comuna', 'parque', 'barrio', 'vereda', 'corregimiento', 'municipio', //
+    'sector', 'urbanizacion', 'cerro', 'alto', 'loma', 'quebrada', 'rio', //
+    'lago', 'laguna', 'embalse', 'reserva', 'bosque', 'cuchilla', 'morro', //
+    'pico', 'el', 'la', 'los', 'las', 'de', 'del',
+  };
 
   static const _servidor = 'nominatim.openstreetmap.org';
 
@@ -149,7 +171,7 @@ class NominatimBuscadorDeZonas implements BuscadorDeZonas {
     final url = Uri.https(_servidor, '/search', {
       'q': texto,
       'format': 'jsonv2',
-      'limit': '1',
+      'limit': '$candidatos',
       'countrycodes': pais,
       'accept-language': 'es',
       'addressdetails': '1',
@@ -181,16 +203,87 @@ class NominatimBuscadorDeZonas implements BuscadorDeZonas {
 
     try {
       final lugares = jsonDecode(utf8.decode(respuesta.bodyBytes));
-      if (lugares is! List || lugares.isEmpty) return null;
-      return _zonaDe(lugares.first);
+      if (lugares is! List) return null;
+      for (final lugar in lugares) {
+        if (lugar is Map &&
+            _esLaZona(lugar, texto, enTodoElPais: cerca == null)) {
+          final zona = _zonaDe(lugar);
+          if (zona != null) return zona;
+        }
+      }
+      return null;
     } on FormatException catch (error) {
       throw ZonaNoDisponibleException('respuesta ilegible: ${error.message}');
     }
   }
 
+  /// Si [lugar] es la zona que nombra [texto] (SCRUM-256).
+  ///
+  /// Nominatim trae cualquier cosa que se llame parecido. Probado con
+  /// nombres de persona: para "Luis" trae una tienda en Bogotá, para "Ana",
+  /// Santa Ana, y para "Carlos", una localidad del Guainía. Sin este
+  /// filtro, confirmar el nombre de alguien para ver sus rutas sumaría las
+  /// de un lugar que nadie buscó (criterio 3 de HU-30). Para contar, el
+  /// lugar tiene que:
+  ///
+  /// - Ser un área: un municipio, una comuna, un barrio, un parque o un
+  ///   accidente natural, no un comercio, una casa ni una calle.
+  /// - Llamarse como lo escrito, sin contar las palabras que lo acompañan:
+  ///   "Belén" es la "Comuna 16 - Belén" y "Arví" el "Parque Arví", pero
+  ///   "Ana" no es "Santa Ana".
+  /// - Si se buscó en todo el país, ser un municipio o algo mayor: lejos
+  ///   del usuario, una vereda que se llama como una persona no es lo que
+  ///   buscaba.
+  static bool _esLaZona(
+    Map<dynamic, dynamic> lugar,
+    String texto, {
+    required bool enTodoElPais,
+  }) {
+    final tipo = lugar['type'];
+    final esArea = switch (lugar['category']) {
+      'boundary' || 'place' || 'natural' => true,
+      'leisure' => tipo == 'park' || tipo == 'nature_reserve',
+      _ => false,
+    };
+    if (!esArea) return false;
+
+    final rango = lugar['place_rank'];
+    if (enTodoElPais && (rango is! num || rango > rangoMunicipio)) {
+      return false;
+    }
+
+    return _seLlamaAsi(_nombreDe(lugar), texto);
+  }
+
+  /// Si el lugar [nombre] se llama como [texto]: igual, o empezando por
+  /// él ("Comuna 14" es la "Comuna 14 - El Poblado"), o igual sin las
+  /// palabras genéricas.
+  static bool _seLlamaAsi(String nombre, String texto) {
+    final delLugar = textoParaBuscar(nombre);
+    final escrito = textoParaBuscar(texto);
+    if (delLugar.isEmpty || escrito.isEmpty) return false;
+    if (delLugar == escrito || delLugar.startsWith('$escrito ')) return true;
+
+    final nucleo = _nucleo(escrito);
+    return nucleo.isNotEmpty && _nucleo(delLugar) == nucleo;
+  }
+
+  /// Un nombre sin sus palabras genéricas ni sus números.
+  static String _nucleo(String normalizado) => normalizado
+      .split(' ')
+      .where((palabra) => !_genericas.contains(palabra))
+      .where((palabra) => int.tryParse(palabra) == null)
+      .join(' ');
+
+  /// El nombre del lugar, o lo primero de su dirección si no trae nombre.
+  static String _nombreDe(Map<dynamic, dynamic> lugar) {
+    final nombre = '${lugar['name'] ?? ''}'.trim();
+    if (nombre.isNotEmpty) return nombre;
+    return '${lugar['display_name'] ?? ''}'.split(',').first.trim();
+  }
+
   /// Una [Zona] a partir de un lugar de Nominatim, o null si no trae caja.
-  static Zona? _zonaDe(Object? lugar) {
-    if (lugar is! Map) return null;
+  static Zona? _zonaDe(Map<dynamic, dynamic> lugar) {
     final caja = lugar['boundingbox'];
     if (caja is! List || caja.length != 4) return null;
 
@@ -209,9 +302,7 @@ class NominatimBuscadorDeZonas implements BuscadorDeZonas {
       este = math.min(centro + mediaCajaMinima, 180);
     }
 
-    final nombre = '${lugar['name'] ?? ''}'.trim();
-    final completo = '${lugar['display_name'] ?? ''}'.split(',').first.trim();
-    final visible = nombre.isNotEmpty ? nombre : completo;
+    final visible = _nombreDe(lugar);
     final direccion = lugar['address'];
     final estado = direccion is Map ? direccion['state'] : null;
     final region = estado is String ? estado.trim() : null;

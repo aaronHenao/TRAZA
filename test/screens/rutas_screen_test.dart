@@ -1382,4 +1382,87 @@ void main() {
       expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
     });
   });
+
+  group('buscar por creador (SCRUM-256, criterio 3 de HU-30)', () {
+    final deMariana = rutaDePrueba(
+      id: 'r-5',
+      nombre: 'Vuelta a la represa',
+      autorNombre: 'Mariana Ríos',
+      estado: EstadoRuta.publicada,
+      fechaPublicacion: DateTime(2026, 10, 14, 9),
+    );
+    final deLuis = rutaDePrueba(
+      id: 'r-6',
+      nombre: 'Cerro de las tres cruces',
+      autorNombre: 'Luis Pérez',
+      estado: EstadoRuta.publicada,
+      fechaPublicacion: DateTime(2026, 10, 13, 9),
+    );
+
+    // Las dos del setUp son de Ana.
+    setUp(
+      () => repositorio = RutasRepositorioFalso(
+        rutas: [vuelta, subida, deMariana, deLuis],
+      ),
+    );
+
+    Future<void> escribir(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.nombre,
+    ];
+
+    testWidgets('con el nombre de quien la publicó salen sus rutas', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await escribir(tester, 'luis');
+
+      expect(enPantalla(tester), ['Cerro de las tres cruces']);
+      expect(find.text('Por Luis Pérez'), findsOneWidget);
+    });
+
+    testWidgets('también con el apellido, sin tilde', (tester) async {
+      await montar(tester);
+
+      await escribir(tester, 'perez');
+
+      expect(enPantalla(tester), ['Cerro de las tres cruces']);
+    });
+
+    testWidgets('no confunde personas: "ana" no trae las rutas de Mariana', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await escribir(tester, 'ana');
+
+      expect(enPantalla(tester), ['Vuelta al estadio', 'Subida al Nutibara']);
+      expect(find.text('Vuelta a la represa'), findsNothing);
+    });
+
+    testWidgets('al confirmar el nombre de una persona muestra solo sus '
+        'rutas: no lo toma por un lugar', (tester) async {
+      await montar(tester);
+      await escribir(tester, 'luis');
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      // Se preguntó, y "Luis" no es una zona.
+      expect([for (final c in zonas.consultas) c.texto], ['luis']);
+      expect(repositorio.busquedas.last.zona, isNull);
+      expect(enPantalla(tester), ['Cerro de las tres cruces']);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsNothing);
+      expect(find.byKey(RutasScreen.claveSinResultados), findsNothing);
+    });
+  });
 }

@@ -2,6 +2,7 @@ import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
 import 'package:traza/models/zona.dart';
 import 'package:traza/services/rutas_service.dart';
+import 'package:traza/utils/texto_para_buscar.dart';
 
 /// Repositorio de rutas en memoria para las pruebas (SCRUM-241).
 ///
@@ -35,7 +36,7 @@ class RutasRepositorioFalso implements RutasRepository {
   int consultasPublicadas = 0;
 
   /// Lo que devuelve `buscar` (SCRUM-254). Sin esto, las publicadas cuyo
-  /// nombre o creador contienen lo buscado, sin mirar mayúsculas.
+  /// nombre o creador coinciden con lo buscado, como lo compara la base.
   List<Ruta>? resultadosBusqueda;
 
   /// Lo que lanza `buscar`, si algo. Va aparte de [error] para que pueda
@@ -118,16 +119,19 @@ class RutasRepositorioFalso implements RutasRepository {
     final error = errorBusqueda;
     if (error != null) throw error;
 
-    final buscado = termino.toLowerCase();
+    // Como compara la base (0041): cada palabra escrita tiene que ser el
+    // comienzo de una palabra del nombre o del creador.
+    final palabras = textoParaBuscar(termino).split(' ');
+    bool coincide(Ruta ruta) {
+      final texto = ' ${textoParaBuscar('${ruta.nombre} ${ruta.autorNombre}')}';
+      return palabras.every((palabra) => texto.contains(' $palabra'));
+    }
+
     final porTexto =
         resultadosBusqueda ??
         [
           for (final ruta in rutas)
-            if (ruta.publicada &&
-                '${ruta.nombre} ${ruta.autorNombre}'.toLowerCase().contains(
-                  buscado,
-                ))
-              ruta,
+            if (ruta.publicada && coincide(ruta)) ruta,
         ];
     return [
       ...porTexto,

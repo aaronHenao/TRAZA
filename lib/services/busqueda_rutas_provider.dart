@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/ruta.dart';
 import '../models/zona.dart';
+import '../utils/texto_para_buscar.dart';
 import 'rutas_service.dart';
 import 'ubicacion_provider.dart';
 import 'zonas_service.dart';
@@ -19,11 +20,16 @@ const esperaBusquedaRutas = Duration(milliseconds: 350);
 const minimoBusquedaRutas = 2;
 
 /// Lo que de verdad se busca a partir de lo escrito: sin espacios en los
-/// extremos y con los de en medio reducidos a uno, como lo compara la base.
-/// Null si no alcanza para buscar.
+/// extremos y con los de en medio reducidos a uno. Null si no alcanza para
+/// buscar.
+///
+/// Lo que alcanza se cuenta como lo cuenta la base (0041): sobre el texto
+/// ya sin signos. "__" no son dos letras, y mandarlo solo traería un error.
 String? terminoDeBusqueda(String escrito) {
   final termino = escrito.trim().replaceAll(RegExp(r'\s+'), ' ');
-  return termino.length >= minimoBusquedaRutas ? termino : null;
+  return textoParaBuscar(termino).length >= minimoBusquedaRutas
+      ? termino
+      : null;
 }
 
 /// Lo que el usuario escribió en la barra de Explorar rutas, tal cual.

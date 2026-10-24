@@ -30,6 +30,14 @@ void main() {
     test('con dos ya hay', () {
       expect(terminoDeBusqueda('ab'), 'ab');
     });
+
+    test('los signos no cuentan como letras, como en la base (SCRUM-256)', () {
+      // Mandarlos solo traería un error: la base los quita antes de contar.
+      expect(terminoDeBusqueda('__'), isNull);
+      expect(terminoDeBusqueda('a%'), isNull);
+      expect(terminoDeBusqueda('a b'), 'a b');
+      expect(terminoDeBusqueda('ñu'), 'ñu');
+    });
   });
 
   group('la consulta', () {

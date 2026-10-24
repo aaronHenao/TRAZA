@@ -20,6 +20,7 @@ void main() {
         'Montaña, Colombia',
     'category': 'boundary',
     'type': 'administrative',
+    'place_rank': 12,
     'boundingbox': ['6.1003036', '6.1983821', '-75.6049283', '-75.4741457'],
     'address': {
       'town': 'Envigado',
@@ -42,7 +43,7 @@ void main() {
       expect(url.queryParameters, {
         'q': 'Envigado',
         'format': 'jsonv2',
-        'limit': '1',
+        'limit': '5',
         'countrycodes': 'co',
         'accept-language': 'es',
         'addressdetails': '1',
@@ -123,23 +124,25 @@ void main() {
 
     test('a un lugar puntual le da una caja de al menos un kilómetro por '
         'lado', () async {
-      // Un estadio llega como un punto: en una caja de metros no arranca
-      // ninguna ruta.
+      // La cima de un cerro llega como un punto: en una caja de metros no
+      // arranca ninguna ruta.
       final nominatim = _NominatimFalso(
         lugares: [
           {
             ...envigadoComoNominatim(),
-            'name': 'Estadio Atanasio Girardot',
+            'name': 'Cerro El Volador',
+            'category': 'natural',
+            'type': 'peak',
             'boundingbox': ['6.2565', '6.2567', '-75.5901', '-75.5899'],
           },
         ],
       );
 
-      final zona = await nominatim.buscador().buscar('Atanasio');
+      final zona = await nominatim.buscador().buscar('El Volador');
 
       expect(zona!.norte - zona.sur, closeTo(0.02, 1e-9));
       expect(zona.este - zona.oeste, closeTo(0.02, 1e-9));
-      // Sigue centrada en el estadio.
+      // Sigue centrada en la cima.
       expect((zona.sur + zona.norte) / 2, closeTo(6.2566, 1e-9));
       expect((zona.oeste + zona.este) / 2, closeTo(-75.59, 1e-9));
     });
@@ -166,7 +169,7 @@ void main() {
       final nominatim = _NominatimFalso(lugares: [envigadoComoNominatim()]);
 
       await nominatim.buscador().buscar(
-        'Laureles',
+        'Envigado',
         latitud: 6.2442,
         longitud: -75.5812,
       );
@@ -200,6 +203,143 @@ void main() {
         nominatim.peticiones.last.url.queryParameters.containsKey('viewbox'),
         isFalse,
       );
+    });
+  });
+
+  group('solo cuenta lo que de verdad es el lugar (SCRUM-256)', () {
+    // Respuestas como las que dio Nominatim el 2026-10-23 para nombres de
+    // persona: confirmar el nombre de alguien no puede sumar las rutas de un
+    // lugar que nadie buscó.
+    Map<String, Object?> lugar(
+      String nombre, {
+      required String categoria,
+      required String tipo,
+      required int rango,
+    }) => {
+      ...envigadoComoNominatim(),
+      'name': nombre,
+      'category': categoria,
+      'type': tipo,
+      'place_rank': rango,
+    };
+
+    test('una tienda o una casa que se llama como lo escrito no es una '
+        'zona: "Luis"', () async {
+      final nominatim = _NominatimFalso(
+        lugares: [
+          lugar('Luis', categoria: 'shop', tipo: 'supermarket', rango: 30),
+          lugar('Luis', categoria: 'building', tipo: 'yes', rango: 30),
+        ],
+      );
+
+      expect(await nominatim.buscador().buscar('Luis'), isNull);
+    });
+
+    test('un lugar que solo contiene lo escrito tampoco: "Ana" no es Santa '
+        'Ana', () async {
+      final nominatim = _NominatimFalso(
+        lugares: [
+          lugar(
+            'Santa Ana',
+            categoria: 'boundary',
+            tipo: 'administrative',
+            rango: 16,
+          ),
+        ],
+      );
+
+      expect(await nominatim.buscador().buscar('Ana'), isNull);
+    });
+
+    test('en todo el país, una localidad que se llama así no cuenta: '
+        '"Carlos" en el Guainía', () async {
+      final nominatim = _NominatimFalso(
+        lugares: [
+          lugar('Carlos', categoria: 'place', tipo: 'locality', rango: 25),
+        ],
+      );
+
+      expect(await nominatim.buscador().buscar('Carlos'), isNull);
+    });
+
+    test('cerca del usuario, un barrio sí cuenta', () async {
+      final nominatim = _NominatimFalso(
+        lugares: [
+          lugar(
+            'Laureles',
+            categoria: 'place',
+            tipo: 'neighbourhood',
+            rango: 22,
+          ),
+        ],
+      );
+
+      final zona = await nominatim.buscador().buscar(
+        'Laureles',
+        latitud: 6.2442,
+        longitud: -75.5812,
+      );
+
+      expect(zona!.nombre, 'Laureles');
+    });
+
+    test('de los candidatos toma el primero que es la zona: Belén es la '
+        'comuna, no la tienda', () async {
+      final nominatim = _NominatimFalso(
+        lugares: [
+          lugar('Belén', categoria: 'shop', tipo: 'clothes', rango: 30),
+          lugar(
+            'Comuna 16 - Belén',
+            categoria: 'boundary',
+            tipo: 'administrative',
+            rango: 16,
+          ),
+        ],
+      );
+
+      final zona = await nominatim.buscador().buscar(
+        'Belén',
+        latitud: 6.2442,
+        longitud: -75.5812,
+      );
+
+      expect(zona!.nombre, 'Comuna 16 - Belén');
+    });
+
+    test('lo reconoce aunque lo acompañe "Comuna", "Parque" o "El"', () async {
+      final nominatim = _NominatimFalso(
+        respuestas: [
+          [
+            lugar(
+              'Comuna 14 - El Poblado',
+              categoria: 'boundary',
+              tipo: 'administrative',
+              rango: 16,
+            ),
+          ],
+          [
+            lugar(
+              'Parque Arví',
+              categoria: 'leisure',
+              tipo: 'nature_reserve',
+              rango: 12,
+            ),
+          ],
+          [
+            lugar(
+              'Comuna 14 - El Poblado',
+              categoria: 'boundary',
+              tipo: 'administrative',
+              rango: 16,
+            ),
+          ],
+        ],
+      );
+      final buscador = nominatim.buscador();
+
+      expect((await buscador.buscar('Poblado'))!.nombre, contains('Poblado'));
+      expect((await buscador.buscar('Arví'))!.nombre, 'Parque Arví');
+      expect((await buscador.buscar('Comuna 14'))!.nombre, contains('Comuna'));
     });
   });
 

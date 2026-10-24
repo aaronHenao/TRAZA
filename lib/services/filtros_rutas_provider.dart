@@ -17,9 +17,9 @@ final rangoDistanciaProvider = StateProvider.autoDispose<RangoDistancia?>(
 /// La dificultad elegida en Explorar rutas, o null para verlas todas
 /// (HU-36).
 ///
-/// Todavía no hay chips que la elijan: los pone SCRUM-266 cuando las rutas
-/// tengan dificultad (SCRUM-363). Lo que se elija aquí ya se combina con la
-/// distancia (SCRUM-275).
+/// La eligen los chips de la fila de dificultades (SCRUM-267), y se combina
+/// con la distancia (SCRUM-275). Mientras las rutas no tengan dificultad
+/// (SCRUM-363), ninguna pasa este filtro.
 final dificultadRutasProvider = StateProvider.autoDispose<Dificultad?>(
   (ref) => null,
 );

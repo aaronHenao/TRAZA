@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
+import '../../models/dificultad.dart';
 import '../../models/filtros_rutas.dart';
 import '../../models/rango_distancia.dart';
 import '../../models/ruta.dart';
@@ -51,9 +52,10 @@ import 'detalle_ruta_screen.dart';
 /// Arriba va una barra que busca por nombre o por quien creó la ruta
 /// (SCRUM-254, HU-30). Con lo escrito, la lista muestra lo que coincide,
 /// con las mismas tarjetas; sin nada escrito, vuelven las cercanas. Debajo
-/// van los rangos de distancia (SCRUM-273, HU-37): con uno elegido, la
-/// lista —las cercanas o los resultados— muestra solo las rutas que miden
-/// eso (SCRUM-274).
+/// van las dificultades (SCRUM-267, HU-36) y los rangos de distancia
+/// (SCRUM-273, HU-37): con algo elegido, la lista —las cercanas o los
+/// resultados— muestra solo las rutas que lo cumplen (SCRUM-274 y
+/// SCRUM-275).
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -77,13 +79,22 @@ class RutasScreen extends ConsumerWidget {
   static const claveSinZona = Key('rutas-sin-zona');
   static const claveBuscarComoLugar = Key('rutas-buscar-como-lugar');
   static const claveReintentarZona = Key('rutas-reintentar-zona');
+  static const claveFiltroDificultad = Key('rutas-filtro-dificultad');
   static const claveFiltroDistancia = Key('rutas-filtro-distancia');
   static const claveSinRutasConFiltros = Key('rutas-sin-rutas-con-filtros');
   static const claveQuitarFiltros = Key('rutas-quitar-filtros');
 
+  /// El chip de una dificultad, o el de "Todas" con null (SCRUM-267).
+  static Key claveDificultad(Dificultad? dificultad) =>
+      Key('rutas-dificultad-${dificultad?.name ?? 'todas'}');
+
   /// El chip de un rango de distancia (SCRUM-273).
   static Key claveRango(RangoDistancia rango) =>
       Key('rutas-rango-${rango.name}');
+
+  /// El chip para ver las rutas de cualquier dificultad (criterio 1 de
+  /// HU-36).
+  static const todasLasDificultades = 'Todas';
 
   /// Lo que dice el campo de búsqueda vacío.
   static const pistaBusqueda = 'Busca por nombre, zona o creador';
@@ -184,12 +195,6 @@ class RutasScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Los filtros duran lo que la sección abierta, aunque la lista se cambie
-    // un momento por un indicador de carga: sin nadie que los escuche, se
-    // borrarían. La fila de rangos mantiene vivo el suyo, pero la dificultad
-    // todavía no tiene chips (SCRUM-266).
-    ref.listen(filtrosRutasProvider, (_, _) {});
-
     return const NavegacionPrincipal(
       seccion: SeccionPrincipal.rutas,
       child: SafeArea(
@@ -200,6 +205,7 @@ class RutasScreen extends ConsumerWidget {
             children: [
               TrazaTopBar(titulo: titulo),
               _BarraBusqueda(),
+              _FiltroDificultad(),
               _FiltroDistancia(),
               Expanded(child: _Contenido()),
             ],
@@ -810,13 +816,47 @@ class _BarraBusqueda extends ConsumerWidget {
   }
 }
 
+/// Las dificultades para filtrar las rutas, más "Todas" (SCRUM-267,
+/// criterio 1 de HU-36).
+///
+/// Con los mismos chips que los rangos de distancia, que van debajo, y que
+/// los demás filtros de la app. La elegida se ve marcada, y sin ninguna
+/// elegida lo marcado es "Todas": así siempre se ve qué muestra la lista
+/// (criterio 2). Una a la vez; "Todas" la quita (criterio 3), y tocar otra
+/// vez la elegida también, como en la fila de distancia.
+///
+/// Como la fila está siempre a la vista, mantiene viva la elección aunque
+/// la lista se cambie un momento por un indicador de carga.
+class _FiltroDificultad extends ConsumerWidget {
+  const _FiltroDificultad();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elegida = ref.watch(dificultadRutasProvider);
+
+    return _FilaDeFiltros(
+      key: RutasScreen.claveFiltroDificultad,
+      children: [
+        for (final dificultad in <Dificultad?>[null, ...Dificultad.values])
+          ChipFiltro(
+            key: RutasScreen.claveDificultad(dificultad),
+            texto: dificultad?.etiqueta ?? RutasScreen.todasLasDificultades,
+            activo: dificultad == elegida,
+            onTap: () => ref.read(dificultadRutasProvider.notifier).state =
+                dificultad == elegida ? null : dificultad,
+          ),
+      ],
+    );
+  }
+}
+
 /// Los rangos de distancia para filtrar las rutas (SCRUM-273, criterio 1 de
 /// HU-37).
 ///
 /// Con los mismos chips que los demás filtros de la app —el catálogo de
-/// retos, el historial, el foro— y en el mismo lugar: fijos bajo lo de
-/// arriba, así siguen a mano mientras se recorre la lista. Cuando no caben,
-/// saltan de línea en vez de cortarse. Uno a la vez, y tocar el elegido lo
+/// retos, el historial, el foro— y fijos bajo lo de arriba, así siguen a
+/// mano mientras se recorre la lista. Van en una línea que se desliza de
+/// lado si no cabe ([_FilaDeFiltros]). Uno a la vez, y tocar el elegido lo
 /// quita (criterio 4).
 class _FiltroDistancia extends ConsumerWidget {
   const _FiltroDistancia();
@@ -825,7 +865,7 @@ class _FiltroDistancia extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final elegido = ref.watch(rangoDistanciaProvider);
 
-    return FilaChips(
+    return _FilaDeFiltros(
       key: RutasScreen.claveFiltroDistancia,
       children: [
         for (final rango in RangoDistancia.values)
@@ -837,6 +877,41 @@ class _FiltroDistancia extends ConsumerWidget {
                 rango == elegido ? null : rango,
           ),
       ],
+    );
+  }
+}
+
+/// Una fila de chips de filtro en una sola línea, que se desliza de lado
+/// cuando no cabe (SCRUM-267), como la fila de chips del prototipo
+/// (`.activity-chip-row`) y el carrusel de la portada.
+///
+/// Con dos filtros, dos filas que saltaban de línea se comían la pantalla
+/// del teléfono más pequeño: con el texto del sistema grande, la lista se
+/// quedaba sin lugar. En una línea cada una, el chip que asoma cortado en
+/// el borde invita a deslizar.
+class _FilaDeFiltros extends StatelessWidget {
+  const _FilaDeFiltros({required this.children, super.key});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          for (final (i, chip) in children.indexed) ...[
+            if (i > 0) const SizedBox(width: AppSpacing.sm),
+            chip,
+          ],
+        ],
+      ),
     );
   }
 }

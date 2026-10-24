@@ -12,8 +12,7 @@
 // - La dificultad que guarda la base. `rutas.dificultad` todavía no existe
 //   (la crea SCRUM-363): las filas de aquí la traen como la traerá, con los
 //   valores de `Dificultad.valorDb`, salvo en la prueba que muestra lo que
-//   pasa hoy. Y como la dificultad todavía no tiene chips (SCRUM-266), se
-//   elige como lo harán ellos.
+//   pasa hoy. La dificultad se elige con sus chips (SCRUM-267).
 // - Un filtro en la base: no lo hay. Se filtra en la app sobre las rutas que
 //   ya llegaron, y lo que se comprueba es justamente que cambiar de filtro
 //   no vuelve a consultar.
@@ -35,7 +34,6 @@ import 'package:traza/models/rango_distancia.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
 import 'package:traza/screens/rutas/seccion_rutas.dart';
 import 'package:traza/services/busqueda_rutas_provider.dart';
-import 'package:traza/services/filtros_rutas_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
@@ -233,23 +231,23 @@ void main() {
     return vistas..sort((a, b) => alto(a).compareTo(alto(b)));
   }
 
-  /// Toca el chip del rango, como el usuario: si ya estaba elegido, lo quita.
-  Future<void> tocarRango(WidgetTester tester, RangoDistancia rango) async {
-    await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+  /// Toca un chip de filtro como el usuario: si la fila no lo deja ver,
+  /// primero la desliza.
+  Future<void> tocarChip(WidgetTester tester, Key clave) async {
+    final chip = find.byKey(clave);
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+    await tester.tap(chip);
     await tester.pumpAndSettle();
   }
 
-  /// Elige una dificultad como lo harán los chips de SCRUM-266. Null es
-  /// "Todas".
-  Future<void> elegirDificultad(
-    WidgetTester tester,
-    Dificultad? dificultad,
-  ) async {
-    ProviderScope.containerOf(
-      tester.element(find.byType(RutasScreen)),
-    ).read(dificultadRutasProvider.notifier).state = dificultad;
-    await tester.pumpAndSettle();
-  }
+  /// Toca el chip del rango: si ya estaba elegido, lo quita.
+  Future<void> tocarRango(WidgetTester tester, RangoDistancia rango) =>
+      tocarChip(tester, RutasScreen.claveRango(rango));
+
+  /// Elige una dificultad con su chip (SCRUM-267). Null es "Todas".
+  Future<void> elegirDificultad(WidgetTester tester, Dificultad? dificultad) =>
+      tocarChip(tester, RutasScreen.claveDificultad(dificultad));
 
   List<RangoDistancia> elegidos(WidgetTester tester) => [
     for (final rango in RangoDistancia.values)

@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:traza/models/estado_permisos.dart';
+import 'package:traza/models/rango_distancia.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
 import 'package:traza/models/zona.dart';
@@ -26,6 +27,7 @@ import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/services/zonas_service.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
 import 'package:traza/widgets/aviso_permiso_ubicacion.dart';
+import 'package:traza/widgets/chip_filtro.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
@@ -1625,6 +1627,129 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+    });
+  });
+
+  group('la fila de rangos de distancia (SCRUM-273, criterio 1 de HU-37)', () {
+    ChipFiltro chip(WidgetTester tester, RangoDistancia rango) =>
+        tester.widget<ChipFiltro>(find.byKey(RutasScreen.claveRango(rango)));
+
+    List<bool> activos(WidgetTester tester) => [
+      for (final rango in RangoDistancia.values) chip(tester, rango).activo,
+    ];
+
+    Future<void> tocar(WidgetTester tester, RangoDistancia rango) async {
+      await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('ofrece los cuatro rangos, de la más corta a la más larga, '
+        'con los chips de los demás filtros de la app', (tester) async {
+      await montar(tester);
+
+      final fila = find.byKey(RutasScreen.claveFiltroDistancia);
+      expect(tester.widget(fila), isA<FilaChips>());
+      expect(
+        [
+          for (final chip in tester.widgetList<ChipFiltro>(
+            find.descendant(of: fila, matching: find.byType(ChipFiltro)),
+          ))
+            chip.texto,
+        ],
+        ['Menos de 5 km', '5 a 10 km', '10 a 20 km', 'Más de 20 km'],
+      );
+    });
+
+    testWidgets('va entre la barra de búsqueda y la lista', (tester) async {
+      await montar(tester);
+
+      final fila = tester.getRect(find.byKey(RutasScreen.claveFiltroDistancia));
+      expect(
+        fila.top,
+        greaterThanOrEqualTo(
+          tester.getRect(find.byKey(RutasScreen.claveBusqueda)).bottom,
+        ),
+      );
+      expect(
+        fila.bottom,
+        lessThanOrEqualTo(altoDe(tester, RutasScreen.rotuloCercania)),
+      );
+    });
+
+    testWidgets('empieza sin ninguno elegido', (tester) async {
+      await montar(tester);
+
+      expect(activos(tester), [false, false, false, false]);
+    });
+
+    testWidgets('tocar un rango lo marca, y tocarlo otra vez lo quita '
+        '(criterio 4 de HU-37)', (tester) async {
+      await montar(tester);
+
+      await tocar(tester, RangoDistancia.de5a10);
+      expect(activos(tester), [false, true, false, false]);
+
+      await tocar(tester, RangoDistancia.de5a10);
+      expect(activos(tester), [false, false, false, false]);
+    });
+
+    testWidgets('uno a la vez: elegir otro reemplaza al anterior', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await tocar(tester, RangoDistancia.menosDe5);
+      await tocar(tester, RangoDistancia.masDe20);
+
+      expect(activos(tester), [false, false, false, true]);
+    });
+
+    testWidgets('sigue a la vista mientras se busca, con lo elegido', (
+      tester,
+    ) async {
+      await montar(tester);
+      await tocar(tester, RangoDistancia.de10a20);
+
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), 'nutibara');
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(activos(tester), [false, false, true, false]);
+    });
+
+    testWidgets('un lector de pantalla sabe cuál está elegido', (tester) async {
+      final semantica = tester.ensureSemantics();
+      await montar(tester);
+
+      await tocar(tester, RangoDistancia.menosDe5);
+
+      expect(
+        tester.getSemantics(
+          find.byKey(RutasScreen.claveRango(RangoDistancia.menosDe5)),
+        ),
+        isSemantics(label: 'Menos de 5 km', isButton: true, isSelected: true),
+      );
+      expect(
+        tester.getSemantics(
+          find.byKey(RutasScreen.claveRango(RangoDistancia.de5a10)),
+        ),
+        isSemantics(label: '5 a 10 km', isButton: true, isSelected: false),
+      );
+      semantica.dispose();
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto grande, saltan de '
+        'línea sin desbordar y se pueden tocar todos', (tester) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+      expect(tester.takeException(), isNull);
+      for (final rango in RangoDistancia.values) {
+        expect(
+          find.byKey(RutasScreen.claveRango(rango)).hitTestable(),
+          findsOneWidget,
+        );
+      }
     });
   });
 }

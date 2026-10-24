@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
+import '../../models/rango_distancia.dart';
 import '../../models/ruta.dart';
 import '../../models/zona.dart';
 import '../../services/busqueda_rutas_provider.dart';
+import '../../services/filtros_rutas_provider.dart';
 import '../../services/explorar_rutas_provider.dart';
 import '../../services/permisos_provider.dart';
 import '../../services/ubicacion_provider.dart';
@@ -15,6 +17,7 @@ import '../../theme/app_dimens.dart';
 import '../../utils/texto_para_buscar.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/aviso_permiso_ubicacion.dart';
+import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/tarjeta_aviso.dart';
@@ -46,7 +49,8 @@ import 'detalle_ruta_screen.dart';
 ///
 /// Arriba va una barra que busca por nombre o por quien creó la ruta
 /// (SCRUM-254, HU-30). Con lo escrito, la lista muestra lo que coincide,
-/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas.
+/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas. Debajo,
+/// los rangos de distancia para filtrarlas (SCRUM-273, HU-37).
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -70,6 +74,11 @@ class RutasScreen extends ConsumerWidget {
   static const claveSinZona = Key('rutas-sin-zona');
   static const claveBuscarComoLugar = Key('rutas-buscar-como-lugar');
   static const claveReintentarZona = Key('rutas-reintentar-zona');
+  static const claveFiltroDistancia = Key('rutas-filtro-distancia');
+
+  /// El chip de un rango de distancia (SCRUM-273).
+  static Key claveRango(RangoDistancia rango) =>
+      Key('rutas-rango-${rango.name}');
 
   /// Lo que dice el campo de búsqueda vacío.
   static const pistaBusqueda = 'Busca por nombre, zona o creador';
@@ -128,6 +137,7 @@ class RutasScreen extends ConsumerWidget {
             children: [
               TrazaTopBar(titulo: titulo),
               _BarraBusqueda(),
+              _FiltroDistancia(),
               Expanded(child: _Contenido()),
             ],
           ),
@@ -600,6 +610,37 @@ class _ListaDeRutas extends StatelessWidget {
 ///
 /// Va fijo debajo del título y no dentro de la lista: así sigue a mano
 /// mientras se recorren los resultados.
+/// Los rangos de distancia para filtrar las rutas (SCRUM-273, criterio 1 de
+/// HU-37).
+///
+/// Con los mismos chips que los demás filtros de la app —el catálogo de
+/// retos, el historial, el foro— y en el mismo lugar: fijos bajo lo de
+/// arriba, así siguen a mano mientras se recorre la lista. Cuando no caben,
+/// saltan de línea en vez de cortarse. Uno a la vez, y tocar el elegido lo
+/// quita (criterio 4).
+class _FiltroDistancia extends ConsumerWidget {
+  const _FiltroDistancia();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elegido = ref.watch(rangoDistanciaProvider);
+
+    return FilaChips(
+      key: RutasScreen.claveFiltroDistancia,
+      children: [
+        for (final rango in RangoDistancia.values)
+          ChipFiltro(
+            key: RutasScreen.claveRango(rango),
+            texto: rango.etiqueta,
+            activo: rango == elegido,
+            onTap: () => ref.read(rangoDistanciaProvider.notifier).state =
+                rango == elegido ? null : rango,
+          ),
+      ],
+    );
+  }
+}
+
 class _BarraBusqueda extends ConsumerWidget {
   const _BarraBusqueda();
 

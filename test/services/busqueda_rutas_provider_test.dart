@@ -4,7 +4,9 @@ import 'package:traza/models/ruta.dart';
 import 'package:traza/services/busqueda_rutas_provider.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
+import 'package:traza/services/zonas_service.dart';
 
+import '../utiles/buscador_de_zonas_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/rutas_repository_falso.dart';
 
@@ -38,8 +40,12 @@ void main() {
     );
 
     late RutasRepositorioFalso repositorio;
+    late BuscadorDeZonasFalso zonas;
 
-    setUp(() => repositorio = RutasRepositorioFalso(rutas: [nutibara]));
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: [nutibara]);
+      zonas = BuscadorDeZonasFalso(zonas: {'envigado': envigado});
+    });
 
     /// Un contenedor con la búsqueda viva, como la tiene la pantalla.
     ProviderContainer crear({
@@ -49,10 +55,16 @@ void main() {
         overrides: [
           rutasRepositoryProvider.overrideWithValue(repositorio),
           ubicacionActualProvider.overrideWith((ref) async => ubicacion),
+          buscadorDeZonasProvider.overrideWithValue(zonas),
         ],
       );
       addTearDown(contenedor.dispose);
-      contenedor.listen(busquedaRutasProvider, (_, _) {});
+      // Lo que tiene vivo la pantalla: la barra, su confirmación, y la lista
+      // con la zona encontrada.
+      contenedor
+        ..listen(busquedaConfirmadaProvider, (_, _) {})
+        ..listen(busquedaRutasProvider, (_, _) {})
+        ..listen(zonaBuscadaProvider, (_, _) {});
       return contenedor;
     }
 
@@ -150,6 +162,111 @@ void main() {
       await tester.pump();
 
       expect(contenedor.read(busquedaRutasProvider).error, isA<StateError>());
+    });
+
+    group('la zona (SCRUM-255)', () {
+      /// Lo que hace la tecla de buscar.
+      void confirmar(ProviderContainer contenedor, String texto) =>
+          contenedor.read(busquedaConfirmadaProvider.notifier).state =
+              terminoDeBusqueda(texto);
+
+      testWidgets('mientras se escribe no pregunta por ningún lugar', (
+        tester,
+      ) async {
+        final contenedor = crear();
+
+        escribir(contenedor, 'envigado');
+        await tester.pump(esperaBusquedaRutas);
+
+        expect(zonas.consultas, isEmpty);
+        expect(repositorio.busquedas.single.zona, isNull);
+        expect(contenedor.read(zonaBuscadaProvider).valueOrNull, isNull);
+      });
+
+      testWidgets('al confirmar pregunta por el lugar y busca enseguida, '
+          'con su zona', (tester) async {
+        final contenedor = crear();
+
+        escribir(contenedor, 'envigado');
+        confirmar(contenedor, 'envigado');
+        // Sin la espera de cuando se escribe.
+        await tester.pump(Duration.zero);
+
+        expect([for (final c in zonas.consultas) c.texto], ['envigado']);
+        expect(repositorio.busquedas.single.zona, envigado);
+        expect(contenedor.read(zonaBuscadaProvider).valueOrNull, envigado);
+
+        // La búsqueda de antes de confirmar se abandonó sin consultar.
+        await tester.pump(esperaBusquedaRutas);
+        expect(repositorio.busquedas, hasLength(1));
+      });
+
+      testWidgets('si vuelve a escribir, lo confirmado ya no vale: busca sin '
+          'zona', (tester) async {
+        final contenedor = crear();
+        escribir(contenedor, 'envigado');
+        confirmar(contenedor, 'envigado');
+        await tester.pump(Duration.zero);
+
+        escribir(contenedor, 'envigad');
+        await tester.pump(esperaBusquedaRutas);
+        await tester.pump(Duration.zero);
+
+        expect(repositorio.busquedas.last.termino, 'envigad');
+        expect(repositorio.busquedas.last.zona, isNull);
+        expect(zonas.consultas, hasLength(1));
+      });
+
+      testWidgets('con la ubicación del usuario la pasa, para preferir los '
+          'lugares cercanos', (tester) async {
+        final enLaU = puntoDePrueba(latitud: 6.2318, longitud: -75.6105);
+        final contenedor = crear(ubicacion: UbicacionConocida(enLaU));
+
+        escribir(contenedor, 'envigado');
+        // La ubicación llega antes de confirmar.
+        await tester.pump(Duration.zero);
+        confirmar(contenedor, 'envigado');
+        await tester.pump(Duration.zero);
+
+        final consulta = zonas.consultas.single;
+        expect(consulta.latitud, enLaU.latitud);
+        expect(consulta.longitud, enLaU.longitud);
+        await tester.pump(esperaBusquedaRutas);
+      });
+
+      testWidgets('si lo escrito no es un lugar, busca solo por nombre y '
+          'creador', (tester) async {
+        final contenedor = crear();
+
+        escribir(contenedor, 'nutibara');
+        confirmar(contenedor, 'nutibara');
+        await tester.pump(Duration.zero);
+
+        expect(zonas.consultas.single.texto, 'nutibara');
+        expect(repositorio.busquedas.single.zona, isNull);
+        expect(contenedor.read(busquedaRutasProvider).valueOrNull, [nutibara]);
+        await tester.pump(esperaBusquedaRutas);
+      });
+
+      testWidgets('si no se pudo preguntar por el lugar, busca igual por '
+          'nombre y creador, y el error queda para la pantalla', (
+        tester,
+      ) async {
+        zonas.error = const ZonaNoDisponibleException('sin conexión');
+        final contenedor = crear();
+
+        escribir(contenedor, 'nutibara');
+        confirmar(contenedor, 'nutibara');
+        await tester.pump(Duration.zero);
+
+        expect(repositorio.busquedas.single.zona, isNull);
+        expect(contenedor.read(busquedaRutasProvider).valueOrNull, [nutibara]);
+        expect(
+          contenedor.read(zonaBuscadaProvider).error,
+          isA<ZonaNoDisponibleException>(),
+        );
+        await tester.pump(esperaBusquedaRutas);
+      });
     });
   });
 }

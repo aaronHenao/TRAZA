@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:traza/models/zona.dart';
 import 'package:traza/services/rutas_service.dart';
 
 /// Pruebas de la búsqueda de rutas del repositorio real (SCRUM-254).
@@ -63,6 +64,31 @@ void main() {
       expect(cuerpo['p_longitud'], -75.5812);
     },
   );
+
+  test('con una zona manda sus cuatro bordes (SCRUM-255)', () async {
+    final supabase = _SupabaseFalso();
+    addTearDown(supabase.cerrar);
+
+    await supabase.repositorio.buscar(
+      termino: 'envigado',
+      zona: const Zona(
+        nombre: 'Envigado',
+        sur: 6.1003,
+        oeste: -75.6049,
+        norte: 6.1984,
+        este: -75.4741,
+      ),
+    );
+
+    expect(jsonDecode(supabase.peticiones.single.body), {
+      'p_termino': 'envigado',
+      'p_zona_sur': 6.1003,
+      'p_zona_oeste': -75.6049,
+      'p_zona_norte': 6.1984,
+      'p_zona_este': -75.4741,
+      'p_limite': SupabaseRutasRepository.limite,
+    });
+  });
 
   test('con una sola coordenada no manda ninguna: la base rechazaría la '
       'consulta', () async {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../models/ruta.dart';
+import '../../models/zona.dart';
 import '../../services/busqueda_rutas_provider.dart';
 import '../../services/explorar_rutas_provider.dart';
 import '../../services/permisos_provider.dart';
@@ -63,9 +64,17 @@ class RutasScreen extends ConsumerWidget {
   static const claveResultados = Key('rutas-resultados');
   static const claveSinResultados = Key('rutas-sin-resultados');
   static const claveBuscando = Key('rutas-buscando');
+  static const claveNotaZona = Key('rutas-nota-zona');
+  static const claveSinZona = Key('rutas-sin-zona');
+  static const claveBuscarComoLugar = Key('rutas-buscar-como-lugar');
+  static const claveReintentarZona = Key('rutas-reintentar-zona');
 
   /// Lo que dice el campo de búsqueda vacío.
-  static const pistaBusqueda = 'Busca por nombre o creador';
+  static const pistaBusqueda = 'Busca por nombre, zona o creador';
+
+  /// De dónde salen los lugares (SCRUM-255): los datos de OpenStreetMap
+  /// piden decirlo donde se usan.
+  static const atribucionZonas = 'Lugares: © colaboradores de OpenStreetMap';
 
   /// Lo que dice el rótulo según cómo se ordenó la lista.
   static const rotuloCercania = 'CERCA DE TI';
@@ -134,9 +143,12 @@ class _Contenido extends ConsumerWidget {
   }
 
   /// Con una búsqueda escrita, deslizar hacia abajo la repite: pudo
-  /// publicarse algo que coincide.
+  /// publicarse algo que coincide. El lugar se vuelve a pedir por si la vez
+  /// anterior no se pudo; si ya se tenía, sale guardado, sin salir a la red.
   Future<void> _recargarBusqueda(WidgetRef ref) async {
-    ref.invalidate(busquedaRutasProvider);
+    ref
+      ..invalidate(zonaBuscadaProvider)
+      ..invalidate(busquedaRutasProvider);
     try {
       await ref.read(busquedaRutasProvider.future);
     } catch (_) {}
@@ -183,6 +195,11 @@ class _Contenido extends ConsumerWidget {
 
 /// Lo que encontró la búsqueda (SCRUM-254): en la misma lista y con la
 /// misma tarjeta que las cercanas, que es lo que el usuario ya sabe leer.
+///
+/// Confirmada, suma las rutas que arrancan en el lugar que nombra lo
+/// escrito, y dice cuál lugar encontró (SCRUM-255): sin eso, una ruta lejana
+/// en la lista no tendría explicación, y "Belén" podría ser Boyacá sin que
+/// el usuario lo supiera.
 class _Resultados extends ConsumerWidget {
   const _Resultados({required this.termino});
 
@@ -192,6 +209,13 @@ class _Resultados extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final busqueda = ref.watch(busquedaRutasProvider);
+    final confirmada = ref.watch(busquedaEstaConfirmadaProvider);
+    final zona = ref.watch(zonaBuscadaProvider);
+
+    // Lo que se sabe del lugar. Nada antes de confirmar: hasta entonces no
+    // se pregunta.
+    final lugar = confirmada ? zona.valueOrNull : null;
+    final lugarNoDisponible = confirmada && zona.hasError && !zona.isLoading;
 
     return switch (busqueda) {
       AsyncError() when busqueda.isLoading => const Center(
@@ -209,6 +233,10 @@ class _Resultados extends ConsumerWidget {
           clave: RutasScreen.claveResultados,
           encabezado: [
             _Rotulo(RutasScreen.rotuloResultados, cargando: busqueda.isLoading),
+            if (lugar != null)
+              _NotaZona(zona: lugar)
+            else if (lugarNoDisponible)
+              _NotaSinZona(termino: termino),
           ],
           rutas: rutas,
         ),
@@ -217,10 +245,99 @@ class _Resultados extends ConsumerWidget {
         key: RutasScreen.claveSinResultados,
         icono: Icons.search_off_rounded,
         titulo: RutasScreen.sinResultados,
-        detalle: 'Ninguna ruta publicada coincide con «$termino».',
+        detalle: switch ((confirmada, lugar, lugarNoDisponible)) {
+          (false, _, _) =>
+            'Ninguna ruta publicada coincide con «$termino». Si es un '
+                'lugar, búscalo como lugar para ver las rutas que arrancan '
+                'ahí.',
+          (true, final lugar?, _) =>
+            'Ninguna ruta publicada coincide con «$termino» ni arranca en '
+                '${lugar.nombreCompleto}.',
+          (true, null, true) =>
+            'Ninguna ruta publicada coincide con «$termino», y no pudimos '
+                'buscarlo como lugar. Revisa tu conexión e inténtalo de '
+                'nuevo.',
+          (true, null, false) =>
+            'Ninguna ruta publicada coincide con «$termino», y no '
+                'encontramos un lugar con ese nombre.',
+        },
+        accion: !confirmada
+            // Lo mismo que la tecla de buscar, para quien no la ve: en el
+            // navegador es Enter.
+            ? OutlinedButton(
+                key: RutasScreen.claveBuscarComoLugar,
+                onPressed: () =>
+                    ref.read(busquedaConfirmadaProvider.notifier).state =
+                        termino,
+                child: const Text('Buscar como lugar'),
+              )
+            : lugarNoDisponible
+            ? OutlinedButton(
+                key: RutasScreen.claveReintentarZona,
+                onPressed: () => ref.invalidate(zonaBuscadaProvider),
+                child: const Text('Reintentar'),
+              )
+            : null,
       ),
       _ => const Center(child: CircularProgressIndicator()),
     };
+  }
+}
+
+/// El lugar que se encontró al confirmar la búsqueda (SCRUM-255), y de
+/// dónde salió.
+class _NotaZona extends StatelessWidget {
+  const _NotaZona({required this.zona});
+
+  final Zona zona;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: RutasScreen.claveNotaZona,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: 'También las que arrancan en '),
+              TextSpan(
+                text: zona.nombreCompleto,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+              ),
+              const TextSpan(text: '.'),
+            ],
+          ),
+          style: const TextStyle(fontSize: 13, color: AppColors.ink2),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          RutasScreen.atribucionZonas,
+          style: TextStyle(fontSize: 11, color: AppColors.ink3),
+        ),
+      ],
+    );
+  }
+}
+
+/// No se pudo preguntar por el lugar (SCRUM-255): lo que se ve coincide por
+/// nombre o creador, y conviene que el usuario lo sepa.
+class _NotaSinZona extends StatelessWidget {
+  const _NotaSinZona({required this.termino});
+
+  final String termino;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'No pudimos buscar «$termino» como lugar: estas coinciden por nombre '
+      'o creador.',
+      key: RutasScreen.claveSinZona,
+      style: const TextStyle(fontSize: 13, color: AppColors.ink2),
+    );
   }
 }
 
@@ -385,7 +502,7 @@ class _ListaDeRutas extends StatelessWidget {
 }
 
 /// El campo para buscar rutas por su nombre o por quien la creó
-/// (SCRUM-254).
+/// (SCRUM-254), y, al confirmar, por el lugar donde arrancan (SCRUM-255).
 ///
 /// Va fijo debajo del título y no dentro de la lista: así sigue a mano
 /// mientras se recorren los resultados.
@@ -394,6 +511,11 @@ class _BarraBusqueda extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // La barra mantiene viva la confirmación mientras exista: sin nadie que
+    // la escuche, se borraría antes de que la búsqueda alcanzara a leerla,
+    // por ejemplo al escribir y dar Enter en el mismo instante.
+    ref.listen(busquedaConfirmadaProvider, (_, _) {});
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -403,8 +525,16 @@ class _BarraBusqueda extends ConsumerWidget {
       ),
       child: TextField(
         key: RutasScreen.claveBusqueda,
-        onChanged: (texto) =>
-            ref.read(textoBusquedaRutasProvider.notifier).state = texto,
+        onChanged: (texto) {
+          ref.read(textoBusquedaRutasProvider.notifier).state = texto;
+          // Lo confirmado era lo que estaba escrito antes.
+          ref.read(busquedaConfirmadaProvider.notifier).state = null;
+        },
+        // La tecla de buscar (Enter en el navegador) confirma: entonces se
+        // busca también el lugar que nombra lo escrito.
+        onSubmitted: (texto) =>
+            ref.read(busquedaConfirmadaProvider.notifier).state =
+                terminoDeBusqueda(texto),
         textInputAction: TextInputAction.search,
         // Nombres de lugares y de personas: el corrector los cambiaría por
         // palabras del diccionario.

@@ -1,5 +1,6 @@
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
+import 'package:traza/models/zona.dart';
 import 'package:traza/services/rutas_service.dart';
 
 /// Repositorio de rutas en memoria para las pruebas (SCRUM-241).
@@ -41,8 +42,14 @@ class RutasRepositorioFalso implements RutasRepository {
   /// fallar la búsqueda sin que falle la lista de siempre.
   Object? errorBusqueda;
 
-  /// Cada búsqueda que llegó: qué se buscó y desde dónde.
-  final busquedas = <({String termino, double? latitud, double? longitud})>[];
+  /// Lo que `buscar` agrega cuando llega una zona (SCRUM-255): las rutas que
+  /// arrancan en ella. El falso no sabe dónde arranca cada ruta, así que la
+  /// prueba se las dice.
+  List<Ruta> rutasEnZona = const [];
+
+  /// Cada búsqueda que llegó: qué se buscó, desde dónde y en qué zona.
+  final busquedas =
+      <({String termino, double? latitud, double? longitud, Zona? zona})>[];
 
   @override
   Future<Ruta> crear(NuevaRuta ruta) async {
@@ -99,14 +106,21 @@ class RutasRepositorioFalso implements RutasRepository {
     required String termino,
     double? latitud,
     double? longitud,
+    Zona? zona,
   }) async {
-    busquedas.add((termino: termino, latitud: latitud, longitud: longitud));
+    busquedas.add((
+      termino: termino,
+      latitud: latitud,
+      longitud: longitud,
+      zona: zona,
+    ));
 
     final error = errorBusqueda;
     if (error != null) throw error;
 
     final buscado = termino.toLowerCase();
-    return resultadosBusqueda ??
+    final porTexto =
+        resultadosBusqueda ??
         [
           for (final ruta in rutas)
             if (ruta.publicada &&
@@ -115,6 +129,12 @@ class RutasRepositorioFalso implements RutasRepository {
                 ))
               ruta,
         ];
+    return [
+      ...porTexto,
+      if (zona != null)
+        for (final ruta in rutasEnZona)
+          if (!porTexto.contains(ruta)) ruta,
+    ];
   }
 
   @override

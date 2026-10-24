@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
+import 'package:traza/models/zona.dart';
 import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
 import 'package:traza/screens/rutas/publicar_ruta_screen.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
@@ -21,12 +22,14 @@ import 'package:traza/services/permisos_usuario_service.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
+import 'package:traza/services/zonas_service.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
 import 'package:traza/widgets/aviso_permiso_ubicacion.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
 
+import '../utiles/buscador_de_zonas_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
@@ -76,11 +79,13 @@ class _BusquedaLenta extends RutasRepositorioFalso {
     required String termino,
     double? latitud,
     double? longitud,
+    Zona? zona,
   }) async {
     final enseguida = await super.buscar(
       termino: termino,
       latitud: latitud,
       longitud: longitud,
+      zona: zona,
     );
     return pendiente?.future ?? enseguida;
   }
@@ -94,6 +99,7 @@ void main() {
   late _MockPermisosService permisos;
   late FuenteUbicacionFalsa fuente;
   late RutasRepositorioFalso repositorio;
+  late BuscadorDeZonasFalso zonas;
 
   final ahora = DateTime(2026, 10, 18, 12);
 
@@ -121,6 +127,7 @@ void main() {
         RutaCercana(ruta: subida, distanciaKm: 1.4),
         RutaCercana(ruta: vuelta, distanciaKm: 6.2),
       ];
+    zonas = BuscadorDeZonasFalso(zonas: {'envigado': envigado});
     when(
       () => permisos.estadoSalud(),
     ).thenAnswer((_) async => EstadoPermiso.desconocido);
@@ -176,6 +183,8 @@ void main() {
           relojProvider.overrideWithValue(() => ahora),
           // El mapa del detalle no descarga tiles reales.
           proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+          // Ni la búsqueda por zona le pregunta a Nominatim (SCRUM-255).
+          buscadorDeZonasProvider.overrideWithValue(zonas),
         ],
         child: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(escalaTexto)),
@@ -1172,6 +1181,205 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+    });
+  });
+
+  group('buscar por zona (SCRUM-255, criterio 2 de HU-30)', () {
+    // Arranca en Envigado y no lo dice en su nombre: solo la encuentra la
+    // búsqueda por zona.
+    final escobero = rutaDePrueba(
+      id: 'r-3',
+      nombre: 'Loma del Escobero',
+      autorNombre: 'Luis',
+      estado: EstadoRuta.publicada,
+      fechaPublicacion: DateTime(2026, 10, 16, 9),
+    );
+
+    Future<void> escribir(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    /// La tecla de buscar del teclado, o Enter en el navegador.
+    Future<void> confirmar(WidgetTester tester) async {
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+    }
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.nombre,
+    ];
+
+    testWidgets('mientras escribe no pregunta por ningún lugar', (
+      tester,
+    ) async {
+      repositorio.rutasEnZona = [escobero];
+      await montar(tester);
+
+      await escribir(tester, 'envigado');
+
+      expect(zonas.consultas, isEmpty);
+      expect(repositorio.busquedas.single.zona, isNull);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsNothing);
+    });
+
+    testWidgets('al confirmar suma las rutas que arrancan en ese lugar, '
+        'aunque estén lejos, en la misma lista y con la misma tarjeta', (
+      tester,
+    ) async {
+      final vueltaEnvigado = rutaDePrueba(
+        id: 'r-4',
+        nombre: 'Vuelta a Envigado',
+        estado: EstadoRuta.publicada,
+        fechaPublicacion: DateTime(2026, 10, 17, 9),
+      );
+      repositorio = RutasRepositorioFalso(
+        rutas: [vuelta, subida, vueltaEnvigado],
+      )..rutasEnZona = [escobero];
+      await montar(tester);
+
+      await escribir(tester, 'envigado');
+      await confirmar(tester);
+
+      expect([for (final c in zonas.consultas) c.texto], ['envigado']);
+      expect(repositorio.busquedas.last.zona, envigado);
+      // La que se llama así y la que arranca allá.
+      expect(enPantalla(tester), ['Vuelta a Envigado', 'Loma del Escobero']);
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      )) {
+        expect(tarjeta.compacta, isFalse);
+      }
+    });
+
+    testWidgets('dice qué lugar encontró, con su departamento, y de dónde '
+        'salió', (tester) async {
+      repositorio.rutasEnZona = [escobero];
+      await montar(tester);
+
+      await escribir(tester, 'envigado');
+      await confirmar(tester);
+
+      final nota = find.byKey(RutasScreen.claveNotaZona);
+      expect(
+        find.descendant(
+          of: nota,
+          matching: find.textContaining(
+            'Envigado, Antioquia',
+            findRichText: true,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: nota,
+          matching: find.text(RutasScreen.atribucionZonas),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('con la ubicación del usuario, la pasa para preferir los '
+        'lugares cercanos', (tester) async {
+      await montar(tester);
+
+      await escribir(tester, 'envigado');
+      await confirmar(tester);
+
+      expect(zonas.consultas.single.latitud, 6.2442);
+      expect(zonas.consultas.single.longitud, -75.5812);
+    });
+
+    testWidgets('si vuelve a escribir, deja de buscar en el lugar', (
+      tester,
+    ) async {
+      repositorio.rutasEnZona = [escobero];
+      await montar(tester);
+      await escribir(tester, 'envigado');
+      await confirmar(tester);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
+
+      await escribir(tester, 'envigad');
+
+      expect(find.byKey(RutasScreen.claveNotaZona), findsNothing);
+      expect(repositorio.busquedas.last.zona, isNull);
+      expect(find.text('Loma del Escobero'), findsNothing);
+    });
+
+    testWidgets('sin coincidencias por nombre, ofrece buscar lo escrito como '
+        'lugar', (tester) async {
+      repositorio.rutasEnZona = [escobero];
+      await montar(tester);
+
+      await escribir(tester, 'envigado');
+      expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+
+      await tester.tap(find.byKey(RutasScreen.claveBuscarComoLugar));
+      await tester.pumpAndSettle();
+
+      expect(enPantalla(tester), ['Loma del Escobero']);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
+    });
+
+    testWidgets('si lo escrito no es un lugar, lo dice', (tester) async {
+      await montar(tester);
+
+      await escribir(tester, 'zzz');
+      await confirmar(tester);
+
+      expect([for (final c in zonas.consultas) c.texto], ['zzz']);
+      expect(
+        find.textContaining('no encontramos un lugar con ese nombre'),
+        findsOneWidget,
+      );
+      expect(find.byKey(RutasScreen.claveBuscarComoLugar), findsNothing);
+    });
+
+    testWidgets('si no se pudo preguntar por el lugar, muestra lo que '
+        'coincide por nombre y lo dice', (tester) async {
+      zonas.error = const ZonaNoDisponibleException('sin conexión');
+      await montar(tester);
+
+      await escribir(tester, 'nutibara');
+      await confirmar(tester);
+
+      expect(enPantalla(tester), ['Subida al Nutibara']);
+      expect(find.byKey(RutasScreen.claveSinZona), findsOneWidget);
+    });
+
+    testWidgets('sin nada por nombre y sin poder preguntar por el lugar, '
+        'deja reintentar', (tester) async {
+      zonas.error = const ZonaNoDisponibleException('sin conexión');
+      repositorio.rutasEnZona = [escobero];
+      await montar(tester);
+
+      await escribir(tester, 'envigado');
+      await confirmar(tester);
+      expect(find.textContaining('Revisa tu conexión'), findsOneWidget);
+
+      zonas.error = null;
+      await tester.tap(find.byKey(RutasScreen.claveReintentarZona));
+      await tester.pumpAndSettle();
+
+      expect(enPantalla(tester), ['Loma del Escobero']);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto grande, la nota '
+        'del lugar no desborda', (tester) async {
+      repositorio.rutasEnZona = [escobero];
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+      await escribir(tester, 'envigado');
+      await confirmar(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(RutasScreen.claveNotaZona), findsOneWidget);
     });
   });
 }

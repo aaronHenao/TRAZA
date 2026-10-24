@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/ruta.dart';
 import '../models/ruta_cercana.dart';
+import '../models/zona.dart';
 // `usuarioActualProvider` vive ahí desde el foro, pero no es del foro: dice
 // quién tiene la sesión abierta. Se reutiliza en vez de declarar otro, para
 // que una prueba que sustituya la sesión la sustituya para toda la app.
@@ -129,7 +130,8 @@ abstract interface class RutasRepository {
   });
 
   /// Las rutas publicadas cuyo nombre o creador coinciden con [termino],
-  /// estén donde estén (SCRUM-254).
+  /// estén donde estén (SCRUM-254), y con [zona], también las que arrancan
+  /// dentro de ella (SCRUM-255).
   ///
   /// La búsqueda la hace la base con `buscar_rutas` (0040): sin tildes ni
   /// mayúsculas, y con todas las palabras de [termino] en cualquier orden.
@@ -140,6 +142,7 @@ abstract interface class RutasRepository {
     required String termino,
     double? latitud,
     double? longitud,
+    Zona? zona,
   });
 }
 
@@ -322,6 +325,7 @@ class SupabaseRutasRepository implements RutasRepository {
     required String termino,
     double? latitud,
     double? longitud,
+    Zona? zona,
   }) async {
     _usuarioId();
 
@@ -333,6 +337,12 @@ class SupabaseRutasRepository implements RutasRepository {
         if (latitud != null && longitud != null) ...{
           'p_latitud': latitud,
           'p_longitud': longitud,
+        },
+        if (zona != null) ...{
+          'p_zona_sur': zona.sur,
+          'p_zona_oeste': zona.oeste,
+          'p_zona_norte': zona.norte,
+          'p_zona_este': zona.este,
         },
         'p_limite': limite,
       },

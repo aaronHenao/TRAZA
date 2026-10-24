@@ -68,6 +68,55 @@ void main() {
     );
     expect(supabase.peticiones, isEmpty);
   });
+
+  group('confirmar la dificultad propuesta (SCRUM-262)', () {
+    test('se lo pide a confirmar_clasificacion, con la ruta', () async {
+      final supabase = _SupabaseFalso();
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.confirmarClasificacion('ruta-1');
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/confirmar_clasificacion');
+      expect(jsonDecode(peticion.body), {'p_ruta_id': 'ruta-1'});
+    });
+
+    test('si la base no lo deja, es falta de permiso', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        supabase.repositorio.confirmarClasificacion('ruta-1'),
+        throwsA(isA<SinPermisoParaRevisarException>()),
+      );
+    });
+
+    test('cualquier otro error llega tal cual, como el de hoy, que la '
+        'función todavía no existe', () async {
+      // PostgREST contesta PGRST202 cuando no encuentra la función.
+      final supabase = _SupabaseFalso(codigoPostgres: 'PGRST202');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        supabase.repositorio.confirmarClasificacion('ruta-1'),
+        throwsA(
+          isA<PostgrestException>().having((e) => e.code, 'code', 'PGRST202'),
+        ),
+      );
+    });
+
+    test('sin sesión no sale ninguna petición', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.confirmarClasificacion('ruta-1'),
+        throwsA(isA<SesionRequeridaParaRutasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
 }
 
 /// PostgREST de mentira: contesta [respuesta] tal cual, o un error con

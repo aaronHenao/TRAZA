@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -340,6 +342,131 @@ void main() {
 
       expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
       expect(find.byKey(RevisarClasificacionScreen.claveAbrir), findsNothing);
+    });
+  });
+
+  group('confirmar la dificultad propuesta (SCRUM-262, criterio 3 de '
+      'HU-35)', () {
+    Finder boton() => find.byKey(RevisarClasificacionScreen.claveConfirmar);
+
+    /// Toca "Confirmar", que va al final, después de los datos.
+    Future<void> confirmar(WidgetTester tester) async {
+      await tester.ensureVisible(boton());
+      await tester.pumpAndSettle();
+      await tester.tap(boton());
+    }
+
+    testWidgets('con una dificultad propuesta, ofrece confirmarla diciendo '
+        'cuál', (tester) async {
+      await montar(tester);
+
+      expect(find.text('Confirmar como moderada'), findsOneWidget);
+    });
+
+    testWidgets('sin dificultad propuesta no hay nada que confirmar: el botón '
+        'no aparece', (tester) async {
+      repositorio = RutasRepositorioFalso(rutas: [enRevision(dificultad: null)])
+        ..puedeRevisar = true;
+      await montar(tester);
+
+      expect(find.byKey(RevisarClasificacionScreen.claveDificultad), findsOne);
+      expect(boton(), findsNothing);
+    });
+
+    testWidgets('confirmar se lo pide a la base, avisa y vuelve al detalle, '
+        'que vuelve a pedir la ruta', (tester) async {
+      await montar(tester, ubicacion: DetalleRutaScreen.rutaDe('ruta-1'));
+      await tester.tap(find.byKey(RevisarClasificacionScreen.claveAbrir));
+      await tester.pumpAndSettle();
+      final consultas = repositorio.consultasDeRuta;
+
+      await confirmar(tester);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.confirmadas, ['ruta-1']);
+      expect(
+        find.text(RevisarClasificacionScreen.confirmada(Dificultad.moderada)),
+        findsOneWidget,
+      );
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+      expect(
+        find.byKey(RevisarClasificacionScreen.claveDificultad),
+        findsNothing,
+      );
+      expect(repositorio.consultasDeRuta, greaterThan(consultas));
+    });
+
+    testWidgets('mientras guarda no se puede volver a tocar, y se ve que '
+        'guarda', (tester) async {
+      repositorio.confirmacionPendiente = Completer<void>();
+      await montar(tester);
+
+      await confirmar(tester);
+      await tester.pump();
+
+      expect(tester.widget<FilledButton>(boton()).onPressed, isNull);
+      expect(
+        find.descendant(
+          of: boton(),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(boton(), warnIfMissed: false);
+      await tester.pump();
+      expect(repositorio.confirmadas, ['ruta-1']);
+
+      repositorio.confirmacionPendiente!.complete();
+      await tester.pumpAndSettle();
+
+      // Se abrió directo en la revisión: debajo quedó el detalle.
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+    });
+
+    testWidgets('si la base ya no lo deja, lo dice y se queda en la '
+        'revisión', (tester) async {
+      repositorio.errorConfirmar = const SinPermisoParaRevisarException();
+      await montar(tester);
+
+      await confirmar(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text(RevisarClasificacionScreen.yaNoPuedes), findsOneWidget);
+      expect(
+        find.byKey(RevisarClasificacionScreen.claveDificultad),
+        findsOneWidget,
+      );
+      expect(tester.widget<FilledButton>(boton()).onPressed, isNotNull);
+    });
+
+    testWidgets('si falla, lo dice y deja intentarlo otra vez', (tester) async {
+      repositorio.errorConfirmar = StateError('sin red');
+      await montar(tester);
+
+      await confirmar(tester);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(RevisarClasificacionScreen.noSeConfirmo),
+        findsOneWidget,
+      );
+
+      repositorio.errorConfirmar = null;
+      await confirmar(tester);
+      await tester.pumpAndSettle();
+
+      expect(repositorio.confirmadas, ['ruta-1', 'ruta-1']);
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto más grande, el '
+        'botón cabe y se puede tocar', (tester) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.6);
+
+      await tester.ensureVisible(boton());
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(boton().hitTestable(), findsOneWidget);
     });
   });
 }

@@ -8,6 +8,7 @@ import '../../models/ruta.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/revision_clasificacion_provider.dart';
 import '../../services/rutas_provider.dart';
+import '../../services/rutas_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/traza_theme.dart';
@@ -19,6 +20,7 @@ import '../../widgets/tarjeta_reto.dart' show TarjetaReto;
 import '../../widgets/tarjeta_ruta.dart';
 import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_card.dart';
+import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
 /// Donde el Runner Experto revisa la clasificación de una ruta (SCRUM-261,
@@ -26,8 +28,8 @@ import '../../widgets/traza_top_bar.dart';
 ///
 /// Enseña la ruta —por dónde va, cómo se llama y de quién es—, la
 /// dificultad propuesta y los datos en que se basa: la distancia y el
-/// desnivel acumulado (criterio 2). Confirmarla o corregirla vienen en las
-/// subtareas que siguen.
+/// desnivel acumulado (criterio 2). Al final deja confirmarla (SCRUM-262,
+/// criterio 3); corregirla viene en la subtarea que sigue.
 ///
 /// Solo la ve quien la base dice que puede (`puede_revisar_clasificacion`,
 /// 0042, criterio 1): un Runner Experto que no sea el autor. A los demás se
@@ -51,6 +53,7 @@ class RevisarClasificacionScreen extends ConsumerWidget {
   static const claveNoDisponible = Key('revisar-clasificacion-no-disponible');
   static const claveError = Key('revisar-clasificacion-error');
   static const claveReintentar = Key('revisar-clasificacion-reintentar');
+  static const claveConfirmar = Key('revisar-clasificacion-confirmar');
 
   static const rotuloDificultad = 'DIFICULTAD PROPUESTA';
   static const rotuloDatos = 'EN QUÉ SE BASA';
@@ -64,6 +67,16 @@ class RevisarClasificacionScreen extends ConsumerWidget {
   static const desnivelNoDisponible =
       'La app no guarda la altitud del recorrido, así que el desnivel '
       'todavía no se puede calcular.';
+
+  /// El botón de confirmar dice qué se confirma (SCRUM-262): queda lejos
+  /// de la dificultad, debajo de los datos.
+  static String confirmarComo(Dificultad dificultad) =>
+      'Confirmar como ${dificultad.etiqueta.toLowerCase()}';
+  static String confirmada(Dificultad dificultad) =>
+      'Confirmaste la ruta como ${dificultad.etiqueta.toLowerCase()}.';
+  static const yaNoPuedes = 'Ya no puedes revisar esta ruta.';
+  static const noSeConfirmo =
+      'No pudimos confirmar la dificultad. Inténtalo de nuevo.';
 
   static const sinPermisoTitulo = 'No puedes revisar esta clasificación';
   static const sinPermisoDetalle =
@@ -153,7 +166,19 @@ class _Contenido extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fecha = ruta.fechaPublicacion ?? ruta.fechaCreacion;
+    final dificultad = ruta.dificultad;
 
+    return Column(
+      children: [
+        Expanded(child: _datos(fecha)),
+        // Sin dificultad propuesta no hay nada que confirmar.
+        if (dificultad != null)
+          _Confirmar(rutaId: ruta.id, dificultad: dificultad),
+      ],
+    );
+  }
+
+  Widget _datos(DateTime fecha) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -195,6 +220,91 @@ class _Contenido extends StatelessWidget {
           conValor: false,
         ),
       ],
+    );
+  }
+}
+
+/// Confirmar la dificultad propuesta (SCRUM-262, criterio 3 de HU-35): la
+/// ruta queda revisada y su dificultad, a la vista de todos.
+///
+/// Va fijo al pie, como el botón de publicar una ruta: siempre a mano,
+/// aunque los datos no quepan en la pantalla, y los avisos suben para no
+/// taparlo. Mientras se guarda no se puede volver a tocar, para que un doble
+/// toque no mande dos confirmaciones. Si sale bien, avisa y vuelve al detalle
+/// de la ruta, ya al día; si no, lo dice y deja intentarlo otra vez.
+class _Confirmar extends ConsumerStatefulWidget {
+  const _Confirmar({required this.rutaId, required this.dificultad});
+
+  final String rutaId;
+  final Dificultad dificultad;
+
+  @override
+  ConsumerState<_Confirmar> createState() => _ConfirmarState();
+}
+
+class _ConfirmarState extends ConsumerState<_Confirmar> {
+  var _guardando = false;
+
+  Future<void> _confirmar() async {
+    setState(() => _guardando = true);
+    try {
+      await ref
+          .read(rutasRepositoryProvider)
+          .confirmarClasificacion(widget.rutaId);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _guardando = false);
+      mostrarToast(
+        context,
+        error is SinPermisoParaRevisarException
+            ? RevisarClasificacionScreen.yaNoPuedes
+            : RevisarClasificacionScreen.noSeConfirmo,
+        // Por encima del pie: si no, taparía el botón para reintentar.
+        separacionInferior: 90,
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    // La ruta cambió: el detalle y su botón de revisar la vuelven a pedir.
+    ref
+      ..invalidate(rutaProvider(widget.rutaId))
+      ..invalidate(puedeRevisarClasificacionProvider(widget.rutaId));
+    mostrarToast(
+      context,
+      RevisarClasificacionScreen.confirmada(widget.dificultad),
+    );
+    context.pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        12,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: FilledButton(
+        key: RevisarClasificacionScreen.claveConfirmar,
+        onPressed: _guardando ? null : _confirmar,
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        child: _guardando
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                  semanticsLabel: 'Guardando',
+                ),
+              )
+            : Text(RevisarClasificacionScreen.confirmarComo(widget.dificultad)),
+      ),
     );
   }
 }

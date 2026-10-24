@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
@@ -160,8 +162,30 @@ class RutasRepositorioFalso implements RutasRepository {
     return puedeRevisar;
   }
 
+  /// Las rutas cuya clasificación se confirmó (SCRUM-262).
+  final confirmadas = <String>[];
+
+  /// Lo que lanza `confirmarClasificacion`, si algo.
+  Object? errorConfirmar;
+
+  /// Si está, `confirmarClasificacion` no termina hasta que la prueba lo
+  /// complete.
+  Completer<void>? confirmacionPendiente;
+
+  @override
+  Future<void> confirmarClasificacion(String rutaId) async {
+    confirmadas.add(rutaId);
+    final error = errorConfirmar;
+    if (error != null) throw error;
+    await confirmacionPendiente?.future;
+  }
+
+  /// Cuántas veces se pidió una ruta con su trazado.
+  int consultasDeRuta = 0;
+
   @override
   Future<Ruta?> ruta(String id) async {
+    consultasDeRuta++;
     final error = this.error;
     if (error != null) throw error;
     return rutas.where((ruta) => ruta.id == id).firstOrNull;

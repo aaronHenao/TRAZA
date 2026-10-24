@@ -2715,4 +2715,194 @@ void main() {
       expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsOneWidget);
     });
   });
+
+  group('aplicar el filtro de dificultad (SCRUM-268, criterio 2 de HU-36)', () {
+    final facilCorta = rutaDePrueba(
+      id: 'facil-corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+      dificultad: Dificultad.facil,
+    );
+    final moderadaMedia = rutaDePrueba(
+      id: 'moderada-media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+      dificultad: Dificultad.moderada,
+    );
+    final facilLarga = rutaDePrueba(
+      id: 'facil-larga',
+      nombre: 'Vuelta a Santa Elena',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 15,
+      dificultad: Dificultad.facil,
+    );
+    final sinClasificar = rutaDePrueba(
+      id: 'sin-clasificar',
+      nombre: 'Vuelta a la manzana',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 4.1,
+    );
+    final dificilCorta = rutaDePrueba(
+      id: 'dificil-corta',
+      nombre: 'Escaleras de la 70',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 2.1,
+      dificultad: Dificultad.dificil,
+    );
+    final todas = [
+      facilCorta,
+      moderadaMedia,
+      facilLarga,
+      sinClasificar,
+      dificilCorta,
+    ];
+
+    // Alta para que la lista construya todas las tarjetas.
+    const alta = Size(390, 2600);
+
+    List<RutaCercana> cercanas(List<Ruta> rutas) => [
+      for (final (i, ruta) in rutas.indexed)
+        RutaCercana(ruta: ruta, distanciaKm: 0.5 + i),
+    ];
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: todas)
+        ..rutasCercanas = cercanas(todas);
+    });
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.id,
+    ];
+
+    bool marcada(WidgetTester tester, Dificultad? dificultad) => tester
+        .widget<ChipFiltro>(find.byKey(RutasScreen.claveDificultad(dificultad)))
+        .activo;
+
+    /// Desliza la lista hacia abajo, como el usuario para recargarla: media
+    /// lista, porque el indicador pide arrastrar un cuarto de lo que mide.
+    Future<void> recargar(WidgetTester tester) async {
+      final lista = find.byKey(RutasScreen.claveLista);
+      await tester.fling(
+        lista,
+        Offset(0, tester.getSize(lista).height / 2),
+        1000,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('con una dificultad elegida, solo las de esa dificultad, en el '
+        'orden por cercanía y con su chip marcado', (tester) async {
+      await montar(tester, tamano: alta);
+
+      const esperadas = {
+        Dificultad.facil: ['facil-corta', 'facil-larga'],
+        Dificultad.moderada: ['moderada-media'],
+        Dificultad.dificil: ['dificil-corta'],
+      };
+      for (final MapEntry(key: dificultad, value: rutas) in esperadas.entries) {
+        await elegirDificultad(tester, dificultad);
+
+        expect(enPantalla(tester), rutas, reason: dificultad.etiqueta);
+        expect(marcada(tester, dificultad), isTrue);
+        expect(marcada(tester, null), isFalse);
+        expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      }
+    });
+
+    testWidgets('la tarjeta de cada una dice esa dificultad', (tester) async {
+      await montar(tester, tamano: alta);
+
+      await elegirDificultad(tester, Dificultad.facil);
+
+      expect(
+        find.descendant(
+          of: find.byType(TarjetaRutaExplorar),
+          matching: find.text('Fácil'),
+        ),
+        findsNWidgets(2),
+      );
+      expect(find.text(TarjetaRutaExplorar.sinDificultad), findsNothing);
+    });
+
+    testWidgets('una ruta sin clasificar no sale con ninguna dificultad, y '
+        'vuelve con «Todas»', (tester) async {
+      await montar(tester, tamano: alta);
+
+      for (final dificultad in Dificultad.values) {
+        await elegirDificultad(tester, dificultad);
+        expect(
+          enPantalla(tester),
+          isNot(contains('sin-clasificar')),
+          reason: dificultad.etiqueta,
+        );
+      }
+
+      await elegirDificultad(tester, null);
+      expect(enPantalla(tester), contains('sin-clasificar'));
+    });
+
+    testWidgets('pasar de una a otra refresca la lista al instante, sin '
+        'volver a consultar la base', (tester) async {
+      await montar(tester, tamano: alta);
+      expect(repositorio.consultasCercanas, 1);
+
+      await elegirDificultad(tester, Dificultad.facil);
+      await elegirDificultad(tester, Dificultad.moderada);
+      await elegirDificultad(tester, Dificultad.dificil);
+      await elegirDificultad(tester, null);
+
+      expect(enPantalla(tester), [for (final ruta in todas) ruta.id]);
+      expect(repositorio.consultasCercanas, 1);
+    });
+
+    testWidgets('al recargar con una dificultad elegida, lo nuevo llega ya '
+        'filtrado y la dificultad sigue elegida', (tester) async {
+      await montar(tester, tamano: alta);
+      await elegirDificultad(tester, Dificultad.facil);
+
+      // Mientras tanto se publicaron dos rutas más, una fácil y una
+      // moderada, y la nueva fácil es la más cercana.
+      final nuevaFacil = rutaDePrueba(
+        id: 'nueva-facil',
+        nombre: 'Vuelta al lago',
+        estado: EstadoRuta.publicada,
+        distanciaKm: 6,
+        dificultad: Dificultad.facil,
+      );
+      final nuevaModerada = rutaDePrueba(
+        id: 'nueva-moderada',
+        nombre: 'Loma del Indio',
+        estado: EstadoRuta.publicada,
+        distanciaKm: 9,
+        dificultad: Dificultad.moderada,
+      );
+      repositorio.rutasCercanas = cercanas([
+        nuevaFacil,
+        ...todas,
+        nuevaModerada,
+      ]);
+
+      await recargar(tester);
+
+      expect(repositorio.consultasCercanas, 2);
+      expect(marcada(tester, Dificultad.facil), isTrue);
+      expect(enPantalla(tester), ['nueva-facil', 'facil-corta', 'facil-larga']);
+    });
+
+    testWidgets('también filtra las más recientes, cuando no se sabe dónde '
+        'está el usuario', (tester) async {
+      await montar(tester, ubicacion: EstadoPermiso.denegado, tamano: alta);
+      expect(find.text(RutasScreen.rotuloRecientes), findsOneWidget);
+
+      await elegirDificultad(tester, Dificultad.moderada);
+
+      expect(enPantalla(tester), ['moderada-media']);
+      expect(find.byType(AvisoPermisoUbicacion), findsOneWidget);
+    });
+  });
 }

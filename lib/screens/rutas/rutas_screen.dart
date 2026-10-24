@@ -4,9 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
+import '../../models/filtros_rutas.dart';
+import '../../models/rango_distancia.dart';
 import '../../models/ruta.dart';
 import '../../models/zona.dart';
 import '../../services/busqueda_rutas_provider.dart';
+import '../../services/filtros_rutas_provider.dart';
 import '../../services/explorar_rutas_provider.dart';
 import '../../services/permisos_provider.dart';
 import '../../services/ubicacion_provider.dart';
@@ -15,6 +18,7 @@ import '../../theme/app_dimens.dart';
 import '../../utils/texto_para_buscar.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/aviso_permiso_ubicacion.dart';
+import '../../widgets/chip_filtro.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/navegacion_principal.dart';
 import '../../widgets/tarjeta_aviso.dart';
@@ -46,7 +50,10 @@ import 'detalle_ruta_screen.dart';
 ///
 /// Arriba va una barra que busca por nombre o por quien creó la ruta
 /// (SCRUM-254, HU-30). Con lo escrito, la lista muestra lo que coincide,
-/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas.
+/// con las mismas tarjetas; sin nada escrito, vuelven las cercanas. Debajo
+/// van los rangos de distancia (SCRUM-273, HU-37): con uno elegido, la
+/// lista —las cercanas o los resultados— muestra solo las rutas que miden
+/// eso (SCRUM-274).
 class RutasScreen extends ConsumerWidget {
   const RutasScreen({super.key});
 
@@ -70,6 +77,13 @@ class RutasScreen extends ConsumerWidget {
   static const claveSinZona = Key('rutas-sin-zona');
   static const claveBuscarComoLugar = Key('rutas-buscar-como-lugar');
   static const claveReintentarZona = Key('rutas-reintentar-zona');
+  static const claveFiltroDistancia = Key('rutas-filtro-distancia');
+  static const claveSinRutasConFiltros = Key('rutas-sin-rutas-con-filtros');
+  static const claveQuitarFiltros = Key('rutas-quitar-filtros');
+
+  /// El chip de un rango de distancia (SCRUM-273).
+  static Key claveRango(RangoDistancia rango) =>
+      Key('rutas-rango-${rango.name}');
 
   /// Lo que dice el campo de búsqueda vacío.
   static const pistaBusqueda = 'Busca por nombre, zona o creador';
@@ -104,6 +118,58 @@ class RutasScreen extends ConsumerWidget {
   /// Sin ninguna ruta publicada en toda la comunidad.
   static const sinRutas = 'Todavía no hay rutas publicadas';
 
+  /// Ninguna ruta de la lista cumple los filtros elegidos (SCRUM-274 y
+  /// SCRUM-275): "Ninguna ruta fácil de 5 a 10 km".
+  static String sinRutasCon(FiltrosRutas filtros) => [
+    'Ninguna ruta',
+    if (filtros.dificultad case final dificultad?)
+      dificultad.etiqueta.toLowerCase(),
+    if (filtros.distancia case final distancia?)
+      'de ${distancia.etiqueta.toLowerCase()}',
+  ].join(' ');
+
+  /// Qué hacer cuando ninguna de [rutas] cumple [filtros] (SCRUM-275,
+  /// criterio 5 de HU-37).
+  ///
+  /// Con un filtro, probar con otro valor. Con los dos, se dice cuál deja
+  /// fuera las rutas, mirando qué saldría con cada uno por separado: que
+  /// haya fáciles y que haya de 5 a 10 km no quiere decir que haya fáciles
+  /// de 5 a 10 km, y sin saberlo el usuario no sabe cuál cambiar.
+  static String queHacerSinRutasCon(FiltrosRutas filtros, List<Ruta> rutas) {
+    final dificultad = filtros.dificultad;
+    final distancia = filtros.distancia;
+    if (dificultad == null) return pruebaOtroRango;
+    if (distancia == null) return pruebaOtraDificultad;
+
+    final hayDeEsaDificultad = FiltrosRutas(
+      dificultad: dificultad,
+    ).aplicar(rutas).isNotEmpty;
+    final hayDeEseRango = FiltrosRutas(
+      distancia: distancia,
+    ).aplicar(rutas).isNotEmpty;
+    final varias = dificultad.plural;
+    final una = dificultad.etiqueta.toLowerCase();
+    final rango = 'de ${distancia.etiqueta.toLowerCase()}';
+
+    return switch ((hayDeEsaDificultad, hayDeEseRango)) {
+      (true, true) =>
+        'Hay rutas $varias y rutas $rango, pero ninguna que cumpla las dos. '
+            'Prueba quitando uno de los filtros.',
+      (true, false) =>
+        'Hay rutas $varias, pero ninguna $rango. Prueba con otro rango.',
+      (false, true) =>
+        'Hay rutas $rango, pero ninguna $una. Prueba con otra dificultad.',
+      (false, false) =>
+        'No hay rutas $varias ni $rango. Prueba con otros filtros o quítalos '
+            'para verlas todas.',
+    };
+  }
+
+  static const pruebaOtroRango =
+      'Prueba con otro rango o quita el filtro para verlas todas.';
+  static const pruebaOtraDificultad =
+      'Prueba con otra dificultad o quita el filtro para verlas todas.';
+
   static const errorTitulo = 'No pudimos cargar las rutas';
   static const errorDeConexion =
       'Revisa tu conexión a internet e inténtalo de nuevo.';
@@ -118,6 +184,12 @@ class RutasScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Los filtros duran lo que la sección abierta, aunque la lista se cambie
+    // un momento por un indicador de carga: sin nadie que los escuche, se
+    // borrarían. La fila de rangos mantiene vivo el suyo, pero la dificultad
+    // todavía no tiene chips (SCRUM-266).
+    ref.listen(filtrosRutasProvider, (_, _) {});
+
     return const NavegacionPrincipal(
       seccion: SeccionPrincipal.rutas,
       child: SafeArea(
@@ -128,6 +200,7 @@ class RutasScreen extends ConsumerWidget {
             children: [
               TrazaTopBar(titulo: titulo),
               _BarraBusqueda(),
+              _FiltroDistancia(),
               Expanded(child: _Contenido()),
             ],
           ),
@@ -324,31 +397,12 @@ class _SinResultados extends ConsumerStatefulWidget {
   ConsumerState<_SinResultados> createState() => _SinResultadosState();
 }
 
-class _SinResultadosState extends ConsumerState<_SinResultados> {
+class _SinResultadosState extends ConsumerState<_SinResultados>
+    with _AnunciaAlAparecer<_SinResultados> {
+  // Otra búsqueda que tampoco encontró nada cambia el detalle, y se vuelve
+  // a anunciar.
   @override
-  void initState() {
-    super.initState();
-    _anunciarDespuesDelCuadro();
-  }
-
-  @override
-  void didUpdateWidget(_SinResultados anterior) {
-    super.didUpdateWidget(anterior);
-    // Otra búsqueda que tampoco encontró nada: el mensaje cambió.
-    if (anterior.detalle != widget.detalle) _anunciarDespuesDelCuadro();
-  }
-
-  /// Después del cuadro, cuando ya se sabe en qué vista está.
-  void _anunciarDespuesDelCuadro() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      SemanticsService.sendAnnouncement(
-        View.of(context),
-        '${RutasScreen.sinResultados}. ${widget.detalle}',
-        Directionality.of(context),
-      );
-    });
-  }
+  String get anuncio => '${RutasScreen.sinResultados}. ${widget.detalle}';
 
   @override
   Widget build(BuildContext context) {
@@ -375,6 +429,43 @@ class _SinResultadosState extends ConsumerState<_SinResultados> {
             )
           : null,
     );
+  }
+}
+
+/// Para lo que aparece sin que el usuario lo toque, como una lista que queda
+/// vacía: se le anuncia al lector de pantalla al aparecer y cada vez que
+/// cambia lo que dice (SCRUM-257 y SCRUM-275). Quien no ve la pantalla no
+/// tendría cómo saberlo.
+mixin _AnunciaAlAparecer<T extends StatefulWidget> on State<T> {
+  /// Lo que se le dice al lector de pantalla.
+  String get anuncio;
+
+  /// Lo último que se anunció, para no repetirlo.
+  String? _anunciado;
+
+  @override
+  void initState() {
+    super.initState();
+    _anunciarDespuesDelCuadro();
+  }
+
+  @override
+  void didUpdateWidget(T anterior) {
+    super.didUpdateWidget(anterior);
+    if (anuncio != _anunciado) _anunciarDespuesDelCuadro();
+  }
+
+  /// Después del cuadro, cuando ya se sabe en qué vista está.
+  void _anunciarDespuesDelCuadro() {
+    _anunciado = anuncio;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        anuncio,
+        Directionality.of(context),
+      );
+    });
   }
 }
 
@@ -547,8 +638,10 @@ class _Lista extends StatelessWidget {
 /// Rutas en tarjetas, con lo que va encima de ellas.
 ///
 /// La comparten las cercanas y los resultados de una búsqueda (SCRUM-254):
-/// mismas tarjetas, mismo espaciado y mismo toque para abrir el detalle.
-class _ListaDeRutas extends StatelessWidget {
+/// mismas tarjetas, mismo espaciado y mismo toque para abrir el detalle. Y
+/// los mismos filtros (SCRUM-274 y SCRUM-275): se aplican aquí para que
+/// todas las listas de la sección se filtren igual.
+class _ListaDeRutas extends ConsumerWidget {
   const _ListaDeRutas({
     required this.clave,
     required this.encabezado,
@@ -558,39 +651,114 @@ class _ListaDeRutas extends StatelessWidget {
   /// Distinta para cada lista: al pasar de una a otra se empieza arriba.
   final Key clave;
   final List<Widget> encabezado;
+
+  /// Todas las de la lista, sin filtrar.
   final List<Ruta> rutas;
 
   @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      key: clave,
-      // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
-      physics: const AlwaysScrollableScrollPhysics(),
-      // Al deslizar se esconde el teclado de la búsqueda, que si no tapa
-      // media pantalla de resultados.
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.xs,
-        AppSpacing.lg,
-        AppSpacing.xl,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final filtros = ref.watch(filtrosRutasProvider);
+    final visibles = filtros.aplicar(rutas);
+    final encabezado = [
+      ...this.encabezado,
+      // Si los filtros la dejan vacía, se dice debajo del rótulo, que sigue
+      // contando qué lista es.
+      if (!filtros.ninguno && visibles.isEmpty)
+        _SinRutasConFiltros(filtros: filtros, rutas: rutas),
+    ];
+
+    // Al cambiar un filtro la lista vuelve arriba: si no, se quedaría a la
+    // altura por la que iba la anterior, en medio de otras rutas.
+    return KeyedSubtree(
+      key: ValueKey(filtros),
+      child: ListView.separated(
+        key: clave,
+        // Sin esto, con pocas rutas la lista no responde al gesto de recargar.
+        physics: const AlwaysScrollableScrollPhysics(),
+        // Al deslizar se esconde el teclado de la búsqueda, que si no tapa
+        // media pantalla de resultados.
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.xs,
+          AppSpacing.lg,
+          AppSpacing.xl,
+        ),
+        itemCount: encabezado.length + visibles.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+        itemBuilder: (_, i) {
+          if (i < encabezado.length) return encabezado[i];
+          final ruta = visibles[i - encabezado.length];
+          return TarjetaRutaExplorar(
+            key: TarjetaRutaExplorar.claveDe(ruta.id),
+            ruta: ruta,
+            // Criterio 5 de HU-29 (SCRUM-250). Con `push`, al cerrar el
+            // detalle se vuelve a la lista donde estaba, sin consultarla otra
+            // vez. La ruta va en `extra` para que el detalle muestre lo que
+            // ya se sabe de ella mientras llega su trazado.
+            onTap: () =>
+                context.push(DetalleRutaScreen.rutaDe(ruta.id), extra: ruta),
+          );
+        },
       ),
-      itemCount: encabezado.length + rutas.length,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (_, i) {
-        if (i < encabezado.length) return encabezado[i];
-        final ruta = rutas[i - encabezado.length];
-        return TarjetaRutaExplorar(
-          key: TarjetaRutaExplorar.claveDe(ruta.id),
-          ruta: ruta,
-          // Criterio 5 de HU-29 (SCRUM-250). Con `push`, al cerrar el detalle
-          // se vuelve a la lista donde estaba, sin consultarla otra vez. La
-          // ruta va en `extra` para que el detalle muestre lo que ya se sabe
-          // de ella mientras llega su trazado.
-          onTap: () =>
-              context.push(DetalleRutaScreen.rutaDe(ruta.id), extra: ruta),
-        );
-      },
+    );
+  }
+}
+
+/// Ninguna ruta de la lista cumple los filtros elegidos (SCRUM-274 y
+/// SCRUM-275, criterio 5 de HU-37).
+///
+/// Dice qué combinación no tiene rutas y qué hacer: con los dos filtros,
+/// cuál es el que las deja fuera ([RutasScreen.queHacerSinRutasCon]).
+///
+/// Va dentro de la lista y no ocupa la pantalla, como el hueco de un filtro
+/// en el catálogo de retos: arriba sigue el rótulo que dice qué lista es, y
+/// los filtros siguen a mano para probar con otros. Aparece por un toque en
+/// otro lado de la pantalla, así que también se anuncia.
+class _SinRutasConFiltros extends ConsumerStatefulWidget {
+  const _SinRutasConFiltros({required this.filtros, required this.rutas});
+
+  final FiltrosRutas filtros;
+
+  /// Las de la lista sin filtrar, para saber qué filtro las deja fuera.
+  final List<Ruta> rutas;
+
+  String get titulo => RutasScreen.sinRutasCon(filtros);
+  String get detalle => RutasScreen.queHacerSinRutasCon(filtros, rutas);
+
+  @override
+  ConsumerState<_SinRutasConFiltros> createState() =>
+      _SinRutasConFiltrosState();
+}
+
+class _SinRutasConFiltrosState extends ConsumerState<_SinRutasConFiltros>
+    with _AnunciaAlAparecer<_SinRutasConFiltros> {
+  @override
+  String get anuncio => '${widget.titulo}. ${widget.detalle}';
+
+  void _quitarFiltros() {
+    ref.read(rangoDistanciaProvider.notifier).state = null;
+    ref.read(dificultadRutasProvider.notifier).state = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MensajeVacio(
+      key: RutasScreen.claveSinRutasConFiltros,
+      icono: Icons.filter_alt_outlined,
+      titulo: widget.titulo,
+      detalle: widget.detalle,
+      // Lo mismo que volver a tocar lo elegido, que no todos saben que lo
+      // quita.
+      accion: OutlinedButton(
+        key: RutasScreen.claveQuitarFiltros,
+        onPressed: _quitarFiltros,
+        child: Text(
+          widget.filtros.cuantos == 1
+              ? 'Quitar el filtro'
+              : 'Quitar los filtros',
+        ),
+      ),
     );
   }
 }
@@ -638,6 +806,37 @@ class _BarraBusqueda extends ConsumerWidget {
           prefixIcon: Icon(Icons.search_rounded, color: AppColors.ink3),
         ),
       ),
+    );
+  }
+}
+
+/// Los rangos de distancia para filtrar las rutas (SCRUM-273, criterio 1 de
+/// HU-37).
+///
+/// Con los mismos chips que los demás filtros de la app —el catálogo de
+/// retos, el historial, el foro— y en el mismo lugar: fijos bajo lo de
+/// arriba, así siguen a mano mientras se recorre la lista. Cuando no caben,
+/// saltan de línea en vez de cortarse. Uno a la vez, y tocar el elegido lo
+/// quita (criterio 4).
+class _FiltroDistancia extends ConsumerWidget {
+  const _FiltroDistancia();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elegido = ref.watch(rangoDistanciaProvider);
+
+    return FilaChips(
+      key: RutasScreen.claveFiltroDistancia,
+      children: [
+        for (final rango in RangoDistancia.values)
+          ChipFiltro(
+            key: RutasScreen.claveRango(rango),
+            texto: rango.etiqueta,
+            activo: rango == elegido,
+            onTap: () => ref.read(rangoDistanciaProvider.notifier).state =
+                rango == elegido ? null : rango,
+          ),
+      ],
     );
   }
 }

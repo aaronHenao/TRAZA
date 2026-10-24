@@ -1,3 +1,4 @@
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
 import 'package:traza/models/zona.dart';
@@ -164,6 +165,7 @@ Ruta rutaDePrueba({
   String? entrenamientoId = 'e-123',
   EstadoRuta estado = EstadoRuta.enRevision,
   double? distanciaKm = 5.23,
+  Dificultad? dificultad,
   List<PuntoRuta> trazado = const [],
   List<PuntoRuta> miniatura = const [],
   DateTime? fechaPublicacion,
@@ -176,6 +178,7 @@ Ruta rutaDePrueba({
   entrenamientoId: entrenamientoId,
   estado: estado,
   distanciaKm: distanciaKm,
+  dificultad: dificultad,
   trazado: trazado,
   miniatura: miniatura,
   fechaCreacion: DateTime(2026, 10, 17, 9),

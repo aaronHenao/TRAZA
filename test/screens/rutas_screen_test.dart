@@ -8,7 +8,10 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/estado_permisos.dart';
+import 'package:traza/models/filtros_rutas.dart';
+import 'package:traza/models/rango_distancia.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
 import 'package:traza/models/zona.dart';
@@ -17,6 +20,7 @@ import 'package:traza/screens/rutas/publicar_ruta_screen.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
 import 'package:traza/screens/rutas/seccion_rutas.dart';
 import 'package:traza/services/busqueda_rutas_provider.dart';
+import 'package:traza/services/filtros_rutas_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
@@ -26,6 +30,7 @@ import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/services/zonas_service.dart';
 import 'package:traza/widgets/ancho_contenido.dart';
 import 'package:traza/widgets/aviso_permiso_ubicacion.dart';
+import 'package:traza/widgets/chip_filtro.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/navegacion_principal.dart';
 import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
@@ -203,6 +208,48 @@ void main() {
 
   double altoDe(WidgetTester tester, String texto) =>
       tester.getTopLeft(find.text(texto)).dy;
+
+  /// Lo que la app le anuncia al lector de pantalla.
+  List<String> escucharAnuncios(WidgetTester tester) {
+    final anuncios = <String>[];
+    final mensajero = tester.binding.defaultBinaryMessenger;
+    mensajero.setMockDecodedMessageHandler<Object?>(
+      SystemChannels.accessibility,
+      (mensaje) async {
+        if (mensaje case {
+          'type': 'announce',
+          'data': {'message': final String texto},
+        }) {
+          anuncios.add(texto);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => mensajero.setMockDecodedMessageHandler<Object?>(
+        SystemChannels.accessibility,
+        null,
+      ),
+    );
+    return anuncios;
+  }
+
+  /// Elige una dificultad como lo harán los chips de SCRUM-266, que todavía
+  /// no existen (SCRUM-275). Null es "Todas".
+  Future<void> elegirDificultad(
+    WidgetTester tester,
+    Dificultad? dificultad,
+  ) async {
+    ProviderScope.containerOf(
+      tester.element(find.byType(RutasScreen)),
+    ).read(dificultadRutasProvider.notifier).state = dificultad;
+    await tester.pumpAndSettle();
+  }
+
+  Dificultad? dificultadElegida(WidgetTester tester) =>
+      ProviderScope.containerOf(
+        tester.element(find.byType(RutasScreen)),
+      ).read(dificultadRutasProvider);
 
   group('la pantalla', () {
     testWidgets('se llama Explorar rutas', (tester) async {
@@ -1474,31 +1521,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Lo que la app le anuncia al lector de pantalla.
-    List<String> escucharAnuncios(WidgetTester tester) {
-      final anuncios = <String>[];
-      final mensajero = tester.binding.defaultBinaryMessenger;
-      mensajero.setMockDecodedMessageHandler<Object?>(
-        SystemChannels.accessibility,
-        (mensaje) async {
-          if (mensaje case {
-            'type': 'announce',
-            'data': {'message': final String texto},
-          }) {
-            anuncios.add(texto);
-          }
-          return null;
-        },
-      );
-      addTearDown(
-        () => mensajero.setMockDecodedMessageHandler<Object?>(
-          SystemChannels.accessibility,
-          null,
-        ),
-      );
-      return anuncios;
-    }
-
     testWidgets('cuando termina de escribir sin coincidencias, lo dice y '
         'sugiere revisar lo escrito', (tester) async {
       await montar(tester);
@@ -1625,6 +1647,912 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+    });
+  });
+
+  group('la fila de rangos de distancia (SCRUM-273, criterio 1 de HU-37)', () {
+    ChipFiltro chip(WidgetTester tester, RangoDistancia rango) =>
+        tester.widget<ChipFiltro>(find.byKey(RutasScreen.claveRango(rango)));
+
+    List<bool> activos(WidgetTester tester) => [
+      for (final rango in RangoDistancia.values) chip(tester, rango).activo,
+    ];
+
+    Future<void> tocar(WidgetTester tester, RangoDistancia rango) async {
+      await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('ofrece los cuatro rangos, de la más corta a la más larga, '
+        'con los chips de los demás filtros de la app', (tester) async {
+      await montar(tester);
+
+      final fila = find.byKey(RutasScreen.claveFiltroDistancia);
+      expect(tester.widget(fila), isA<FilaChips>());
+      expect(
+        [
+          for (final chip in tester.widgetList<ChipFiltro>(
+            find.descendant(of: fila, matching: find.byType(ChipFiltro)),
+          ))
+            chip.texto,
+        ],
+        ['Menos de 5 km', '5 a 10 km', '10 a 20 km', 'Más de 20 km'],
+      );
+    });
+
+    testWidgets('va entre la barra de búsqueda y la lista', (tester) async {
+      await montar(tester);
+
+      final fila = tester.getRect(find.byKey(RutasScreen.claveFiltroDistancia));
+      expect(
+        fila.top,
+        greaterThanOrEqualTo(
+          tester.getRect(find.byKey(RutasScreen.claveBusqueda)).bottom,
+        ),
+      );
+      expect(
+        fila.bottom,
+        lessThanOrEqualTo(altoDe(tester, RutasScreen.rotuloCercania)),
+      );
+    });
+
+    testWidgets('empieza sin ninguno elegido', (tester) async {
+      await montar(tester);
+
+      expect(activos(tester), [false, false, false, false]);
+    });
+
+    testWidgets('tocar un rango lo marca, y tocarlo otra vez lo quita '
+        '(criterio 4 de HU-37)', (tester) async {
+      await montar(tester);
+
+      await tocar(tester, RangoDistancia.de5a10);
+      expect(activos(tester), [false, true, false, false]);
+
+      await tocar(tester, RangoDistancia.de5a10);
+      expect(activos(tester), [false, false, false, false]);
+    });
+
+    testWidgets('uno a la vez: elegir otro reemplaza al anterior', (
+      tester,
+    ) async {
+      await montar(tester);
+
+      await tocar(tester, RangoDistancia.menosDe5);
+      await tocar(tester, RangoDistancia.masDe20);
+
+      expect(activos(tester), [false, false, false, true]);
+    });
+
+    testWidgets('sigue a la vista mientras se busca, con lo elegido', (
+      tester,
+    ) async {
+      await montar(tester);
+      await tocar(tester, RangoDistancia.de10a20);
+
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), 'nutibara');
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(activos(tester), [false, false, true, false]);
+    });
+
+    testWidgets('un lector de pantalla sabe cuál está elegido', (tester) async {
+      final semantica = tester.ensureSemantics();
+      await montar(tester);
+
+      await tocar(tester, RangoDistancia.menosDe5);
+
+      expect(
+        tester.getSemantics(
+          find.byKey(RutasScreen.claveRango(RangoDistancia.menosDe5)),
+        ),
+        isSemantics(label: 'Menos de 5 km', isButton: true, isSelected: true),
+      );
+      expect(
+        tester.getSemantics(
+          find.byKey(RutasScreen.claveRango(RangoDistancia.de5a10)),
+        ),
+        isSemantics(label: '5 a 10 km', isButton: true, isSelected: false),
+      );
+      semantica.dispose();
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto grande, saltan de '
+        'línea sin desbordar y se pueden tocar todos', (tester) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+      expect(tester.takeException(), isNull);
+      for (final rango in RangoDistancia.values) {
+        expect(
+          find.byKey(RutasScreen.claveRango(rango)).hitTestable(),
+          findsOneWidget,
+        );
+      }
+    });
+  });
+
+  group('aplicar el filtro de distancia (SCRUM-274, criterio 2 de HU-37)', () {
+    // La más cercana es la más larga: el filtro mira lo que mide cada ruta,
+    // no lo lejos que queda.
+    final larga = rutaDePrueba(
+      id: 'larga',
+      nombre: 'Vuelta a Santa Elena',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 15,
+    );
+    final corta = rutaDePrueba(
+      id: 'corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+    );
+    final media = rutaDePrueba(
+      id: 'media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+    );
+    final sinDistancia = rutaDePrueba(
+      id: 'sin-distancia',
+      nombre: 'Paseo sin medir',
+      estado: EstadoRuta.publicada,
+      distanciaKm: null,
+    );
+    final otraCorta = rutaDePrueba(
+      id: 'otra-corta',
+      nombre: 'Vuelta a la manzana',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 4.1,
+    );
+    final muyLarga = rutaDePrueba(
+      id: 'muy-larga',
+      nombre: 'Travesía a Guatapé',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 32,
+    );
+    final todas = [larga, corta, media, sinDistancia, otraCorta, muyLarga];
+
+    // Alta para que la lista construya todas las tarjetas: las que quedan
+    // fuera de la pantalla no se construyen, y no se podrían contar.
+    const alta = Size(390, 2600);
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: todas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in todas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: 0.5 + i),
+        ];
+    });
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.id,
+    ];
+
+    Future<void> elegir(WidgetTester tester, RangoDistancia rango) async {
+      await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> buscar(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    bool elegido(WidgetTester tester, RangoDistancia rango) => tester
+        .widget<ChipFiltro>(find.byKey(RutasScreen.claveRango(rango)))
+        .activo;
+
+    testWidgets('con un rango elegido, solo las que miden eso, en el orden '
+        'por cercanía', (tester) async {
+      await montar(tester, tamano: alta);
+      expect(enPantalla(tester), [
+        'larga',
+        'corta',
+        'media',
+        'sin-distancia',
+        'otra-corta',
+        'muy-larga',
+      ]);
+
+      // La más cercana mide 15 km: no sale entre las de menos de 5. Y la que
+      // no tiene distancia registrada no sale en ninguno.
+      await elegir(tester, RangoDistancia.menosDe5);
+      expect(enPantalla(tester), ['corta', 'otra-corta']);
+
+      await elegir(tester, RangoDistancia.de5a10);
+      expect(enPantalla(tester), ['media']);
+
+      await elegir(tester, RangoDistancia.de10a20);
+      expect(enPantalla(tester), ['larga']);
+
+      await elegir(tester, RangoDistancia.masDe20);
+      expect(enPantalla(tester), ['muy-larga']);
+
+      // Sigue diciendo qué lista es.
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+    });
+
+    testWidgets('una ruta que la tarjeta muestra como "5 km" sale en "5 a 10 '
+        'km", aunque mida un poco menos', (tester) async {
+      final casiCinco = rutaDePrueba(
+        id: 'casi-cinco',
+        nombre: 'Casi cinco',
+        estado: EstadoRuta.publicada,
+        distanciaKm: 4.996,
+      );
+      repositorio = RutasRepositorioFalso(rutas: [casiCinco])
+        ..rutasCercanas = [RutaCercana(ruta: casiCinco, distanciaKm: 1)];
+      await montar(tester);
+      expect(find.text('5 km'), findsOneWidget);
+
+      await elegir(tester, RangoDistancia.de5a10);
+      expect(enPantalla(tester), ['casi-cinco']);
+
+      await elegir(tester, RangoDistancia.menosDe5);
+      expect(enPantalla(tester), isEmpty);
+    });
+
+    testWidgets('quitarlo devuelve la lista como estaba, sin volver a '
+        'consultarla (criterio 4 de HU-37)', (tester) async {
+      await montar(tester, tamano: alta);
+      final antes = enPantalla(tester);
+
+      await elegir(tester, RangoDistancia.de5a10);
+      await elegir(tester, RangoDistancia.masDe20);
+      await elegir(tester, RangoDistancia.masDe20);
+
+      expect(elegido(tester, RangoDistancia.masDe20), isFalse);
+      expect(enPantalla(tester), antes);
+      // Cambiar de rango tampoco consultó: se filtra lo que ya había.
+      expect(repositorio.consultasCercanas, 1);
+    });
+
+    testWidgets('también filtra los resultados de una búsqueda, sin buscar '
+        'otra vez', (tester) async {
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'vuelta');
+      expect(enPantalla(tester), ['larga', 'corta', 'otra-corta']);
+      final busquedas = repositorio.busquedas.length;
+
+      await elegir(tester, RangoDistancia.menosDe5);
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(enPantalla(tester), ['corta', 'otra-corta']);
+      expect(repositorio.busquedas, hasLength(busquedas));
+    });
+
+    testWidgets('al borrar la búsqueda sigue elegido: vuelven las cercanas, '
+        'filtradas', (tester) async {
+      await montar(tester, tamano: alta);
+      await elegir(tester, RangoDistancia.menosDe5);
+      await buscar(tester, 'vuelta');
+
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), '');
+      await tester.pumpAndSettle();
+
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      expect(elegido(tester, RangoDistancia.menosDe5), isTrue);
+      expect(enPantalla(tester), ['corta', 'otra-corta']);
+    });
+
+    testWidgets('también las más recientes, cuando no se sabe dónde está el '
+        'usuario', (tester) async {
+      await montar(tester, ubicacion: EstadoPermiso.denegado, tamano: alta);
+      expect(find.text(RutasScreen.rotuloRecientes), findsOneWidget);
+
+      await elegir(tester, RangoDistancia.masDe20);
+
+      expect(enPantalla(tester), ['muy-larga']);
+      // El aviso del permiso sigue arriba: no tiene que ver con el filtro.
+      expect(find.byType(AvisoPermisoUbicacion), findsOneWidget);
+    });
+
+    testWidgets('sigue elegido al volver del detalle de una ruta', (
+      tester,
+    ) async {
+      await montar(tester, tamano: alta);
+      await elegir(tester, RangoDistancia.menosDe5);
+
+      await tester.tap(find.byKey(TarjetaRutaExplorar.claveDe('corta')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DetalleRutaScreen), findsOneWidget);
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(elegido(tester, RangoDistancia.menosDe5), isTrue);
+      expect(enPantalla(tester), ['corta', 'otra-corta']);
+    });
+
+    testWidgets('al cambiar de rango la lista vuelve arriba', (tester) async {
+      final muchas = [
+        for (var i = 0; i < 10; i++)
+          rutaDePrueba(
+            id: 'r$i',
+            nombre: 'Ruta $i',
+            estado: EstadoRuta.publicada,
+            distanciaKm: 3,
+          ),
+      ];
+      repositorio = RutasRepositorioFalso(rutas: muchas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in muchas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: i + 1.0),
+        ];
+      await montar(tester);
+
+      double desplazamiento() => tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byKey(RutasScreen.claveLista),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position
+          .pixels;
+
+      Future<void> bajar() async {
+        await tester.drag(
+          find.byKey(RutasScreen.claveLista),
+          const Offset(0, -500),
+        );
+        await tester.pumpAndSettle();
+        expect(desplazamiento(), greaterThan(0));
+      }
+
+      // Todas miden 3 km: la lista filtrada es igual de larga, y aun así
+      // empieza arriba. Y al quitar el filtro, también.
+      await bajar();
+      await elegir(tester, RangoDistancia.menosDe5);
+      expect(desplazamiento(), 0);
+
+      await bajar();
+      await elegir(tester, RangoDistancia.menosDe5);
+      expect(desplazamiento(), 0);
+    });
+  });
+
+  group('si el filtro deja la lista vacía (SCRUM-274)', () {
+    final corta = rutaDePrueba(
+      id: 'corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+    );
+    final media = rutaDePrueba(
+      id: 'media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+    );
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: [corta, media])
+        ..rutasCercanas = [
+          RutaCercana(ruta: corta, distanciaKm: 0.8),
+          RutaCercana(ruta: media, distanciaKm: 1.5),
+        ];
+    });
+
+    Future<void> elegir(WidgetTester tester, RangoDistancia rango) async {
+      await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> buscar(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    test('el mensaje nombra el rango como se lee en una frase', () {
+      expect(
+        [
+          for (final rango in RangoDistancia.values)
+            RutasScreen.sinRutasCon(FiltrosRutas(distancia: rango)),
+        ],
+        [
+          'Ninguna ruta de menos de 5 km',
+          'Ninguna ruta de 5 a 10 km',
+          'Ninguna ruta de 10 a 20 km',
+          'Ninguna ruta de más de 20 km',
+        ],
+      );
+    });
+
+    testWidgets('lo dice debajo del rótulo, y deja quitar el filtro', (
+      tester,
+    ) async {
+      await montar(tester);
+      await elegir(tester, RangoDistancia.masDe20);
+
+      const titulo = 'Ninguna ruta de más de 20 km';
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
+      expect(find.text(titulo), findsOneWidget);
+      expect(find.text(RutasScreen.pruebaOtroRango), findsOneWidget);
+      expect(
+        altoDe(tester, RutasScreen.rotuloCercania),
+        lessThan(altoDe(tester, titulo)),
+      );
+
+      await tester.tap(find.byKey(RutasScreen.claveQuitarFiltros));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsNothing);
+      expect(
+        tester
+            .widget<ChipFiltro>(
+              find.byKey(RutasScreen.claveRango(RangoDistancia.masDe20)),
+            )
+            .activo,
+        isFalse,
+      );
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+    });
+
+    testWidgets('con una búsqueda, lo dice debajo de los resultados: la '
+        'búsqueda sí encontró', (tester) async {
+      await montar(tester);
+      await buscar(tester, 'vuelta');
+
+      await elegir(tester, RangoDistancia.de5a10);
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(find.text('Ninguna ruta de 5 a 10 km'), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveSinResultados), findsNothing);
+    });
+
+    testWidgets('si no hay ninguna ruta cerca, lo dice sin culpar al filtro', (
+      tester,
+    ) async {
+      repositorio = RutasRepositorioFalso()..rutasCercanas = const [];
+      await montar(tester);
+
+      await elegir(tester, RangoDistancia.menosDe5);
+
+      expect(find.byKey(RutasScreen.claveSinRutasCerca), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsNothing);
+    });
+
+    testWidgets('si la búsqueda no encontró nada, lo dice la búsqueda', (
+      tester,
+    ) async {
+      await montar(tester);
+      await elegir(tester, RangoDistancia.menosDe5);
+
+      await buscar(tester, 'zzz');
+
+      expect(find.byKey(RutasScreen.claveSinResultados), findsOneWidget);
+      expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsNothing);
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto grande no desborda', (
+      tester,
+    ) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+      await elegir(tester, RangoDistancia.masDe20);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsOneWidget);
+    });
+  });
+
+  group('combinar los dos filtros (SCRUM-275, criterio 3 de HU-37)', () {
+    final facilCorta = rutaDePrueba(
+      id: 'facil-corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+      dificultad: Dificultad.facil,
+    );
+    final facilLarga = rutaDePrueba(
+      id: 'facil-larga',
+      nombre: 'Vuelta a Santa Elena',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 15,
+      dificultad: Dificultad.facil,
+    );
+    final moderadaMedia = rutaDePrueba(
+      id: 'moderada-media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+      dificultad: Dificultad.moderada,
+    );
+    final dificilCorta = rutaDePrueba(
+      id: 'dificil-corta',
+      nombre: 'Escaleras de la 70',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 2.1,
+      dificultad: Dificultad.dificil,
+    );
+    final sinClasificar = rutaDePrueba(
+      id: 'sin-clasificar',
+      nombre: 'Vuelta a la manzana',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 4.1,
+    );
+    final todas = [
+      facilCorta,
+      facilLarga,
+      moderadaMedia,
+      dificilCorta,
+      sinClasificar,
+    ];
+
+    // Alta para que la lista construya todas las tarjetas.
+    const alta = Size(390, 2600);
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: todas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in todas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: 0.5 + i),
+        ];
+    });
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.id,
+    ];
+
+    Future<void> elegirRango(WidgetTester tester, RangoDistancia rango) async {
+      await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> buscar(WidgetTester tester, String texto) async {
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), texto);
+      await tester.pump(esperaBusquedaRutas);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('con las dos elegidas, solo las que cumplen las dos, en el '
+        'orden por cercanía', (tester) async {
+      await montar(tester, tamano: alta);
+
+      await elegirDificultad(tester, Dificultad.facil);
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+
+      await elegirRango(tester, RangoDistancia.menosDe5);
+      expect(enPantalla(tester), ['facil-corta']);
+
+      await elegirRango(tester, RangoDistancia.de10a20);
+      expect(enPantalla(tester), ['facil-larga']);
+      // La tarjeta dice la dificultad por la que pasó el filtro.
+      expect(
+        find.descendant(
+          of: find.byType(TarjetaRutaExplorar),
+          matching: find.text('Fácil'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('una sin clasificar sale con la distancia, pero no con una '
+        'dificultad', (tester) async {
+      await montar(tester, tamano: alta);
+
+      await elegirRango(tester, RangoDistancia.menosDe5);
+      expect(enPantalla(tester), [
+        'facil-corta',
+        'dificil-corta',
+        'sin-clasificar',
+      ]);
+
+      await elegirDificultad(tester, Dificultad.facil);
+      expect(enPantalla(tester), ['facil-corta']);
+    });
+
+    testWidgets('quitar uno deja el otro, sin volver a consultar', (
+      tester,
+    ) async {
+      await montar(tester, tamano: alta);
+      await elegirDificultad(tester, Dificultad.facil);
+      await elegirRango(tester, RangoDistancia.menosDe5);
+
+      // Tocar otra vez el rango lo quita: quedan todas las fáciles.
+      await elegirRango(tester, RangoDistancia.menosDe5);
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+
+      await elegirDificultad(tester, null);
+      expect(enPantalla(tester), [
+        'facil-corta',
+        'facil-larga',
+        'moderada-media',
+        'dificil-corta',
+        'sin-clasificar',
+      ]);
+      expect(repositorio.consultasCercanas, 1);
+    });
+
+    testWidgets('también sobre los resultados de una búsqueda, sin buscar '
+        'otra vez', (tester) async {
+      await montar(tester, tamano: alta);
+      await buscar(tester, 'vuelta');
+      expect(enPantalla(tester), [
+        'facil-corta',
+        'facil-larga',
+        'sin-clasificar',
+      ]);
+      final busquedas = repositorio.busquedas.length;
+
+      await elegirDificultad(tester, Dificultad.facil);
+      await elegirRango(tester, RangoDistancia.menosDe5);
+
+      expect(find.text(RutasScreen.rotuloResultados), findsOneWidget);
+      expect(enPantalla(tester), ['facil-corta']);
+      expect(repositorio.busquedas, hasLength(busquedas));
+    });
+
+    testWidgets('la dificultad elegida sigue al buscar y al borrar la '
+        'búsqueda, aunque todavía no tenga chips', (tester) async {
+      await montar(tester, tamano: alta);
+      await elegirDificultad(tester, Dificultad.facil);
+
+      // Mientras llega la búsqueda, la lista se cambia por un indicador.
+      await buscar(tester, 'vuelta');
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+
+      await tester.enterText(find.byKey(RutasScreen.claveBusqueda), '');
+      await tester.pumpAndSettle();
+
+      expect(find.text(RutasScreen.rotuloCercania), findsOneWidget);
+      expect(dificultadElegida(tester), Dificultad.facil);
+      expect(enPantalla(tester), ['facil-corta', 'facil-larga']);
+    });
+
+    testWidgets('al cambiar la dificultad, la lista también vuelve arriba', (
+      tester,
+    ) async {
+      final muchas = [
+        for (var i = 0; i < 10; i++)
+          rutaDePrueba(
+            id: 'r$i',
+            nombre: 'Ruta $i',
+            estado: EstadoRuta.publicada,
+            distanciaKm: 3,
+            dificultad: Dificultad.facil,
+          ),
+      ];
+      repositorio = RutasRepositorioFalso(rutas: muchas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in muchas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: i + 1.0),
+        ];
+      await montar(tester);
+
+      double desplazamiento() => tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byKey(RutasScreen.claveLista),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position
+          .pixels;
+
+      await tester.drag(
+        find.byKey(RutasScreen.claveLista),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      expect(desplazamiento(), greaterThan(0));
+
+      // Todas son fáciles: la lista filtrada es igual de larga.
+      await elegirDificultad(tester, Dificultad.facil);
+      expect(desplazamiento(), 0);
+    });
+  });
+
+  group('sin resultados con los filtros (SCRUM-275, criterio 5 de HU-37)', () {
+    final facilCorta = rutaDePrueba(
+      id: 'facil-corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+      dificultad: Dificultad.facil,
+    );
+    final moderadaMedia = rutaDePrueba(
+      id: 'moderada-media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+      dificultad: Dificultad.moderada,
+    );
+    final rutas = [facilCorta, moderadaMedia];
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: rutas)
+        ..rutasCercanas = [
+          RutaCercana(ruta: facilCorta, distanciaKm: 0.8),
+          RutaCercana(ruta: moderadaMedia, distanciaKm: 1.5),
+        ];
+    });
+
+    Future<void> elegirRango(WidgetTester tester, RangoDistancia rango) async {
+      await tester.tap(find.byKey(RutasScreen.claveRango(rango)));
+      await tester.pumpAndSettle();
+    }
+
+    bool elegido(WidgetTester tester, RangoDistancia rango) => tester
+        .widget<ChipFiltro>(find.byKey(RutasScreen.claveRango(rango)))
+        .activo;
+
+    test('el título dice la combinación que no tiene rutas', () {
+      expect(
+        RutasScreen.sinRutasCon(
+          const FiltrosRutas(
+            dificultad: Dificultad.facil,
+            distancia: RangoDistancia.de5a10,
+          ),
+        ),
+        'Ninguna ruta fácil de 5 a 10 km',
+      );
+      expect(
+        RutasScreen.sinRutasCon(
+          const FiltrosRutas(
+            dificultad: Dificultad.moderada,
+            distancia: RangoDistancia.masDe20,
+          ),
+        ),
+        'Ninguna ruta moderada de más de 20 km',
+      );
+      expect(
+        RutasScreen.sinRutasCon(
+          const FiltrosRutas(dificultad: Dificultad.dificil),
+        ),
+        'Ninguna ruta difícil',
+      );
+    });
+
+    test('con los dos, dice cuál deja fuera las rutas', () {
+      String queHacer(Dificultad dificultad, RangoDistancia rango) =>
+          RutasScreen.queHacerSinRutasCon(
+            FiltrosRutas(dificultad: dificultad, distancia: rango),
+            rutas,
+          );
+
+      // Hay fáciles y hay de 5 a 10 km, pero ninguna fácil de 5 a 10 km.
+      expect(
+        queHacer(Dificultad.facil, RangoDistancia.de5a10),
+        'Hay rutas fáciles y rutas de 5 a 10 km, pero ninguna que cumpla las '
+        'dos. Prueba quitando uno de los filtros.',
+      );
+      // Lo que falta es el rango.
+      expect(
+        queHacer(Dificultad.facil, RangoDistancia.masDe20),
+        'Hay rutas fáciles, pero ninguna de más de 20 km. Prueba con otro '
+        'rango.',
+      );
+      // Lo que falta es la dificultad.
+      expect(
+        queHacer(Dificultad.dificil, RangoDistancia.de5a10),
+        'Hay rutas de 5 a 10 km, pero ninguna difícil. Prueba con otra '
+        'dificultad.',
+      );
+      // Faltan los dos.
+      expect(
+        queHacer(Dificultad.dificil, RangoDistancia.masDe20),
+        'No hay rutas difíciles ni de más de 20 km. Prueba con otros filtros o '
+        'quítalos para verlas todas.',
+      );
+    });
+
+    test('con uno solo, sugiere probar con otro valor de ese filtro', () {
+      expect(
+        RutasScreen.queHacerSinRutasCon(
+          const FiltrosRutas(dificultad: Dificultad.dificil),
+          rutas,
+        ),
+        RutasScreen.pruebaOtraDificultad,
+      );
+      expect(
+        RutasScreen.queHacerSinRutasCon(
+          const FiltrosRutas(distancia: RangoDistancia.masDe20),
+          rutas,
+        ),
+        RutasScreen.pruebaOtroRango,
+      );
+    });
+
+    testWidgets('lo dice debajo del rótulo, y «Quitar los filtros» quita los '
+        'dos', (tester) async {
+      await montar(tester);
+      await elegirDificultad(tester, Dificultad.facil);
+      await elegirRango(tester, RangoDistancia.de5a10);
+
+      const titulo = 'Ninguna ruta fácil de 5 a 10 km';
+      expect(find.byType(TarjetaRutaExplorar), findsNothing);
+      expect(find.text(titulo), findsOneWidget);
+      expect(
+        find.textContaining('pero ninguna que cumpla las dos'),
+        findsOneWidget,
+      );
+      expect(
+        altoDe(tester, RutasScreen.rotuloCercania),
+        lessThan(altoDe(tester, titulo)),
+      );
+      expect(find.text('Quitar los filtros'), findsOneWidget);
+
+      await tester.tap(find.byKey(RutasScreen.claveQuitarFiltros));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+      expect(elegido(tester, RangoDistancia.de5a10), isFalse);
+      expect(dificultadElegida(tester), isNull);
+    });
+
+    testWidgets('con un filtro solo, el botón dice «Quitar el filtro»', (
+      tester,
+    ) async {
+      await montar(tester);
+      await elegirDificultad(tester, Dificultad.dificil);
+
+      expect(find.text('Ninguna ruta difícil'), findsOneWidget);
+      expect(find.text(RutasScreen.pruebaOtraDificultad), findsOneWidget);
+      expect(find.text('Quitar el filtro'), findsOneWidget);
+
+      await tester.tap(find.byKey(RutasScreen.claveQuitarFiltros));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TarjetaRutaExplorar), findsNWidgets(2));
+      expect(dificultadElegida(tester), isNull);
+    });
+
+    testWidgets('se le anuncia al lector de pantalla, y otra vez si cambia '
+        'la combinación', (tester) async {
+      final anuncios = escucharAnuncios(tester);
+      await montar(tester);
+
+      // Hay fáciles: no hay nada que anunciar.
+      await elegirDificultad(tester, Dificultad.facil);
+      expect(anuncios, isEmpty);
+
+      await elegirRango(tester, RangoDistancia.masDe20);
+      await elegirRango(tester, RangoDistancia.de10a20);
+
+      expect(anuncios, [
+        'Ninguna ruta fácil de más de 20 km. Hay rutas fáciles, pero ninguna '
+            'de más de 20 km. Prueba con otro rango.',
+        'Ninguna ruta fácil de 10 a 20 km. Hay rutas fáciles, pero ninguna de '
+            '10 a 20 km. Prueba con otro rango.',
+      ]);
+    });
+
+    testWidgets('también con la distancia sola (SCRUM-274)', (tester) async {
+      final anuncios = escucharAnuncios(tester);
+      await montar(tester);
+
+      await elegirRango(tester, RangoDistancia.masDe20);
+
+      expect(anuncios, [
+        'Ninguna ruta de más de 20 km. ${RutasScreen.pruebaOtroRango}',
+      ]);
+    });
+
+    testWidgets('en la pantalla más estrecha con el texto grande no desborda', (
+      tester,
+    ) async {
+      await montar(tester, tamano: const Size(320, 568), escalaTexto: 1.3);
+
+      await elegirDificultad(tester, Dificultad.dificil);
+      await elegirRango(tester, RangoDistancia.masDe20);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(RutasScreen.claveSinRutasConFiltros), findsOneWidget);
     });
   });
 }

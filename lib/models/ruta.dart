@@ -95,6 +95,7 @@ class Ruta {
     this.miniatura = const [],
     this.distanciaKm,
     this.dificultad,
+    this.dificultadRevisadaEn,
     this.motivoRechazo,
     this.fechaPublicacion,
   });
@@ -133,6 +134,14 @@ class Ruta {
   /// tiene: "Sin clasificar". Hasta que la base guarde `rutas.dificultad`,
   /// todas llegan así.
   final Dificultad? dificultad;
+
+  /// Cuándo un Runner Experto confirmó o corrigió su dificultad (SCRUM-264),
+  /// o null si nadie la ha revisado. Quién fue lo guarda la base; a los
+  /// demás solo se les dice que fue un Runner Experto (criterio 5 de HU-35).
+  final DateTime? dificultadRevisadaEn;
+
+  /// Si un Runner Experto ya revisó su dificultad.
+  bool get dificultadRevisada => dificultadRevisadaEn != null;
 
   /// Por qué el experto no la aprobó. Null mientras no la rechace.
   final String? motivoRechazo;
@@ -185,6 +194,7 @@ class Ruta {
       miniatura: trazadoDesdeJson(fila['miniatura']),
       distanciaKm: _comoDouble(fila['distancia_km']),
       dificultad: Dificultad.desdeDb(fila['dificultad']),
+      dificultadRevisadaEn: _comoFecha(fila['dificultad_revisada_en']),
       motivoRechazo: motivo as String?,
       fechaPublicacion: publicacion is String
           ? DateTime.parse(publicacion).toLocal()
@@ -199,6 +209,13 @@ class Ruta {
     if (json is! List) return const [];
     return [for (final punto in json) ?PuntoRuta.desdeJson(punto)];
   }
+
+  /// Una fecha que puede no venir: las consultas de hoy no traen
+  /// `dificultad_revisada_en`, que llega con SCRUM-363 (`docs/deudas.md`).
+  /// Una que no se entienda se toma como que no está, igual que una
+  /// dificultad que no se conoce.
+  static DateTime? _comoFecha(Object? valor) =>
+      valor is String ? DateTime.tryParse(valor)?.toLocal() : null;
 
   /// `distancia_km` es `numeric`, que según el caso llega como número o como
   /// texto (lo mismo que `distancia_total_m` en `EntrenamientoService`).

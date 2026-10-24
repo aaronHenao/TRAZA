@@ -16,6 +16,7 @@ import '../../widgets/estado_vacio.dart';
 import '../../widgets/mapa_trayecto.dart';
 import '../../widgets/tarjeta_reto.dart' show TarjetaReto;
 import '../../widgets/tarjeta_ruta.dart';
+import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_top_bar.dart';
 import 'revisar_clasificacion_screen.dart';
@@ -29,6 +30,8 @@ import 'revisar_clasificacion_screen.dart';
 /// Del "Detalle de ruta" del prototipo quedan fuera el desnivel y el tiempo
 /// estimado: el primero necesitaría la altitud, que no se guarda a propósito
 /// desde el Sprint 1, y el segundo depende de él.
+///
+/// Dice también su dificultad, y si un Runner Experto la revisó (SCRUM-264).
 class DetalleRutaScreen extends ConsumerWidget {
   const DetalleRutaScreen({required this.rutaId, this.vistaPrevia, super.key});
 
@@ -48,7 +51,16 @@ class DetalleRutaScreen extends ConsumerWidget {
   static String rutaDe(String rutaId) =>
       '/rutas/${Uri.encodeComponent(rutaId)}';
 
+  /// Quién revisó la dificultad: que fue un Runner Experto, y cuándo
+  /// (SCRUM-264, criterio 5 de HU-35).
+  static String revisadaPorExperto(DateTime en, DateTime ahora) =>
+      'Revisada por un Runner Experto · ${fechaRelativa(en, ahora)}';
+  static const sinRevisar = 'Todavía no la revisa un Runner Experto.';
+  static const sinDificultadAsignada =
+      'Todavía no tiene una dificultad asignada.';
+
   static const claveDistancia = Key('detalle-ruta-distancia');
+  static const claveDificultad = Key('detalle-ruta-dificultad');
   static const claveReintentar = Key('detalle-ruta-reintentar');
   static const claveCargandoTrazado = Key('detalle-ruta-cargando-trazado');
 
@@ -153,6 +165,8 @@ class _Contenido extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         _Distancia(ruta: ruta),
+        const SizedBox(height: AppSpacing.sm),
+        _Dificultad(ruta: ruta, ahora: ahora),
         _RevisarClasificacion(rutaId: ruta.id),
         if (descripcion != null && descripcion.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
@@ -236,6 +250,95 @@ class _Distancia extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// La dificultad de la ruta y si un Runner Experto la revisó (SCRUM-264,
+/// criterio 5 de HU-35).
+///
+/// De quién la revisó solo se dice que fue un Runner Experto, y cuándo: eso
+/// es lo que le da confianza a quien la va a correr, y el nombre no le
+/// agrega nada. Se lee de una vez con el lector de pantalla.
+class _Dificultad extends StatelessWidget {
+  const _Dificultad({required this.ruta, required this.ahora});
+
+  final Ruta ruta;
+  final DateTime ahora;
+
+  @override
+  Widget build(BuildContext context) {
+    final dificultad = ruta.dificultad;
+    final revisadaEn = ruta.dificultadRevisadaEn;
+    const detalle = TextStyle(fontSize: 12.5, color: AppColors.ink2);
+
+    return MergeSemantics(
+      child: TrazaCard(
+        key: DetalleRutaScreen.claveDificultad,
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.secondaryTint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.signal_cellular_alt_rounded,
+                size: 20,
+                color: AppColors.secondaryDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dificultad?.etiqueta ?? TarjetaRutaExplorar.sinDificultad,
+                    style: TextStyle(
+                      fontSize: dificultad == null ? 14 : 19,
+                      fontWeight: FontWeight.w800,
+                      color: dificultad == null
+                          ? AppColors.ink2
+                          : AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  if (dificultad != null && revisadaEn != null)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 14,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            DetalleRutaScreen.revisadaPorExperto(
+                              revisadaEn,
+                              ahora,
+                            ),
+                            style: detalle,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      dificultad == null
+                          ? DetalleRutaScreen.sinDificultadAsignada
+                          : DetalleRutaScreen.sinRevisar,
+                      style: detalle,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

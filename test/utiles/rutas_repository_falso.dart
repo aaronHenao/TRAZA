@@ -1,6 +1,8 @@
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
+import 'package:traza/models/zona.dart';
 import 'package:traza/services/rutas_service.dart';
+import 'package:traza/utils/texto_para_buscar.dart';
 
 /// Repositorio de rutas en memoria para las pruebas (SCRUM-241).
 ///
@@ -32,6 +34,23 @@ class RutasRepositorioFalso implements RutasRepository {
 
   int consultasCercanas = 0;
   int consultasPublicadas = 0;
+
+  /// Lo que devuelve `buscar` (SCRUM-254). Sin esto, las publicadas cuyo
+  /// nombre o creador coinciden con lo buscado, como lo compara la base.
+  List<Ruta>? resultadosBusqueda;
+
+  /// Lo que lanza `buscar`, si algo. Va aparte de [error] para que pueda
+  /// fallar la búsqueda sin que falle la lista de siempre.
+  Object? errorBusqueda;
+
+  /// Lo que `buscar` agrega cuando llega una zona (SCRUM-255): las rutas que
+  /// arrancan en ella. El falso no sabe dónde arranca cada ruta, así que la
+  /// prueba se las dice.
+  List<Ruta> rutasEnZona = const [];
+
+  /// Cada búsqueda que llegó: qué se buscó, desde dónde y en qué zona.
+  final busquedas =
+      <({String termino, double? latitud, double? longitud, Zona? zona})>[];
 
   @override
   Future<Ruta> crear(NuevaRuta ruta) async {
@@ -84,6 +103,45 @@ class RutasRepositorioFalso implements RutasRepository {
   }
 
   @override
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+    Zona? zona,
+  }) async {
+    busquedas.add((
+      termino: termino,
+      latitud: latitud,
+      longitud: longitud,
+      zona: zona,
+    ));
+
+    final error = errorBusqueda;
+    if (error != null) throw error;
+
+    // Como compara la base (0041): cada palabra escrita tiene que ser el
+    // comienzo de una palabra del nombre o del creador.
+    final palabras = textoParaBuscar(termino).split(' ');
+    bool coincide(Ruta ruta) {
+      final texto = ' ${textoParaBuscar('${ruta.nombre} ${ruta.autorNombre}')}';
+      return palabras.every((palabra) => texto.contains(' $palabra'));
+    }
+
+    final porTexto =
+        resultadosBusqueda ??
+        [
+          for (final ruta in rutas)
+            if (ruta.publicada && coincide(ruta)) ruta,
+        ];
+    return [
+      ...porTexto,
+      if (zona != null)
+        for (final ruta in rutasEnZona)
+          if (!porTexto.contains(ruta)) ruta,
+    ];
+  }
+
+  @override
   Future<Ruta?> ruta(String id) async {
     final error = this.error;
     if (error != null) throw error;
@@ -101,6 +159,7 @@ class RutasRepositorioFalso implements RutasRepository {
 Ruta rutaDePrueba({
   String id = 'ruta-1',
   String nombre = 'Vuelta al estadio',
+  String autorNombre = 'Ana',
   String? descripcion,
   String? entrenamientoId = 'e-123',
   EstadoRuta estado = EstadoRuta.enRevision,
@@ -111,7 +170,7 @@ Ruta rutaDePrueba({
 }) => Ruta(
   id: id,
   autorId: 'usuario-1',
-  autorNombre: 'Ana',
+  autorNombre: autorNombre,
   nombre: nombre,
   descripcion: descripcion,
   entrenamientoId: entrenamientoId,

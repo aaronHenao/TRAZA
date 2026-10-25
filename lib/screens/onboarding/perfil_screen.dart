@@ -8,6 +8,8 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
 import '../home/runner_experto_screen.dart';
+import '../rutas/rutas_por_clasificar_screen.dart';
+import '../../services/roles_service.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../services/perfil_provider.dart';
@@ -67,6 +69,7 @@ class PerfilScreen extends StatelessWidget {
   static const ruta = '/perfil';
 
   static const claveRunnerExperto = Key('perfil-runner-experto');
+  static const claveRutasPorClasificar = Key('perfil-rutas-por-clasificar');
 
   static Key clavePestana(PestanaPerfil pestana) =>
       Key('perfil-pestana-${pestana.name}');
@@ -194,6 +197,9 @@ class _Objetivos extends ConsumerWidget {
                 // Recién registrado todavía no hay nada que alcanzar: primero
                 // termina el onboarding.
                 if (!enOnboarding) const _InvitacionRunnerExperto(),
+                // La bandeja del Runner Experto (SCRUM-363), solo para quien
+                // tiene el rol.
+                if (!enOnboarding) const _AccesoRutasPorClasificar(),
                 const SizedBox(height: AppSpacing.xl),
                 const MisObjetivosSection(),
                 // Los logros del corredor (SCRUM-222), debajo de los
@@ -423,6 +429,63 @@ class _InvitacionRunnerExperto extends StatelessWidget {
           ),
           Icon(Icons.chevron_right_rounded, color: AppColors.ink3),
         ],
+      ),
+    );
+  }
+}
+
+/// Lo que el Runner Experto tiene por clasificar (SCRUM-363). A quien no tiene
+/// el rol no se le muestra nada: para él ya está la invitación de arriba.
+class _AccesoRutasPorClasificar extends ConsumerWidget {
+  const _AccesoRutasPorClasificar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(esExpertoProvider).valueOrNull != true) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: TrazaCard(
+        key: PerfilScreen.claveRutasPorClasificar,
+        // `push`: al cerrarla se vuelve al perfil.
+        onTap: () => context.push(RutasPorClasificarScreen.ruta),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              radius: 21,
+              backgroundColor: AppColors.secondaryTint,
+              child: Icon(
+                Icons.terrain_outlined,
+                size: 22,
+                color: AppColors.secondaryDark,
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Rutas por clasificar',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Asígnales la dificultad antes de que se publiquen.',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppColors.ink3),
+          ],
+        ),
       ),
     );
   }

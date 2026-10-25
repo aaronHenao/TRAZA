@@ -14,6 +14,7 @@ import '../../widgets/estado_vacio.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/trazado_recorrido.dart';
+import 'detalle_ruta_screen.dart';
 
 /// Formulario para publicar como ruta el recorrido de un entrenamiento
 /// finalizado (SCRUM-241).
@@ -36,6 +37,7 @@ class PublicarRutaScreen extends ConsumerStatefulWidget {
   static const claveDescripcion = Key('ruta-descripcion');
   static const clavePublicar = Key('ruta-publicar');
   static const claveYaPublicada = Key('ruta-ya-publicada');
+  static const claveVerRuta = Key('ruta-ver-mi-ruta');
 
   static const revisaLosCampos = 'Revisa los campos marcados';
 
@@ -56,7 +58,17 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
 
   /// Si este entrenamiento ya tiene una ruta en pie. Se pregunta al abrir:
   /// mejor decírselo antes de que escriba que después de que toque publicar.
-  late final Future<Ruta?> _yaPublicada = _buscarLaQueYaHay();
+  late Future<Ruta?> _yaPublicada = _buscarLaQueYaHay();
+
+  /// Abre el detalle de su ruta y, al volver, pregunta otra vez: si la
+  /// publicó desde ahí, la tarjeta ya lo dice (SCRUM-363).
+  Future<void> _verRuta(Ruta ruta) async {
+    await context.push(DetalleRutaScreen.rutaDe(ruta.id));
+    if (!mounted) return;
+    setState(() {
+      _yaPublicada = _buscarLaQueYaHay();
+    });
+  }
 
   Future<Ruta?> _buscarLaQueYaHay() async {
     final id = widget.resumen?.entrenamientoId;
@@ -107,6 +119,10 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
         case RutaEnRevision():
           context.pop();
           mostrarToast(context, PublicacionRuta.enRevision);
+        case RutaSinClasificar():
+          // Criterio 3 de SCRUM-363: quedó guardada, pero sin dificultad.
+          context.pop();
+          mostrarToast(context, PublicacionRuta.sinDatosParaClasificar);
         case RutaConErrores(:final errores):
           setState(() => _errores = errores);
           mostrarToast(context, PublicarRutaScreen.revisaLosCampos);
@@ -149,7 +165,12 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
                           }
 
                           final ruta = estado.data;
-                          if (ruta != null) return _YaPublicada(ruta: ruta);
+                          if (ruta != null) {
+                            return _YaPublicada(
+                              ruta: ruta,
+                              onVerRuta: () => _verRuta(ruta),
+                            );
+                          }
 
                           return _Formulario(
                             resumen: resumen,
@@ -176,13 +197,48 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
 /// La barrera de verdad es el índice único de `0031`; esto es para que no se
 /// entere después de haber escrito el nombre y la descripción.
 class _YaPublicada extends StatelessWidget {
-  const _YaPublicada({required this.ruta});
+  const _YaPublicada({required this.ruta, required this.onVerRuta});
 
   final Ruta ruta;
+  final VoidCallback onVerRuta;
 
   @override
   Widget build(BuildContext context) {
-    final enRevision = ruta.estado == EstadoRuta.enRevision;
+    // En qué va la ruta (SCRUM-363). Las rechazadas no llegan aquí: esas se
+    // pueden volver a mandar, así que el formulario se ofrece de nuevo.
+    final (icono, color, estado, titulo, detalle) = switch (ruta.estado) {
+      EstadoRuta.enRevision => (
+        Icons.hourglass_top_rounded,
+        AppColors.ink3,
+        EstadoRuta.enRevision.etiqueta,
+        'Esta ruta está en revisión',
+        'La publicaste como "${ruta.nombre}". Un Runner Experto le asignará '
+            'la dificultad.',
+      ),
+      EstadoRuta.clasificada => (
+        Icons.terrain_outlined,
+        AppColors.secondary,
+        EstadoRuta.clasificada.etiqueta,
+        'Tu ruta ya tiene dificultad',
+        'Un Runner Experto clasificó "${ruta.nombre}". Ábrela para '
+            'confirmar su publicación.',
+      ),
+      EstadoRuta.datosIncompletos => (
+        Icons.help_outline_rounded,
+        AppColors.ink3,
+        EstadoRuta.datosIncompletos.etiqueta,
+        'No se pudo clasificar',
+        '"${ruta.nombre}" no tiene la distancia registrada, así que un Runner '
+            'Experto no puede asignarle la dificultad.',
+      ),
+      _ => (
+        Icons.check_circle,
+        AppColors.secondary,
+        EstadoRuta.publicada.etiqueta,
+        'Ya publicaste esta ruta',
+        'La comunidad ya puede ver "${ruta.nombre}".',
+      ),
+    };
 
     return Padding(
       key: PublicarRutaScreen.claveYaPublicada,
@@ -190,16 +246,22 @@ class _YaPublicada extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            enRevision ? Icons.hourglass_top_rounded : Icons.check_circle,
-            size: 42,
-            color: enRevision ? AppColors.ink3 : AppColors.secondary,
-          ),
-          const SizedBox(height: 14),
+          Icon(icono, size: 42, color: color),
+          const SizedBox(height: 10),
+          // En qué va, con las palabras de SCRUM-363.
           Text(
-            enRevision
-                ? 'Esta ruta está en revisión'
-                : 'Ya publicaste esta ruta',
+            estado,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            titulo,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 16,
@@ -209,10 +271,7 @@ class _YaPublicada extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            enRevision
-                ? 'La publicaste como "${ruta.nombre}". Un Runner Experto la '
-                      'está revisando y te avisamos cuando se publique.'
-                : 'La comunidad ya puede ver "${ruta.nombre}".',
+            detalle,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13.5,
@@ -221,6 +280,17 @@ class _YaPublicada extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
+          // El detalle es donde se ve su estado y, ya clasificada, donde se
+          // confirma la publicación (SCRUM-363).
+          OutlinedButton(
+            key: PublicarRutaScreen.claveVerRuta,
+            onPressed: onVerRuta,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: const Text('Ver mi ruta'),
+          ),
+          const SizedBox(height: AppSpacing.sm),
           FilledButton(
             onPressed: context.pop,
             style: FilledButton.styleFrom(

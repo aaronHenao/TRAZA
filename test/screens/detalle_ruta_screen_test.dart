@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/screens/foro/foro_screen.dart';
 import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
@@ -13,6 +14,8 @@ import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/roles_service.dart';
+import 'package:traza/services/rutas_provider.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/tarjeta_ruta.dart';
@@ -20,6 +23,7 @@ import 'package:traza/widgets/tarjeta_ruta.dart';
 import '../utiles/foro_repository_falso.dart';
 import '../utiles/fuente_cambios_foro_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
+import '../utiles/roles_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
 /// Pruebas del detalle de una ruta (SCRUM-240): que diga cuánto mide sin que
@@ -28,6 +32,9 @@ import '../utiles/rutas_repository_falso.dart';
 /// SCRUM-358 agrega el recorrido completo sobre el mapa: verlo entero, con su
 /// inicio y su final, moverse por él, salir sin registrar nada y reintentar
 /// cuando no carga.
+///
+/// SCRUM-363 agrega la dificultad: quién la asignó, en qué va la revisión
+/// para el autor, cómo la confirma, y cómo la asigna un Runner Experto.
 void main() {
   Ruta ruta({
     double? distanciaKm = 5.23,
@@ -384,6 +391,446 @@ void main() {
       expect(find.byType(MapaTrayecto), findsNothing);
     });
   });
+
+  group('la clasificación por un Runner Experto (SCRUM-363)', () {
+    final enRevision = rutaDePrueba(
+      autorId: 'autor-1',
+      nombre: 'Vuelta al Parque Norte',
+    );
+    final clasificada = rutaDePrueba(
+      autorId: 'autor-1',
+      nombre: 'Vuelta al Parque Norte',
+      estado: EstadoRuta.clasificada,
+      dificultad: Dificultad.moderada,
+    );
+
+    group('la dificultad a la vista', () {
+      testWidgets('una ruta publicada muestra su nivel de dificultad e indica '
+          'que lo asignó un Runner Experto (criterio 2 de SCRUM-363)', (
+        tester,
+      ) async {
+        await _abrirComo(
+          tester,
+          usuario: 'corredor-1',
+          ruta: rutaDePrueba(
+            autorId: 'autor-1',
+            estado: EstadoRuta.publicada,
+            dificultad: Dificultad.moderada,
+            fechaPublicacion: DateTime(2026, 10, 17, 10),
+          ),
+        );
+
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Moderada'),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, _asignadaPorExperto),
+          findsOneWidget,
+        );
+        // Quien la mira no es el autor ni experto: no hay nada más que hacer.
+        expect(find.byKey(DetalleRutaScreen.claveEstado), findsNothing);
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+      });
+
+      testWidgets('una ruta sin dificultad dice "Sin clasificar" y no se la '
+          'atribuye a ningún experto', (tester) async {
+        // Las publicadas antes de SCRUM-363 no la tienen.
+        await _abrirComo(
+          tester,
+          usuario: 'corredor-1',
+          ruta: rutaDePrueba(
+            autorId: 'autor-1',
+            estado: EstadoRuta.publicada,
+            fechaPublicacion: DateTime(2026, 10, 17, 10),
+          ),
+        );
+
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Sin clasificar'),
+          findsOneWidget,
+        );
+        expect(find.text(_asignadaPorExperto), findsNothing);
+      });
+    });
+
+    group('lo que ve el autor mientras no se publica', () {
+      testWidgets('en revisión le muestra que está pendiente de revisión por '
+          'un Runner Experto (criterio 1 de SCRUM-363)', (tester) async {
+        await _abrirComo(tester, usuario: 'autor-1', ruta: enRevision);
+
+        expect(
+          _en(DetalleRutaScreen.claveEstado, 'Pendiente de revisión'),
+          findsOneWidget,
+        );
+        expect(
+          _en(
+            DetalleRutaScreen.claveEstado,
+            'Un Runner Experto le asignará la dificultad.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Sin clasificar'),
+          findsOneWidget,
+        );
+        // Todavía no hay nada que confirmar.
+        expect(find.byKey(DetalleRutaScreen.clavePublicar), findsNothing);
+      });
+
+      testWidgets('sin la distancia le informa que no puede clasificarse y '
+          'que la dificultad quedó pendiente (criterio 3 de SCRUM-363)', (
+        tester,
+      ) async {
+        await _abrirComo(
+          tester,
+          usuario: 'autor-1',
+          ruta: rutaDePrueba(
+            autorId: 'autor-1',
+            estado: EstadoRuta.datosIncompletos,
+            distanciaKm: null,
+          ),
+        );
+
+        expect(
+          _en(DetalleRutaScreen.claveEstado, 'Dificultad pendiente'),
+          findsOneWidget,
+        );
+        expect(
+          _en(
+            DetalleRutaScreen.claveEstado,
+            'No se puede clasificar: falta la distancia de la ruta.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Sin clasificar'),
+          findsOneWidget,
+        );
+        expect(find.byKey(DetalleRutaScreen.clavePublicar), findsNothing);
+      });
+
+      testWidgets('con la dificultad asignada la ve lista para publicar, con '
+          'su nivel (criterio 2 de SCRUM-363)', (tester) async {
+        await _abrirComo(tester, usuario: 'autor-1', ruta: clasificada);
+
+        expect(
+          _en(DetalleRutaScreen.claveEstado, 'Lista para publicar'),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Moderada'),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.clavePublicar, 'Publicar ruta'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('al confirmar, TRAZA publica la ruta mostrando su nivel de '
+          'dificultad e indicando que lo asignó un Runner Experto (criterio 2 '
+          'de SCRUM-363)', (tester) async {
+        final repositorio = await _abrirComo(
+          tester,
+          usuario: 'autor-1',
+          ruta: clasificada,
+        );
+
+        await _tocar(tester, find.byKey(DetalleRutaScreen.clavePublicar));
+
+        expect(
+          find.text(ConfirmacionPublicacionRuta.publicada),
+          findsOneWidget,
+        );
+        expect(repositorio.confirmaciones, ['ruta-1']);
+        expect(repositorio.rutas.single.estado, EstadoRuta.publicada);
+
+        // Sigue en la ruta, ya publicada: sin estado de revisión ni botón, y
+        // con su dificultad y quién la asignó.
+        expect(find.byType(DetalleRutaScreen), findsOneWidget);
+        expect(find.byKey(DetalleRutaScreen.claveEstado), findsNothing);
+        expect(find.byKey(DetalleRutaScreen.clavePublicar), findsNothing);
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Moderada'),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, _asignadaPorExperto),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('si no se pudo publicar lo dice y deja reintentar', (
+        tester,
+      ) async {
+        final repositorio = await _abrirComo(
+          tester,
+          usuario: 'autor-1',
+          ruta: clasificada,
+        );
+        repositorio.errorConfirmacion = StateError('sin red');
+
+        await _tocar(tester, find.byKey(DetalleRutaScreen.clavePublicar));
+
+        expect(find.text(ConfirmacionPublicacionRuta.noSePudo), findsOneWidget);
+        expect(find.textContaining('sin red'), findsNothing);
+        expect(find.byKey(DetalleRutaScreen.clavePublicar), findsOneWidget);
+        expect(repositorio.rutas.single.estado, EstadoRuta.clasificada);
+      });
+
+      testWidgets('a quien no es el autor no le muestra el estado de la '
+          'revisión ni le ofrece clasificar', (tester) async {
+        await _abrirComo(tester, usuario: 'corredor-1', ruta: enRevision);
+
+        expect(find.byKey(DetalleRutaScreen.claveEstado), findsNothing);
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+        expect(find.byKey(DetalleRutaScreen.clavePublicar), findsNothing);
+      });
+    });
+
+    group('lo que hace el Runner Experto', () {
+      testWidgets('a un experto le ofrece asignar la dificultad de una ruta '
+          'ajena en revisión (criterio 1 de SCRUM-363)', (tester) async {
+        await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: enRevision,
+        );
+
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsOneWidget);
+        for (final dificultad in Dificultad.values) {
+          expect(
+            _en(
+              DetalleRutaScreen.claveOpcionDificultad(dificultad),
+              dificultad.etiqueta,
+            ),
+            findsOneWidget,
+          );
+        }
+        // Hasta elegir una no hay nada que asignar.
+        expect(
+          _boton(tester, DetalleRutaScreen.claveAsignar).onPressed,
+          isNull,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveAsignar, 'Asignar dificultad'),
+          findsOneWidget,
+        );
+        // No es el autor: el estado de la revisión no es asunto suyo.
+        expect(find.byKey(DetalleRutaScreen.claveEstado), findsNothing);
+      });
+
+      testWidgets('el experto asigna la dificultad y vuelve a la bandeja', (
+        tester,
+      ) async {
+        final repositorio = await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: enRevision,
+        );
+
+        await _tocar(
+          tester,
+          find.byKey(
+            DetalleRutaScreen.claveOpcionDificultad(Dificultad.moderada),
+          ),
+        );
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.byKey(
+                  DetalleRutaScreen.claveOpcionDificultad(Dificultad.moderada),
+                ),
+              )
+              .selected,
+          isTrue,
+        );
+        expect(
+          _boton(tester, DetalleRutaScreen.claveAsignar).onPressed,
+          isNotNull,
+        );
+
+        await _tocar(tester, find.byKey(DetalleRutaScreen.claveAsignar));
+
+        expect(find.text(ClasificacionRuta.clasificada), findsOneWidget);
+        expect(find.text('Pantalla anterior'), findsOneWidget);
+        expect(find.byType(DetalleRutaScreen), findsNothing);
+        expect(repositorio.clasificaciones, [
+          (rutaId: 'ruta-1', dificultad: Dificultad.moderada),
+        ]);
+        expect(repositorio.rutas.single.estado, EstadoRuta.clasificada);
+        expect(repositorio.rutas.single.dificultad, Dificultad.moderada);
+      });
+
+      testWidgets('si no se pudo asignar lo dice y se queda en la ruta', (
+        tester,
+      ) async {
+        final repositorio = await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: enRevision,
+        );
+        // Otro experto se adelantó.
+        repositorio.errorClasificacion = const RutaCambioDeEstadoException();
+
+        await _tocar(
+          tester,
+          find.byKey(DetalleRutaScreen.claveOpcionDificultad(Dificultad.facil)),
+        );
+        await _tocar(tester, find.byKey(DetalleRutaScreen.claveAsignar));
+
+        expect(find.text(ClasificacionRuta.yaCambio), findsOneWidget);
+        expect(find.byType(DetalleRutaScreen), findsOneWidget);
+        expect(find.text('Pantalla anterior'), findsNothing);
+      });
+
+      testWidgets('un experto no clasifica su propia ruta: la ve como autor', (
+        tester,
+      ) async {
+        await _abrirComo(
+          tester,
+          usuario: 'autor-1',
+          experto: true,
+          ruta: enRevision,
+        );
+
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+        expect(
+          _en(DetalleRutaScreen.claveEstado, 'Pendiente de revisión'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('lo ya clasificado no se vuelve a ofrecer', (tester) async {
+        await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: clasificada,
+        );
+
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+      });
+
+      testWidgets('una ruta sin la distancia no se ofrece para clasificar '
+          '(criterio 3 de SCRUM-363)', (tester) async {
+        await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: rutaDePrueba(
+            autorId: 'autor-1',
+            estado: EstadoRuta.datosIncompletos,
+            distanciaKm: null,
+          ),
+        );
+
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+      });
+
+      testWidgets('a un corredor que no es experto no le ofrece clasificar', (
+        tester,
+      ) async {
+        await _abrirComo(tester, usuario: 'corredor-1', ruta: enRevision);
+
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+      });
+
+      testWidgets(
+        'si no se pudo saber si es experto, no le ofrece clasificar',
+        (tester) async {
+          // Como `SoloExperto`: ante la duda no se ofrece lo que la base va a
+          // rechazar.
+          await _abrirComo(
+            tester,
+            usuario: 'experto-1',
+            experto: true,
+            errorRoles: StateError('sin red'),
+            ruta: enRevision,
+          );
+
+          expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
+          expect(find.byType(DetalleRutaScreen), findsOneWidget);
+        },
+      );
+    });
+  });
+}
+
+/// Lo que acompaña a la dificultad cuando la asignó un experto (criterio 2
+/// de SCRUM-363).
+const _asignadaPorExperto = 'Asignada por un Runner Experto';
+
+/// [texto] dentro del widget con [clave].
+Finder _en(Key clave, String texto) =>
+    find.descendant(of: find.byKey(clave), matching: find.text(texto));
+
+ButtonStyleButton _boton(WidgetTester tester, Key clave) =>
+    tester.widget<ButtonStyleButton>(find.byKey(clave));
+
+/// Lo trae a la vista antes de tocarlo: el detalle es una lista que puede no
+/// caber entera.
+Future<void> _tocar(WidgetTester tester, Finder objetivo) async {
+  await tester.ensureVisible(objetivo);
+  await tester.pumpAndSettle();
+  await tester.tap(objetivo);
+  await tester.pumpAndSettle();
+}
+
+/// Abre el detalle con la sesión de [usuario], encima de otra pantalla como
+/// lo abre la app, para que al volver haya a dónde (SCRUM-363).
+Future<RutasRepositorioFalso> _abrirComo(
+  WidgetTester tester, {
+  required Ruta ruta,
+  required String? usuario,
+  bool experto = false,
+  Object? errorRoles,
+}) async {
+  tester.view.physicalSize = const Size(390 * 3, 900 * 3);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  final repositorio = RutasRepositorioFalso(rutas: [ruta], usuario: usuario);
+  final roles = (experto ? RolesFalso.experto() : RolesFalso())
+    ..error = errorRoles;
+
+  final router = GoRouter(
+    initialLocation: '/anterior',
+    routes: [
+      GoRoute(
+        path: '/anterior',
+        builder: (_, _) => const Scaffold(body: Text('Pantalla anterior')),
+      ),
+      GoRoute(
+        path: DetalleRutaScreen.ruta,
+        builder: (_, estado) =>
+            DetalleRutaScreen(rutaId: estado.pathParameters['rutaId']!),
+      ),
+    ],
+  );
+  addTearDown(router.dispose);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        rutasRepositoryProvider.overrideWithValue(repositorio),
+        usuarioActualProvider.overrideWithValue(() => usuario),
+        rolesRepositoryProvider.overrideWithValue(roles),
+        relojProvider.overrideWithValue(() => DateTime(2026, 10, 17, 12)),
+        proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ),
+  );
+  router.push(DetalleRutaScreen.rutaDe(ruta.id));
+  await tester.pumpAndSettle();
+
+  return repositorio;
 }
 
 /// Un recorrido corto que no va siempre en la misma dirección, para que el

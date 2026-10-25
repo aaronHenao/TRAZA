@@ -58,6 +58,29 @@ void main() {
     expect(avisos.map((aviso) => aviso.id), ['aviso-1']);
   });
 
+  test('lee el aviso de que un Runner Experto clasifico la ruta del autor '
+      '(SCRUM-363)', () async {
+    // Lo crea `clasificar_ruta` (0045) para que el autor sepa que ya puede
+    // confirmar la publicación.
+    final supabase = _SupabaseFalso(
+      filas: [
+        {
+          ...fila,
+          'id': 'aviso-2',
+          'tipo': 'ruta_clasificada',
+          'titulo': 'Tu ruta ya tiene dificultad',
+        },
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final avisos = await supabase.repositorio.mias();
+
+    expect(avisos.single.tipo, TipoNotificacion.rutaClasificada);
+    expect(avisos.single.entidadId, 'ruta-1');
+    expect(TipoNotificacion.rutaClasificada.valorDb, 'ruta_clasificada');
+  });
+
   test('sin sesion no sale ninguna peticion', () async {
     final supabase = _SupabaseFalso(usuarioActual: null);
     addTearDown(supabase.cerrar);

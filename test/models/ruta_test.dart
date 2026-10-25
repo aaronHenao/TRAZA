@@ -1,10 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/ruta.dart';
 
 /// Validación de una ruta antes de enviarla (criterio 3 de SCRUM-241),
 /// conversión del recorrido de un entrenamiento en su trazado y lectura de
 /// las filas de `rutas`.
+///
+/// SCRUM-363 agrega quién puede clasificar una ruta y quién confirmar su
+/// publicación.
 void main() {
   PuntoGps punto(double lat, double lng) => PuntoGps(
     latitud: lat,
@@ -277,6 +281,134 @@ void main() {
       expect(EstadoRuta.desdeDb('publicada'), EstadoRuta.publicada);
       expect(EstadoRuta.desdeDb('rechazada'), EstadoRuta.rechazada);
       expect(EstadoRuta.desdeDb('retirada'), isNull);
+    });
+
+    test('lee los estados nuevos de la clasificacion, con los nombres de '
+        '0045 (SCRUM-363)', () {
+      expect(EstadoRuta.clasificada.valorDb, 'clasificada');
+      expect(EstadoRuta.datosIncompletos.valorDb, 'datos_incompletos');
+      expect(EstadoRuta.desdeDb('clasificada'), EstadoRuta.clasificada);
+      expect(
+        EstadoRuta.desdeDb('datos_incompletos'),
+        EstadoRuta.datosIncompletos,
+      );
+    });
+  });
+
+  group('la clasificacion de una ruta (SCRUM-363)', () {
+    Ruta ruta({
+      EstadoRuta estado = EstadoRuta.enRevision,
+      Dificultad? dificultad,
+    }) => Ruta(
+      id: 'ruta-1',
+      autorId: 'autor-1',
+      autorNombre: 'María',
+      nombre: 'Cerro Pan de Azúcar',
+      estado: estado,
+      distanciaKm: 5.23,
+      dificultad: dificultad,
+      fechaCreacion: DateTime(2026, 10, 17, 9),
+    );
+
+    test('Ruta.desdeSupabase lee una ruta clasificada con su dificultad '
+        '(criterio 2 de SCRUM-363)', () {
+      final leida = Ruta.desdeSupabase({
+        ...fila(estado: 'clasificada', distancia: 5.23),
+        'dificultad': 'moderada',
+      });
+
+      expect(leida.estado, EstadoRuta.clasificada);
+      expect(leida.dificultad, Dificultad.moderada);
+      expect(leida.publicada, isFalse);
+    });
+
+    test('Ruta.desdeSupabase lee una ruta con la dificultad pendiente '
+        '(criterio 3 de SCRUM-363)', () {
+      final leida = Ruta.desdeSupabase({
+        ...fila(estado: 'datos_incompletos'),
+        'dificultad': null,
+      });
+
+      expect(leida.estado, EstadoRuta.datosIncompletos);
+      expect(leida.dificultad, isNull);
+      expect(leida.tieneDistancia, isFalse);
+    });
+
+    group('clasificablePor', () {
+      test('un Runner Experto puede clasificar la ruta ajena que esta en '
+          'revision (criterio 1 de SCRUM-363)', () {
+        expect(ruta().clasificablePor('experto-1', esExperto: true), isTrue);
+      });
+
+      test('un experto no clasifica su propia ruta', () {
+        expect(ruta().clasificablePor('autor-1', esExperto: true), isFalse);
+      });
+
+      test('un corredor que no es experto no clasifica', () {
+        expect(ruta().clasificablePor('otro-1', esExperto: false), isFalse);
+      });
+
+      test('sin sesion no se clasifica', () {
+        expect(ruta().clasificablePor(null, esExperto: true), isFalse);
+      });
+
+      test('solo lo que esta en revision: ni la ya clasificada, ni la '
+          'publicada, ni la rechazada, ni la que tiene la dificultad '
+          'pendiente (criterio 3 de SCRUM-363)', () {
+        for (final estado in [
+          EstadoRuta.clasificada,
+          EstadoRuta.publicada,
+          EstadoRuta.rechazada,
+          EstadoRuta.datosIncompletos,
+        ]) {
+          expect(
+            ruta(
+              estado: estado,
+              dificultad: Dificultad.facil,
+            ).clasificablePor('experto-1', esExperto: true),
+            isFalse,
+            reason: '$estado',
+          );
+        }
+      });
+    });
+
+    group('publicablePor', () {
+      test('el autor puede confirmar la ruta que el experto ya clasifico '
+          '(criterio 2 de SCRUM-363)', () {
+        final clasificada = ruta(
+          estado: EstadoRuta.clasificada,
+          dificultad: Dificultad.moderada,
+        );
+
+        expect(clasificada.publicablePor('autor-1'), isTrue);
+      });
+
+      test('sin la dificultad asignada el autor no la publica: en revision, '
+          'con la dificultad pendiente, ya publicada o rechazada', () {
+        for (final estado in [
+          EstadoRuta.enRevision,
+          EstadoRuta.datosIncompletos,
+          EstadoRuta.publicada,
+          EstadoRuta.rechazada,
+        ]) {
+          expect(
+            ruta(estado: estado).publicablePor('autor-1'),
+            isFalse,
+            reason: '$estado',
+          );
+        }
+      });
+
+      test('nadie mas que el autor la publica, ni el experto', () {
+        final clasificada = ruta(
+          estado: EstadoRuta.clasificada,
+          dificultad: Dificultad.moderada,
+        );
+
+        expect(clasificada.publicablePor('experto-1'), isFalse);
+        expect(clasificada.publicablePor(null), isFalse);
+      });
     });
   });
 }

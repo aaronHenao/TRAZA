@@ -164,3 +164,20 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **La cercanía en el carrusel.** Explorar rutas ya ordena por cercanía (SCRUM-246, con `rutas_cercanas` de 0037), pero el carrusel todavía muestra las últimas publicadas. Lo que falta es que `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) use la misma consulta y la ubicación del usuario; el widget no cambia. Mientras tanto, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
 - **La dificultad (SCRUM-363, y su revisión en HU-35 / SCRUM-259).** La tabla `rutas` todavía no tiene esa columna, así que todas las tarjetas dicen "Sin clasificar", que es la verdad de hoy (acordado con el equipo). Desde SCRUM-275 la app está lista para cuando exista: `Dificultad` (`lib/models/dificultad.dart`) tiene los tres niveles de HU-36, `Ruta.desdeSupabase` lee `rutas.dificultad`, la tarjeta la muestra y Explorar rutas la combina con el filtro de distancia. Lo que falta en la base (SCRUM-363): crear `rutas.dificultad` como texto con los valores `facil`, `moderada` o `dificil` (null mientras nadie la clasifique), y agregarla a `_columnas` de `SupabaseRutasRepository` y a lo que devuelven `rutas_cercanas` (0037) y `buscar_rutas` (0041); cambiar lo que devuelve una función obliga a borrarla y crearla de nuevo, con sus permisos. Lo que falta en la app (SCRUM-266): los chips de dificultad, que solo tienen que escribir en `dificultadRutasProvider`. En el detalle de la ruta (SCRUM-240) sigue pendiente mostrarla.
 - **El desnivel.** No hay historia que lo produzca: los puntos GPS que guarda la app no llevan altitud, así que haría falta guardarla al entrenar o pedírsela a un servicio de elevación. Hasta entonces la tarjeta dice "Desnivel no disponible" (`TarjetaRutaExplorar.sinDesnivel`).
+
+## SCRUM-363: clasificación de la ruta por un Runner Experto
+
+**Qué quedó hecho:**
+
+- `0045_clasificacion_de_rutas.sql`: `rutas.dificultad` y `clasificada_por`, los estados `clasificada` y `datos_incompletos`, y `preparar_ruta`, que manda la ruta a revisión si tiene distancia o la deja con la dificultad pendiente si no (criterio 3). El experto asigna con `clasificar_ruta` y el autor publica con `confirmar_publicacion_ruta`, las dos `security definer` (nadie actualiza `rutas` directo). Aviso `ruta_clasificada` para el autor. Trae su script de verificación para el SQL Editor.
+- Bandeja "Rutas por clasificar" desde el Perfil del Runner Experto; en el detalle de la ruta, la dificultad para todos, el selector para el experto y el estado y el botón "Publicar ruta" para el autor.
+
+Con esto queda resuelta la parte de la base de "La dificultad" en la sección de SCRUM-289 y SCRUM-247: `rutas_cercanas` y `buscar_rutas` ya devuelven la dificultad, y el detalle la muestra. Ese punto se puede borrar.
+
+**Qué falta:**
+
+- **Pendiente y desnivel.** La HU los nombra, pero la app no guarda altitud (`0001`: "puntos_gps SIN altitud, a petición explícita"). Acordado con el equipo: el experto clasifica con la distancia y el mapa. Para usarlos haría falta guardar la altitud al entrenar o pedírsela a un servicio de elevación al guardar la ruta; con ellos, `preparar_ruta` podría exigirlos para "datos suficientes" y el detalle mostrarlos.
+- **Completar los datos.** Una ruta en `datos_incompletos` se queda así: no hay de dónde sacar la distancia que le falta, y el índice de `0031` no deja volver a publicar ese entrenamiento (solo las rechazadas se pueden mandar de nuevo). Si se resuelve la distancia, haría falta una función que la recalcule y la pase a `en_revision`.
+- **Rechazar una ruta.** No está en los criterios. `motivo_rechazo` y el aviso `ruta_rechazada` ya existen; faltaría una función `rechazar_ruta` como `clasificar_ruta` y su botón en el detalle.
+- **Tocar el aviso.** La bandeja de notificaciones no abre la ruta. El autor llega a confirmarla por "Ver mi ruta" en la pantalla de publicar de ese entrenamiento.
+

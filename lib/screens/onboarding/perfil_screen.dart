@@ -8,12 +8,37 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
 import '../home/runner_experto_screen.dart';
+import '../rutas/rutas_por_clasificar_screen.dart';
+import '../../services/roles_service.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../services/perfil_provider.dart';
 import '../../models/perfil_state.dart';
+import '../../widgets/lista_historial.dart';
 import '../../widgets/mis_objetivos_section.dart';
+import '../../widgets/pestanas_segmentadas.dart';
 import '../../widgets/seccion_insignias.dart';
+
+/// Las dos caras del perfil (SCRUM-285).
+enum PestanaPerfil {
+  perfil(etiqueta: 'Perfil', parametro: 'perfil'),
+  actividades(etiqueta: 'Actividades', parametro: 'actividades');
+
+  const PestanaPerfil({required this.etiqueta, required this.parametro});
+
+  final String etiqueta;
+
+  /// Con qué valor de `?pestana=` la abre otra pantalla.
+  final String parametro;
+
+  /// La pestaña que pide la dirección. La del perfil si no pide ninguna o si
+  /// pide una que no existe: entrar al perfil nunca debe fallar por eso.
+  static PestanaPerfil desdeParametro(String? valor) =>
+      PestanaPerfil.values.firstWhere(
+        (pestana) => pestana.parametro == valor,
+        orElse: () => PestanaPerfil.perfil,
+      );
+}
 
 /// Pantalla de perfil (`screen-profile`).
 ///
@@ -21,16 +46,39 @@ import '../../widgets/seccion_insignias.dart';
 /// y desde aquí continúa hacia la pantalla de permisos. Si ya los había
 /// configurado antes, la pantalla llega con sus valores precargados.
 ///
-/// Terminado el onboarding es además una sección fija de la barra inferior:
-/// se entra a mirar o cambiar los objetivos y se vuelve a la portada.
+/// Terminado el onboarding es además una sección fija de la barra inferior,
+/// con dos pestañas (SCRUM-285): lo suyo —objetivos, insignias y el rol— y
+/// "Actividades", sus entrenamientos anteriores, que hasta esta historia
+/// tenían sección propia en la barra.
 class PerfilScreen extends StatelessWidget {
-  const PerfilScreen({this.enOnboarding = false, super.key});
+  const PerfilScreen({
+    this.enOnboarding = false,
+    this.pestanaInicial = PestanaPerfil.perfil,
+    super.key,
+  });
 
   /// Si viene del registro, guardar sigue hacia Permisos. Si no, guardar es
   /// solo guardar y se vuelve a la portada.
   final bool enOnboarding;
 
+  /// Con qué pestaña se abre. Quien venga a mirar los entrenamientos —el "Ver
+  /// todos" de la portada, el reloj de Seleccionar actividad— entra directo a
+  /// "Actividades".
+  final PestanaPerfil pestanaInicial;
+
+  static const ruta = '/perfil';
+
   static const claveRunnerExperto = Key('perfil-runner-experto');
+  static const claveRutasPorClasificar = Key('perfil-rutas-por-clasificar');
+
+  static Key clavePestana(PestanaPerfil pestana) =>
+      Key('perfil-pestana-${pestana.name}');
+
+  /// La dirección del perfil abierto en [pestana].
+  static String rutaCon(PestanaPerfil pestana) =>
+      pestana == PestanaPerfil.perfil
+      ? ruta
+      : '$ruta?pestana=${pestana.parametro}';
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +87,12 @@ class PerfilScreen extends StatelessWidget {
         child: Column(
           children: [
             const TrazaTopBar(titulo: 'Perfil', accion: BotonCerrarSesion()),
-            Expanded(child: _Cuerpo(enOnboarding: enOnboarding)),
+            Expanded(
+              child: _Cuerpo(
+                enOnboarding: enOnboarding,
+                pestanaInicial: pestanaInicial,
+              ),
+            ),
           ],
         ),
       ),
@@ -47,8 +100,76 @@ class PerfilScreen extends StatelessWidget {
   }
 }
 
-class _Cuerpo extends ConsumerWidget {
-  const _Cuerpo({required this.enOnboarding});
+/// Reparte la pantalla entre las pestañas y recuerda cuál está abierta.
+class _Cuerpo extends StatefulWidget {
+  const _Cuerpo({required this.enOnboarding, required this.pestanaInicial});
+
+  final bool enOnboarding;
+  final PestanaPerfil pestanaInicial;
+
+  @override
+  State<_Cuerpo> createState() => _CuerpoState();
+}
+
+class _CuerpoState extends State<_Cuerpo> {
+  late var _pestana = widget.pestanaInicial;
+
+  @override
+  void didUpdateWidget(covariant _Cuerpo anterior) {
+    super.didUpdateWidget(anterior);
+    // Volver al perfil pidiendo otra pestaña la abre aunque la pantalla
+    // siguiera montada, que es lo que pasa al llegar desde la barra inferior.
+    if (widget.pestanaInicial != anterior.pestanaInicial) {
+      _pestana = widget.pestanaInicial;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // En el onboarding el perfil es un paso del registro: sin pestañas, que
+    // todavía no hay entrenamientos ni nada que mirar.
+    if (widget.enOnboarding) return const _Objetivos(enOnboarding: true);
+
+    return Column(
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.xs,
+            AppSpacing.lg,
+            AppSpacing.md,
+          ),
+          child: _CabeceraPerfil(),
+        ),
+        PestanasSegmentadas(
+          children: [
+            for (final pestana in PestanaPerfil.values)
+              PestanaSegmentada(
+                key: PerfilScreen.clavePestana(pestana),
+                texto: pestana.etiqueta,
+                abierta: pestana == _pestana,
+                onTap: () => setState(() => _pestana = pestana),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Expanded(
+          child: switch (_pestana) {
+            PestanaPerfil.perfil => const _Objetivos(enOnboarding: false),
+            // Los entrenamientos anteriores (SCRUM-44), que dejaron de ser una
+            // sección de la barra para vivir aquí.
+            PestanaPerfil.actividades => const ListaHistorial(),
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// La pestaña del perfil: objetivos, insignias y el rol, con su botón de
+/// guardar. Es también todo el cuerpo durante el onboarding.
+class _Objetivos extends ConsumerWidget {
+  const _Objetivos({required this.enOnboarding});
 
   final bool enOnboarding;
 
@@ -70,13 +191,15 @@ class _Cuerpo extends ConsumerWidget {
                 AppSpacing.xl,
               ),
               children: [
-                const _CabeceraPerfil(),
+                // Fuera del onboarding la cabecera va arriba, encima de las
+                // pestañas: identifica al usuario en las dos.
+                if (enOnboarding) const _CabeceraPerfil(),
                 // Recién registrado todavía no hay nada que alcanzar: primero
                 // termina el onboarding.
-                if (!enOnboarding) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  const _InvitacionRunnerExperto(),
-                ],
+                if (!enOnboarding) const _InvitacionRunnerExperto(),
+                // La bandeja del Runner Experto (SCRUM-363), solo para quien
+                // tiene el rol.
+                if (!enOnboarding) const _AccesoRutasPorClasificar(),
                 const SizedBox(height: AppSpacing.xl),
                 const MisObjetivosSection(),
                 // Los logros del corredor (SCRUM-222), debajo de los
@@ -263,11 +386,17 @@ class _CabeceraPerfil extends StatelessWidget {
 }
 
 /// La entrada a los requisitos y ventajas de Runner Experto (SCRUM-212).
-class _InvitacionRunnerExperto extends StatelessWidget {
+/// A quien ya lo es no se le invita: en su lugar tiene la tarjeta de las
+/// rutas por clasificar (SCRUM-363).
+class _InvitacionRunnerExperto extends ConsumerWidget {
   const _InvitacionRunnerExperto();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(esExpertoProvider).valueOrNull == true) {
+      return const SizedBox.shrink();
+    }
+
     return TrazaCard(
       key: PerfilScreen.claveRunnerExperto,
       // `push`: al cerrarla se vuelve al perfil.
@@ -306,6 +435,64 @@ class _InvitacionRunnerExperto extends StatelessWidget {
           ),
           Icon(Icons.chevron_right_rounded, color: AppColors.ink3),
         ],
+      ),
+    );
+  }
+}
+
+/// Lo que el Runner Experto tiene por clasificar (SCRUM-363). A quien no tiene
+/// el rol no se le muestra nada: para esa persona está la invitación de
+/// arriba.
+class _AccesoRutasPorClasificar extends ConsumerWidget {
+  const _AccesoRutasPorClasificar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(esExpertoProvider).valueOrNull != true) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: TrazaCard(
+        key: PerfilScreen.claveRutasPorClasificar,
+        // `push`: al cerrarla se vuelve al perfil.
+        onTap: () => context.push(RutasPorClasificarScreen.ruta),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              radius: 21,
+              backgroundColor: AppColors.secondaryTint,
+              child: Icon(
+                Icons.terrain_outlined,
+                size: 22,
+                color: AppColors.secondaryDark,
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Rutas por clasificar',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Asígnales la dificultad antes de que se publiquen.',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppColors.ink3),
+          ],
+        ),
       ),
     );
   }

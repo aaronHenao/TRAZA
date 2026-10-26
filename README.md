@@ -39,8 +39,7 @@ lib/
 │   ├── onboarding/                # permissions, goals
 │   ├── home/                      # home (selección de actividad + iniciar)
 │   ├── tracking/                  # cronómetro + mapa + distancia en vivo
-│   ├── summary/                   # resumen del entrenamiento
-│   └── history/                   # historial de entrenamientos
+│   └── summary/                   # resumen del entrenamiento
 ├── theme/                         # colores, tipografía y tema del prototipo
 └── widgets/                       # componentes reutilizables (chips, cards, botones)
 

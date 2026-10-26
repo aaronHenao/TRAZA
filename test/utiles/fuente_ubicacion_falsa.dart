@@ -19,10 +19,31 @@ class FuenteUbicacionFalsa implements FuenteUbicacion {
   /// Si la ubicación del teléfono está encendida.
   bool servicio = true;
 
+  /// Lo que devuelve `ubicacionActual`. Sin esto, el punto de prueba.
+  PuntoGps? puntoActual;
+
+  /// Si no es null, `ubicacionActual` lo lanza (GPS que no responde).
+  Object? errorAlLeer;
+
+  /// Cuántas lecturas puntuales se le pidieron y con cuánta espera.
+  int lecturasPuntuales = 0;
+  Duration? ultimoTiempoMaximo;
+
   late final StreamController<PuntoGps> _controlador;
 
   @override
   Future<bool> servicioActivo() async => servicio;
+
+  @override
+  Future<PuntoGps> ubicacionActual({required Duration tiempoMaximo}) async {
+    lecturasPuntuales++;
+    ultimoTiempoMaximo = tiempoMaximo;
+
+    final error = errorAlLeer;
+    if (error != null) throw error;
+
+    return puntoActual ?? puntoDePrueba();
+  }
 
   @override
   Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion) {

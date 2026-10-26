@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/services/rutas_service.dart';
@@ -223,6 +224,252 @@ void main() {
       expect(peticion.url.queryParameters['select'], contains('trazado'));
     });
   });
+
+  group('la dificultad en las consultas (SCRUM-363)', () {
+    test('el detalle pide la dificultad, para mostrarla (criterio 2 de '
+        'SCRUM-363)', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'estado': 'publicada', 'dificultad': 'moderada'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final ruta = await supabase.repositorio.ruta('ruta-1');
+
+      expect(ruta?.dificultad, Dificultad.moderada);
+      expect(
+        supabase.peticiones.single.url.queryParameters['select'],
+        contains('dificultad'),
+      );
+    });
+
+    test('los listados tambien la piden', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.misRutas();
+      await supabase.repositorio.publicadas();
+
+      for (final peticion in supabase.peticiones) {
+        expect(
+          peticion.url.queryParameters['select'],
+          contains('dificultad'),
+          reason: '${peticion.url}',
+        );
+      }
+    });
+  });
+
+  group('porClasificar (criterio 1 de SCRUM-363)', () {
+    test('pide las que esperan al Runner Experto, la mas antigua primero, '
+        'sin trazado', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'estado': 'revision_experto'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final rutas = await supabase.repositorio.porClasificar();
+
+      expect(rutas.single.id, 'ruta-1');
+      expect(rutas.single.estado, EstadoRuta.revisionExperto);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'GET');
+      expect(peticion.url.path, '/rest/v1/rutas');
+      // Solo las que el administrador ya aprobó (SCRUM-321). Las que
+      // tienen la dificultad pendiente tampoco le llegan (criterio 3): no
+      // habría con qué clasificarlas.
+      expect(peticion.url.queryParameters['estado'], 'eq.revision_experto');
+      // La que más lleva esperando, primero.
+      expect(
+        peticion.url.queryParameters['order'],
+        startsWith('fecha_creacion.asc'),
+      );
+      expect(peticion.url.queryParameters['select'], contains('dificultad'));
+      expect(
+        peticion.url.queryParameters['select'],
+        isNot(contains('trazado')),
+      );
+      expect(peticion.url.queryParameters['limit'], isNotNull);
+    });
+
+    test('deja fuera las rutas del propio experto: no las puede '
+        'clasificar', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.porClasificar();
+
+      expect(
+        supabase.peticiones.single.url.queryParameters['autor_id'],
+        'neq.usuario-1',
+      );
+    });
+
+    test('sin sesion no sale ninguna peticion', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.porClasificar(),
+        throwsA(isA<SesionRequeridaParaRutasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
+
+  group('clasificar (SCRUM-363)', () {
+    final ruta = Ruta.desdeSupabase(fila);
+    final clasificada = {
+      ...fila,
+      'estado': 'clasificada',
+      'dificultad': 'moderada',
+    };
+
+    test('llama a clasificar_ruta con la ruta y la dificultad, y devuelve la '
+        'ruta clasificada', () async {
+      final supabase = _SupabaseFalso(filas: [clasificada]);
+      addTearDown(supabase.cerrar);
+
+      final resultado = await supabase.repositorio.clasificar(
+        ruta,
+        Dificultad.moderada,
+      );
+
+      expect(resultado.id, 'ruta-1');
+      expect(resultado.estado, EstadoRuta.clasificada);
+      expect(resultado.dificultad, Dificultad.moderada);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/clasificar_ruta');
+      // Ni el experto ni el estado van en la llamada: la función los saca de
+      // la sesión y de la ruta.
+      expect(jsonDecode(peticion.body), {
+        'p_ruta_id': 'ruta-1',
+        'p_dificultad': 'moderada',
+      });
+    });
+
+    test('si no es experto o es su propia ruta, lo dice como falta de '
+        'permiso', () async {
+      // 42501: `clasificar_ruta` lo lanza sin el rol o con la ruta propia.
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.clasificar(ruta, Dificultad.facil),
+        throwsA(isA<SinPermisoSobreRutaException>()),
+      );
+    });
+
+    test('si la ruta ya no esta en revision, lo dice', () async {
+      // TZ409: otro experto se adelantó o cambió de estado.
+      final supabase = _SupabaseFalso(codigoPostgres: 'TZ409');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.clasificar(ruta, Dificultad.facil),
+        throwsA(isA<RutaCambioDeEstadoException>()),
+      );
+    });
+
+    test('un error que no se conoce se deja pasar tal cual', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: '23514');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.clasificar(ruta, Dificultad.facil),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+
+    test('sin sesion no sale ninguna peticion', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.clasificar(ruta, Dificultad.facil),
+        throwsA(isA<SesionRequeridaParaRutasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
+
+  group('confirmarPublicacion (criterio 2 de SCRUM-363)', () {
+    final ruta = Ruta.desdeSupabase({
+      ...fila,
+      'estado': 'clasificada',
+      'dificultad': 'moderada',
+    });
+    final publicada = {
+      ...fila,
+      'estado': 'publicada',
+      'dificultad': 'moderada',
+      'fecha_publicacion': '2026-10-18T09:00:00+00:00',
+    };
+
+    test('llama a confirmar_publicacion_ruta con la ruta y devuelve la ruta '
+        'publicada con su dificultad', () async {
+      final supabase = _SupabaseFalso(filas: [publicada]);
+      addTearDown(supabase.cerrar);
+
+      final resultado = await supabase.repositorio.confirmarPublicacion(ruta);
+
+      expect(resultado.estado, EstadoRuta.publicada);
+      expect(resultado.dificultad, Dificultad.moderada);
+      expect(resultado.fechaPublicacion, isNotNull);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/confirmar_publicacion_ruta');
+      expect(jsonDecode(peticion.body), {'p_ruta_id': 'ruta-1'});
+    });
+
+    test('si no es el autor, lo dice como falta de permiso', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.confirmarPublicacion(ruta),
+        throwsA(isA<SinPermisoSobreRutaException>()),
+      );
+    });
+
+    test('si la ruta ya no espera su confirmacion, lo dice', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: 'TZ409');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.confirmarPublicacion(ruta),
+        throwsA(isA<RutaCambioDeEstadoException>()),
+      );
+    });
+
+    test('un error que no se conoce se deja pasar tal cual', () async {
+      final supabase = _SupabaseFalso(codigoPostgres: '23514');
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.confirmarPublicacion(ruta),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+
+    test('sin sesion no sale ninguna peticion', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.confirmarPublicacion(ruta),
+        throwsA(isA<SesionRequeridaParaRutasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
 }
 
 /// Cliente de Supabase que no sale a la red.
@@ -269,7 +516,10 @@ class _SupabaseFalso {
     final unaSola = peticion.headers['Accept']?.contains(
       'vnd.pgrst.object+json',
     );
-    final cuerpo = unaSola == true
+    // `clasificar_ruta` y `confirmar_publicacion_ruta` (0045) devuelven una
+    // fila de `rutas`, no un conjunto: PostgREST la manda como un objeto.
+    final esFuncion = peticion.url.path.startsWith('/rest/v1/rpc/');
+    final cuerpo = unaSola == true || esFuncion
         ? (filas.isEmpty ? null : filas.first)
         : filas;
 

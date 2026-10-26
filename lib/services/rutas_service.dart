@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/dificultad.dart';
 import '../models/ruta.dart';
+import '../models/ruta_cercana.dart';
+import '../models/zona.dart';
 // `usuarioActualProvider` vive ahí desde el foro, pero no es del foro: dice
 // quién tiene la sesión abierta. Se reutiliza en vez de declarar otro, para
 // que una prueba que sustituya la sesión la sustituya para toda la app.
@@ -52,6 +55,29 @@ class EntrenamientoYaPublicadoException implements Exception {
       'EntrenamientoYaPublicadoException: ese entrenamiento ya tiene una ruta';
 }
 
+/// Se lanza cuando la cuenta no puede hacer eso con la ruta (SCRUM-363): no
+/// es Runner Experto, quiere clasificar su propia ruta, o confirma una que no
+/// es suya. Lo deciden `clasificar_ruta` y `confirmar_publicacion_ruta`
+/// (0045).
+class SinPermisoSobreRutaException implements Exception {
+  const SinPermisoSobreRutaException();
+
+  @override
+  String toString() =>
+      'SinPermisoSobreRutaException: la cuenta no puede hacer eso con la ruta';
+}
+
+/// Se lanza cuando la ruta ya no está en el estado que hacía falta
+/// (SCRUM-363): otro experto la clasificó primero, o ya no espera la
+/// confirmación de su autor.
+class RutaCambioDeEstadoException implements Exception {
+  const RutaCambioDeEstadoException();
+
+  @override
+  String toString() =>
+      'RutaCambioDeEstadoException: la ruta ya no está en ese estado';
+}
+
 /// Se lanza cuando la base rechaza los datos de la ruta.
 ///
 /// Las restricciones de `rutas` y el trigger `rutas_preparar` piden un nombre
@@ -65,6 +91,18 @@ class DatosDeRutaInvalidosException implements Exception {
 
   @override
   String toString() => 'DatosDeRutaInvalidosException: $detalle';
+}
+
+/// Se lanza cuando la base no deja revisar la clasificación de una ruta
+/// (SCRUM-262): quien lo intenta no es Runner Experto o es su autor
+/// (`puede_revisar_clasificacion`, 0042).
+class SinPermisoParaRevisarException implements Exception {
+  const SinPermisoParaRevisarException();
+
+  @override
+  String toString() =>
+      'SinPermisoParaRevisarException: no puede revisar la clasificación de '
+      'esa ruta';
 }
 
 /// Acceso a la tabla `rutas` (SCRUM-241).
@@ -113,6 +151,82 @@ abstract interface class RutasRepository {
   /// Runner Experto lo que tiene que revisar y el administrador todo. Lo
   /// publicado lo ve cualquiera.
   Future<Ruta?> ruta(String id);
+
+  /// Las rutas publicadas que arrancan a menos de [radioKm] de unas
+  /// coordenadas, de la más cercana a la más lejana (SCRUM-246).
+  ///
+  /// La cuenta la hace la base con `rutas_cercanas` (0037): mide hasta el
+  /// punto de inicio de cada ruta y respeta RLS, así que lo que está en
+  /// revisión no sale ni para su autor. Sin el trazado, como los demás
+  /// listados.
+  Future<List<RutaCercana>> cercanas({
+    required double latitud,
+    required double longitud,
+    required double radioKm,
+  });
+
+  /// Las rutas publicadas cuyo nombre o creador coinciden con [termino],
+  /// estén donde estén (SCRUM-254), y con [zona], también las que arrancan
+  /// dentro de ella (SCRUM-255).
+  ///
+  /// La búsqueda la hace la base con `buscar_rutas` (0040): sin tildes ni
+  /// mayúsculas, y con todas las palabras de [termino] en cualquier orden.
+  /// Con [latitud] y [longitud], de la más cercana a la más lejana; sin
+  /// ellas, de la más reciente a la más antigua. [termino] necesita al
+  /// menos dos letras: con menos, la base lo rechaza.
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+    Zona? zona,
+  });
+
+  /// Las rutas ajenas que el administrador ya aprobó y puede clasificar un
+  /// Runner Experto, la más antigua primero: la que lleva más tiempo
+  /// esperando (SCRUM-363 + SCRUM-321).
+  ///
+  /// RLS solo le deja ver las de `revision_experto` a quien tiene el rol. El
+  /// filtro va igual: el administrador las ve todas.
+  Future<List<Ruta>> porClasificar();
+
+  /// Le asigna [dificultad] a [ruta], que pasa a esperar la confirmación de
+  /// su autor, y devuelve la fila guardada (SCRUM-363).
+  ///
+  /// Lanza [SinPermisoSobreRutaException] si la cuenta no es Runner Experto
+  /// o la ruta es suya, y [RutaCambioDeEstadoException] si ya no está en
+  /// revisión.
+  Future<Ruta> clasificar(Ruta ruta, Dificultad dificultad);
+
+  /// El autor confirma la publicación de [ruta], ya clasificada, y devuelve
+  /// la fila publicada (criterio 2 de SCRUM-363).
+  ///
+  /// Lanza [SinPermisoSobreRutaException] si no es suya y
+  /// [RutaCambioDeEstadoException] si no está esperando su confirmación.
+  Future<Ruta> confirmarPublicacion(Ruta ruta);
+
+  /// Si quien tiene la sesión abierta puede revisar la clasificación de la
+  /// ruta [rutaId] (SCRUM-261): es Runner Experto y no es su autor. Lo
+  /// decide la base, con `puede_revisar_clasificacion` (0042).
+  Future<bool> puedeRevisarClasificacion(String rutaId);
+
+  /// Confirma la dificultad propuesta de la ruta [rutaId] y la deja marcada
+  /// como revisada por quien tiene la sesión abierta (SCRUM-262, criterio 3
+  /// de HU-35).
+  ///
+  /// Lo hace la base, con `confirmar_clasificacion`. Esa función todavía no
+  /// existe: depende de que SCRUM-363 cree la dificultad, y lo que tiene que
+  /// hacer está escrito en `docs/deudas.md`. Lanza
+  /// [SinPermisoParaRevisarException] si la base no lo deja.
+  Future<void> confirmarClasificacion(String rutaId);
+
+  /// Reemplaza la dificultad de la ruta [rutaId] por [dificultad] y la deja
+  /// marcada como revisada por quien tiene la sesión abierta: queda como su
+  /// clasificación definitiva (SCRUM-263, criterio 4 de HU-35).
+  ///
+  /// Lo hace la base, con `corregir_clasificacion`, que todavía no existe por
+  /// lo mismo que `confirmar_clasificacion` (`docs/deudas.md`). Lanza
+  /// [SinPermisoParaRevisarException] si la base no lo deja.
+  Future<void> corregirClasificacion(String rutaId, Dificultad dificultad);
 }
 
 /// Lee y escribe en `rutas`.
@@ -134,9 +248,14 @@ class SupabaseRutasRepository implements RutasRepository {
 
   /// Lo que se lee de una ruta cuando no hace falta su trazado. Pedir `*`
   /// traería cientos de coordenadas por fila para no dibujar ninguna.
+  ///
+  /// `miniatura` no es una columna: es un campo calculado (0038) que
+  /// devuelve 32 puntos del trazado, lo justo para dibujar la ruta en
+  /// pequeño en una tarjeta (SCRUM-247).
   static const _columnas =
       'id,autor_id,autor_nombre,entrenamiento_id,nombre,descripcion,'
-      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion';
+      'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion,'
+      'miniatura,dificultad';
 
   static const _columnasConTrazado = '$_columnas,trazado';
 
@@ -152,6 +271,10 @@ class SupabaseRutasRepository implements RutasRepository {
 
   /// Ese entrenamiento ya tiene una ruta: lo dice el índice único de 0031.
   static const _duplicado = '23505';
+
+  /// La ruta ya no está en el estado que hacía falta: lo dicen
+  /// `clasificar_ruta` y `confirmar_publicacion_ruta` (0045).
+  static const _cambioDeEstado = 'TZ409';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -256,5 +379,161 @@ class SupabaseRutasRepository implements RutasRepository {
         .maybeSingle();
 
     return fila == null ? null : Ruta.desdeSupabase(fila);
+  }
+
+  @override
+  Future<List<RutaCercana>> cercanas({
+    required double latitud,
+    required double longitud,
+    required double radioKm,
+  }) async {
+    _usuarioId();
+
+    // El orden y la distancia vienen hechos de la base: ordenar aquí
+    // obligaría a traer todas las rutas para quedarse con las de cerca.
+    final filas = await _cliente.rpc<List<dynamic>>(
+      'rutas_cercanas',
+      params: {
+        'p_latitud': latitud,
+        'p_longitud': longitud,
+        'p_radio_km': radioKm,
+        'p_limite': limite,
+      },
+    );
+
+    return [
+      for (final fila in filas)
+        RutaCercana.desdeSupabase(Map<String, dynamic>.from(fila as Map)),
+    ];
+  }
+
+  @override
+  Future<List<Ruta>> buscar({
+    required String termino,
+    double? latitud,
+    double? longitud,
+    Zona? zona,
+  }) async {
+    _usuarioId();
+
+    final filas = await _cliente.rpc<List<dynamic>>(
+      'buscar_rutas',
+      params: {
+        'p_termino': termino,
+        // Las dos o ninguna: con una sola, la base rechaza la consulta.
+        if (latitud != null && longitud != null) ...{
+          'p_latitud': latitud,
+          'p_longitud': longitud,
+        },
+        if (zona != null) ...{
+          'p_zona_sur': zona.sur,
+          'p_zona_oeste': zona.oeste,
+          'p_zona_norte': zona.norte,
+          'p_zona_este': zona.este,
+        },
+        'p_limite': limite,
+      },
+    );
+
+    // Cada fila trae además a cuánto queda del usuario, que la tarjeta no
+    // muestra: solo sirvió para ordenarlas.
+    return [
+      for (final fila in filas)
+        Ruta.desdeSupabase(Map<String, dynamic>.from(fila as Map)),
+    ];
+  }
+
+  @override
+  Future<List<Ruta>> porClasificar() async {
+    final usuarioId = _usuarioId();
+
+    final filas = await _cliente
+        .from(tabla)
+        .select(_columnas)
+        .eq('estado', EstadoRuta.revisionExperto.valorDb)
+        // Las suyas no las puede clasificar (`clasificar_ruta`, 0048).
+        .neq('autor_id', usuarioId)
+        .order('fecha_creacion', ascending: true)
+        .limit(limite);
+
+    return filas.map(Ruta.desdeSupabase).toList();
+  }
+
+  @override
+  Future<Ruta> clasificar(Ruta ruta, Dificultad dificultad) => _cambiarEstado(
+    'clasificar_ruta',
+    {'p_ruta_id': ruta.id, 'p_dificultad': dificultad.valorDb},
+  );
+
+  @override
+  Future<Ruta> confirmarPublicacion(Ruta ruta) =>
+      _cambiarEstado('confirmar_publicacion_ruta', {'p_ruta_id': ruta.id});
+
+  /// Llama a una de las funciones de 0045, que devuelven la fila de `rutas`
+  /// como quedó, y traduce sus errores.
+  Future<Ruta> _cambiarEstado(
+    String funcion,
+    Map<String, dynamic> parametros,
+  ) async {
+    _usuarioId();
+
+    try {
+      final fila = await _cliente.rpc<Map<String, dynamic>>(
+        funcion,
+        params: parametros,
+      );
+      return Ruta.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      if (e.code == _rlsRechazo) throw const SinPermisoSobreRutaException();
+      if (e.code == _cambioDeEstado) throw const RutaCambioDeEstadoException();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<bool> puedeRevisarClasificacion(String rutaId) async {
+    _usuarioId();
+
+    // Una función que devuelve un solo valor llega como ese valor, sin
+    // filas alrededor.
+    final puede = await _cliente.rpc<dynamic>(
+      'puede_revisar_clasificacion',
+      params: {'p_ruta_id': rutaId},
+    );
+    if (puede is! bool) {
+      throw FormatException(
+        'puede_revisar_clasificacion devolvió algo inesperado',
+        puede,
+      );
+    }
+    return puede;
+  }
+
+  @override
+  Future<void> confirmarClasificacion(String rutaId) =>
+      _guardarRevision('confirmar_clasificacion', {'p_ruta_id': rutaId});
+
+  @override
+  Future<void> corregirClasificacion(String rutaId, Dificultad dificultad) =>
+      _guardarRevision('corregir_clasificacion', {
+        'p_ruta_id': rutaId,
+        'p_dificultad': dificultad.valorDb,
+      });
+
+  /// Llama a una de las funciones de la base que guardan la revisión de una
+  /// clasificación (SCRUM-262 y SCRUM-263).
+  Future<void> _guardarRevision(
+    String funcion,
+    Map<String, Object> parametros,
+  ) async {
+    _usuarioId();
+
+    try {
+      await _cliente.rpc<void>(funcion, params: parametros);
+    } on PostgrestException catch (e) {
+      // La regla la pone la base: quien no puede revisar recibe 42501.
+      if (e.code == _rlsRechazo) throw const SinPermisoParaRevisarException();
+      rethrow;
+    }
   }
 }

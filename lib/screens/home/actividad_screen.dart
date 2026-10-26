@@ -14,6 +14,7 @@ import '../../widgets/requiere_permiso_ubicacion.dart';
 import '../../widgets/chips_tipo_actividad.dart';
 import '../../widgets/seccion_iniciar_entrenamiento.dart';
 import '../../widgets/ventana_permiso_salud.dart';
+import '../onboarding/perfil_screen.dart';
 
 /// Pantalla para elegir la actividad y arrancar el entrenamiento
 /// (`screen-home` del prototipo del sprint 1). Se llega desde el botón "+"
@@ -199,11 +200,13 @@ class _Cabecera extends StatelessWidget {
             ],
           ),
         ),
-        // Historial de entrenamientos (SCRUM-125). push: "atrás" vuelve a
-        // esta pantalla.
+        // Historial de entrenamientos (SCRUM-125). Desde SCRUM-285 está en el
+        // perfil, que es una sección de la barra: se va con `go`, y de ahí se
+        // vuelve por la barra.
         TrazaIconButton(
           icon: Icons.schedule,
-          onPressed: () => context.push('/historial'),
+          onPressed: () =>
+              context.go(PerfilScreen.rutaCon(PestanaPerfil.actividades)),
           tooltip: 'Historial',
         ),
         const SizedBox(width: 8),

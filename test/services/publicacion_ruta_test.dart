@@ -56,6 +56,8 @@ void main() {
     expect(ruta.dificultad, isNull);
     // Lo que se le dice al autor nombra el estado.
     expect(PublicacionRuta.enRevision, contains('pendiente de revisión'));
+    // Primero el administrador y después el experto (SCRUM-321).
+    expect(PublicacionRuta.enRevision, contains('administrador'));
     expect(PublicacionRuta.enRevision, contains('Runner Experto'));
   });
 

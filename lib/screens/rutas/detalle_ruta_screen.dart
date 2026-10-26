@@ -314,6 +314,7 @@ class _EstadoDelAutor extends ConsumerStatefulWidget {
 
   static bool aplicaA(Ruta ruta) => switch (ruta.estado) {
     EstadoRuta.enRevision ||
+    EstadoRuta.revisionExperto ||
     EstadoRuta.clasificada ||
     EstadoRuta.datosIncompletos => true,
     _ => false,
@@ -354,6 +355,10 @@ class _EstadoDelAutorState extends ConsumerState<_EstadoDelAutor> {
             'vea la comunidad.',
       EstadoRuta.datosIncompletos =>
         'No se puede clasificar: falta la distancia de la ruta.',
+      // Primero el administrador (SCRUM-321).
+      EstadoRuta.enRevision =>
+        'El administrador la revisará y después un Runner Experto le '
+            'asignará la dificultad.',
       _ => 'Un Runner Experto le asignará la dificultad.',
     };
 

@@ -181,10 +181,11 @@ abstract interface class RutasRepository {
     Zona? zona,
   });
 
-  /// Las rutas ajenas en revisión que puede clasificar un Runner Experto, la
-  /// más antigua primero: la que lleva más tiempo esperando (SCRUM-363).
+  /// Las rutas ajenas que el administrador ya aprobó y puede clasificar un
+  /// Runner Experto, la más antigua primero: la que lleva más tiempo
+  /// esperando (SCRUM-363 + SCRUM-321).
   ///
-  /// RLS solo le deja ver las en revisión a quien tiene el rol (0029). El
+  /// RLS solo le deja ver las de `revision_experto` a quien tiene el rol. El
   /// filtro va igual: el administrador las ve todas.
   Future<List<Ruta>> porClasificar();
 
@@ -449,8 +450,8 @@ class SupabaseRutasRepository implements RutasRepository {
     final filas = await _cliente
         .from(tabla)
         .select(_columnas)
-        .eq('estado', EstadoRuta.enRevision.valorDb)
-        // Las suyas no las puede clasificar (`clasificar_ruta`, 0045).
+        .eq('estado', EstadoRuta.revisionExperto.valorDb)
+        // Las suyas no las puede clasificar (`clasificar_ruta`, 0048).
         .neq('autor_id', usuarioId)
         .order('fecha_creacion', ascending: true)
         .limit(limite);

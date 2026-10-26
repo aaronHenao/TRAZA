@@ -1,18 +1,20 @@
 // Pruebas de integración de la clasificación de una ruta por un Runner
 // Experto (SCRUM-363, subtask SCRUM-368): el autor la manda desde el resumen
-// de su entrenamiento, un Runner Experto la encuentra en su perfil y le
-// asigna la dificultad, y el autor la confirma y queda publicada con ella.
-// También el camino de la ruta sin distancia, que no se puede clasificar.
+// de su entrenamiento, el administrador la aprueba (SCRUM-321), un Runner
+// Experto la encuentra en su perfil y le asigna la dificultad, y el autor la
+// confirma y queda publicada con ella. También el camino de la ruta sin
+// distancia, que no se puede clasificar.
 //
 // Cada sesión es otro teléfono: un `ProviderScope` y un router nuevos, con
 // las pantallas de verdad. Lo único compartido es el repositorio de rutas
 // en memoria, que hace de base y repite las reglas de `preparar_ruta`,
-// `clasificar_ruta` y `confirmar_publicacion_ruta` (0045).
+// `decidir_revision_ruta`, `clasificar_ruta` y `confirmar_publicacion_ruta`
+// (0045 y 0048).
 //
 // Lo que estas pruebas NO prueban: que la base decida el estado al crear,
 // que solo un experto pueda clasificar ni el aviso `ruta_clasificada`. Eso
 // lo hace Postgres y no se puede ejecutar desde aquí; su verificación está
-// escrita al final de `0045_clasificacion_de_rutas.sql`.
+// escrita al final de `0048_flujo_unico_de_revision.sql`.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -202,9 +204,9 @@ void main() {
     expect(find.byType(RutasPorClasificarScreen), findsOneWidget);
   }
 
-  testWidgets('con la distancia: va a un Runner Experto, que le asigna la '
-      'dificultad, y el autor la publica mostrándola (criterios 1 y 2 de '
-      'SCRUM-363)', (tester) async {
+  testWidgets('con la distancia: la aprueba el administrador, va a un Runner '
+      'Experto, que le asigna la dificultad, y el autor la publica '
+      'mostrándola (SCRUM-321, criterios 1 y 2 de SCRUM-363)', (tester) async {
     // --- El autor la manda a clasificar ---
     await abrirApp(
       tester,
@@ -222,9 +224,15 @@ void main() {
     await _esperarQueSeVayaElAviso(tester);
 
     // ...y es lo que ve cuando vuelve a mirarla, sin poder publicarla aún.
-    await abrirMiRutaDesdeElResumen(tester, estado: 'Pendiente de revisión');
+    await abrirMiRutaDesdeElResumen(
+      tester,
+      estado: 'Pendiente de revisión del administrador',
+    );
     expect(
-      _en(DetalleRutaScreen.claveEstado, 'Pendiente de revisión'),
+      _en(
+        DetalleRutaScreen.claveEstado,
+        'Pendiente de revisión del administrador',
+      ),
       findsOneWidget,
     );
     expect(
@@ -232,6 +240,21 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(DetalleRutaScreen.clavePublicar), findsNothing);
+
+    // --- Mientras el administrador no la apruebe, al experto no le llega ---
+    await abrirApp(
+      tester,
+      usuario: 'experto-1',
+      experto: true,
+      en: PerfilScreen.ruta,
+    );
+    await abrirLaBandejaDesdeElPerfil(tester);
+    expect(find.text('No hay rutas por clasificar'), findsOneWidget);
+
+    // --- El administrador la aprueba (SCRUM-321) ---
+    // Su pantalla no está en este repo: el doble hace lo que
+    // `decidir_revision_ruta` al aprobar.
+    base.aprobarComoAdministrador(base.rutas.single.id);
 
     // --- Un Runner Experto la encuentra en su perfil y la clasifica ---
     await abrirApp(

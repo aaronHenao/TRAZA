@@ -17,14 +17,16 @@ import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/roles_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
-/// La bandeja del Runner Experto (SCRUM-363): las rutas que esperan su
-/// dificultad, de dónde se abre cada una y qué pasa al volver.
+/// La bandeja del Runner Experto (SCRUM-363): las rutas que el
+/// administrador ya aprobó y esperan su dificultad (SCRUM-321), de dónde se
+/// abre cada una y qué pasa al volver.
 void main() {
   final antigua = rutaDePrueba(
     id: 'ruta-antigua',
     autorId: 'autor-1',
     nombre: 'Vuelta al Parque Norte',
     autorNombre: 'Ana',
+    estado: EstadoRuta.revisionExperto,
     fechaCreacion: DateTime(2026, 10, 16, 8),
   );
   final reciente = rutaDePrueba(
@@ -32,18 +34,25 @@ void main() {
     autorId: 'autor-2',
     nombre: 'Subida a Las Palmas',
     autorNombre: 'Luis',
+    estado: EstadoRuta.revisionExperto,
     fechaCreacion: DateTime(2026, 10, 17, 8),
   );
 
-  testWidgets('lista las rutas en revisión que puede clasificar, la que más '
+  testWidgets('lista las rutas que esperan al Runner Experto, la que más '
       'lleva esperando primero (criterio 1 de SCRUM-363)', (tester) async {
     await _abrir(
       tester,
       rutas: [
         reciente,
         antigua,
-        // Ni lo publicado ni lo que tiene la dificultad pendiente
-        // (criterio 3) le llega.
+        // Ni lo que todavía espera al administrador (SCRUM-321), ni lo
+        // publicado, ni lo que tiene la dificultad pendiente (criterio 3)
+        // le llega.
+        rutaDePrueba(
+          id: 'ruta-del-admin',
+          autorId: 'autor-3',
+          nombre: 'Loma del Indio',
+        ),
         rutaDePrueba(
           id: 'ruta-publicada',
           autorId: 'autor-3',
@@ -69,6 +78,7 @@ void main() {
       tester.getTopLeft(find.text('Vuelta al Parque Norte')).dy,
       lessThan(tester.getTopLeft(find.text('Subida a Las Palmas')).dy),
     );
+    expect(find.text('Loma del Indio'), findsNothing);
     expect(find.text('Cerro Pan de Azúcar'), findsNothing);
     expect(find.text('Paseo sin medir'), findsNothing);
   });
@@ -128,6 +138,11 @@ void main() {
     await _abrir(tester, rutas: const []);
 
     expect(find.text('No hay rutas por clasificar'), findsOneWidget);
+    // Le llegan después del administrador, no apenas se publican.
+    expect(
+      find.textContaining('Cuando el administrador apruebe una ruta'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('si no carga lo dice, sin el error crudo, y deja reintentar', (

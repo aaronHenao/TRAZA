@@ -320,11 +320,31 @@ void main() {
       expect(find.text('Pantalla de resumen'), findsOneWidget);
     });
 
-    testWidgets('ya enviada y en revisión, la tarjeta dice "Pendiente de '
-        'revisión" (criterio 1 de SCRUM-363)', (tester) async {
+    testWidgets('ya enviada, la tarjeta dice que espera al administrador '
+        '(SCRUM-321, criterio 1 de SCRUM-363)', (tester) async {
       await _abrirConMiRuta(tester, resumen: resumen(), ruta: rutaDePrueba());
 
-      expect(_enLaTarjeta('Pendiente de revisión'), findsOneWidget);
+      expect(
+        _enLaTarjeta('Pendiente de revisión del administrador'),
+        findsOneWidget,
+      );
+      expect(find.byKey(PublicarRutaScreen.claveNombre), findsNothing);
+    });
+
+    testWidgets('aprobada por el administrador, la tarjeta dice que espera '
+        'al Runner Experto, no que ya está publicada (criterio 1 de '
+        'SCRUM-363)', (tester) async {
+      await _abrirConMiRuta(
+        tester,
+        resumen: resumen(),
+        ruta: rutaDePrueba(estado: EstadoRuta.revisionExperto),
+      );
+
+      expect(
+        _enLaTarjeta('Pendiente de revisión del Runner Experto'),
+        findsOneWidget,
+      );
+      expect(_enLaTarjeta(EstadoRuta.publicada.etiqueta), findsNothing);
       expect(find.byKey(PublicarRutaScreen.claveNombre), findsNothing);
     });
 

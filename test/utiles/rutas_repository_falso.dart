@@ -128,15 +128,29 @@ class RutasRepositorioFalso implements RutasRepository {
     final error = errorPorClasificar;
     if (error != null) throw error;
 
-    // La consulta de la app: las ajenas que están en revisión, la más
-    // antigua primero. Las que no tienen distancia no llegan (criterio 3).
+    // La consulta de la app: las ajenas que el administrador ya aprobó, la
+    // más antigua primero. Las que no tienen distancia no llegan
+    // (criterio 3).
     return rutas
         .where(
           (ruta) =>
-              ruta.estado == EstadoRuta.enRevision && ruta.autorId != usuario,
+              ruta.estado == EstadoRuta.revisionExperto &&
+              ruta.autorId != usuario,
         )
         .toList()
       ..sort((a, b) => a.fechaCreacion.compareTo(b.fechaCreacion));
+  }
+
+  /// Lo que hace `decidir_revision_ruta` (SCRUM-321) cuando el
+  /// administrador aprueba: la pasa al Runner Experto. La app todavía no
+  /// tiene esa pantalla, así que las pruebas la llaman directo.
+  void aprobarComoAdministrador(String rutaId) {
+    final i = rutas.indexWhere((guardada) => guardada.id == rutaId);
+    rutas[i] = _cambiada(
+      rutas[i],
+      estado: EstadoRuta.revisionExperto,
+      dificultad: rutas[i].dificultad,
+    );
   }
 
   @override
@@ -149,10 +163,10 @@ class RutasRepositorioFalso implements RutasRepository {
     final usuario = this.usuario;
     if (usuario == null) throw const SesionRequeridaParaRutasException();
 
-    // En el orden de `clasificar_ruta`: primero si sigue en revisión, luego
-    // si es suya.
+    // En el orden de `clasificar_ruta` (0048): primero si sigue esperando al
+    // experto, luego si es suya.
     final i = rutas.indexWhere((guardada) => guardada.id == ruta.id);
-    if (i < 0 || rutas[i].estado != EstadoRuta.enRevision) {
+    if (i < 0 || rutas[i].estado != EstadoRuta.revisionExperto) {
       throw const RutaCambioDeEstadoException();
     }
     if (rutas[i].autorId == usuario) {

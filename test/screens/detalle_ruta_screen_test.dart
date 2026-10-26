@@ -393,9 +393,16 @@ void main() {
   });
 
   group('la clasificación por un Runner Experto (SCRUM-363)', () {
+    // Recién publicada: espera al administrador (SCRUM-321).
     final enRevision = rutaDePrueba(
       autorId: 'autor-1',
       nombre: 'Vuelta al Parque Norte',
+    );
+    // El administrador ya la aprobó: espera su dificultad.
+    final revisionExperto = rutaDePrueba(
+      autorId: 'autor-1',
+      nombre: 'Vuelta al Parque Norte',
+      estado: EstadoRuta.revisionExperto,
     );
     final clasificada = rutaDePrueba(
       autorId: 'autor-1',
@@ -455,12 +462,45 @@ void main() {
     });
 
     group('lo que ve el autor mientras no se publica', () {
-      testWidgets('en revisión le muestra que está pendiente de revisión por '
-          'un Runner Experto (criterio 1 de SCRUM-363)', (tester) async {
+      testWidgets('recién publicada le muestra que espera al administrador y '
+          'después a un Runner Experto (SCRUM-321, criterio 1 de SCRUM-363)', (
+        tester,
+      ) async {
         await _abrirComo(tester, usuario: 'autor-1', ruta: enRevision);
 
         expect(
-          _en(DetalleRutaScreen.claveEstado, 'Pendiente de revisión'),
+          _en(
+            DetalleRutaScreen.claveEstado,
+            'Pendiente de revisión del administrador',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          _en(
+            DetalleRutaScreen.claveEstado,
+            'El administrador la revisará y después un Runner Experto le '
+            'asignará la dificultad.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          _en(DetalleRutaScreen.claveDificultad, 'Sin clasificar'),
+          findsOneWidget,
+        );
+        expect(find.byKey(DetalleRutaScreen.clavePublicar), findsNothing);
+      });
+
+      testWidgets('aprobada por el administrador le muestra que está pendiente '
+          'de revisión por un Runner Experto (criterio 1 de SCRUM-363)', (
+        tester,
+      ) async {
+        await _abrirComo(tester, usuario: 'autor-1', ruta: revisionExperto);
+
+        expect(
+          _en(
+            DetalleRutaScreen.claveEstado,
+            'Pendiente de revisión del Runner Experto',
+          ),
           findsOneWidget,
         );
         expect(
@@ -591,12 +631,14 @@ void main() {
 
     group('lo que hace el Runner Experto', () {
       testWidgets('a un experto le ofrece asignar la dificultad de una ruta '
-          'ajena en revisión (criterio 1 de SCRUM-363)', (tester) async {
+          'ajena que espera su revisión (criterio 1 de SCRUM-363)', (
+        tester,
+      ) async {
         await _abrirComo(
           tester,
           usuario: 'experto-1',
           experto: true,
-          ruta: enRevision,
+          ruta: revisionExperto,
         );
 
         expect(find.byKey(DetalleRutaScreen.claveClasificar), findsOneWidget);
@@ -629,7 +671,7 @@ void main() {
           tester,
           usuario: 'experto-1',
           experto: true,
-          ruta: enRevision,
+          ruta: revisionExperto,
         );
 
         await _tocar(
@@ -672,7 +714,7 @@ void main() {
           tester,
           usuario: 'experto-1',
           experto: true,
-          ruta: enRevision,
+          ruta: revisionExperto,
         );
         // Otro experto se adelantó.
         repositorio.errorClasificacion = const RutaCambioDeEstadoException();
@@ -695,14 +737,29 @@ void main() {
           tester,
           usuario: 'autor-1',
           experto: true,
-          ruta: enRevision,
+          ruta: revisionExperto,
         );
 
         expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
         expect(
-          _en(DetalleRutaScreen.claveEstado, 'Pendiente de revisión'),
+          _en(
+            DetalleRutaScreen.claveEstado,
+            'Pendiente de revisión del Runner Experto',
+          ),
           findsOneWidget,
         );
+      });
+
+      testWidgets('lo que todavía espera al administrador no se le ofrece '
+          '(SCRUM-321)', (tester) async {
+        await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: enRevision,
+        );
+
+        expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
       });
 
       testWidgets('lo ya clasificado no se vuelve a ofrecer', (tester) async {
@@ -735,7 +792,7 @@ void main() {
       testWidgets('a un corredor que no es experto no le ofrece clasificar', (
         tester,
       ) async {
-        await _abrirComo(tester, usuario: 'corredor-1', ruta: enRevision);
+        await _abrirComo(tester, usuario: 'corredor-1', ruta: revisionExperto);
 
         expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);
       });
@@ -750,7 +807,7 @@ void main() {
             usuario: 'experto-1',
             experto: true,
             errorRoles: StateError('sin red'),
-            ruta: enRevision,
+            ruta: revisionExperto,
           );
 
           expect(find.byKey(DetalleRutaScreen.claveClasificar), findsNothing);

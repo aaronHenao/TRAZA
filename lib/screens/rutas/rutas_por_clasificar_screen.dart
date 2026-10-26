@@ -11,8 +11,9 @@ import '../../widgets/tarjeta_ruta.dart';
 import '../../widgets/traza_top_bar.dart';
 import 'detalle_ruta_screen.dart';
 
-/// La bandeja del Runner Experto: las rutas que esperan su dificultad
-/// (criterio 1 de SCRUM-363), la que lleva más tiempo esperando primero.
+/// La bandeja del Runner Experto: las rutas que el administrador ya aprobó y
+/// esperan su dificultad (criterio 1 de SCRUM-363, SCRUM-321), la que lleva
+/// más tiempo esperando primero.
 ///
 /// Tocar una abre su detalle, que es donde se ve el mapa y se asigna la
 /// dificultad. Cualquier experto puede tomar cualquiera: la que clasifica
@@ -46,8 +47,9 @@ class RutasPorClasificarScreen extends ConsumerWidget {
                         icono: Icons.task_alt_rounded,
                         titulo: 'No hay rutas por clasificar',
                         detalle:
-                            'Cuando alguien publique una ruta, aparecerá aquí '
-                            'para que le asignes la dificultad.',
+                            'Cuando el administrador apruebe una ruta, '
+                            'aparecerá aquí para que le asignes la '
+                            'dificultad.',
                       ),
                     AsyncData(value: final lista) => ListView.separated(
                       physics: const AlwaysScrollableScrollPhysics(),

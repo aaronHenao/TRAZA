@@ -293,11 +293,32 @@ void main() {
         EstadoRuta.datosIncompletos,
       );
     });
+
+    test('lee la etapa del Runner Experto con el nombre de 0048 '
+        '(SCRUM-321 + SCRUM-363)', () {
+      expect(EstadoRuta.revisionExperto.valorDb, 'revision_experto');
+      expect(
+        EstadoRuta.desdeDb('revision_experto'),
+        EstadoRuta.revisionExperto,
+      );
+    });
+
+    test('la etiqueta dice a quien espera la ruta: primero al '
+        'administrador y despues al Runner Experto (SCRUM-321)', () {
+      expect(
+        EstadoRuta.enRevision.etiqueta,
+        'Pendiente de revisión del administrador',
+      );
+      expect(
+        EstadoRuta.revisionExperto.etiqueta,
+        'Pendiente de revisión del Runner Experto',
+      );
+    });
   });
 
   group('la clasificacion de una ruta (SCRUM-363)', () {
     Ruta ruta({
-      EstadoRuta estado = EstadoRuta.enRevision,
+      EstadoRuta estado = EstadoRuta.revisionExperto,
       Dificultad? dificultad,
     }) => Ruta(
       id: 'ruta-1',
@@ -335,8 +356,8 @@ void main() {
     });
 
     group('clasificablePor', () {
-      test('un Runner Experto puede clasificar la ruta ajena que esta en '
-          'revision (criterio 1 de SCRUM-363)', () {
+      test('un Runner Experto puede clasificar la ruta ajena que el '
+          'administrador ya aprobo (criterio 1 de SCRUM-363)', () {
         expect(ruta().clasificablePor('experto-1', esExperto: true), isTrue);
       });
 
@@ -352,10 +373,12 @@ void main() {
         expect(ruta().clasificablePor(null, esExperto: true), isFalse);
       });
 
-      test('solo lo que esta en revision: ni la ya clasificada, ni la '
+      test('solo lo que espera al experto: ni la que todavia espera al '
+          'administrador (SCRUM-321), ni la ya clasificada, ni la '
           'publicada, ni la rechazada, ni la que tiene la dificultad '
           'pendiente (criterio 3 de SCRUM-363)', () {
         for (final estado in [
+          EstadoRuta.enRevision,
           EstadoRuta.clasificada,
           EstadoRuta.publicada,
           EstadoRuta.rechazada,
@@ -388,6 +411,7 @@ void main() {
           'con la dificultad pendiente, ya publicada o rechazada', () {
         for (final estado in [
           EstadoRuta.enRevision,
+          EstadoRuta.revisionExperto,
           EstadoRuta.datosIncompletos,
           EstadoRuta.publicada,
           EstadoRuta.rechazada,

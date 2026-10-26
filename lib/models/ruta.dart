@@ -8,15 +8,20 @@ import 'punto_gps.dart';
 /// Los nombres coinciden con la restricción `estado in (...)` de la tabla
 /// `rutas` (`0029_rutas.sql`, ampliada en `0045_clasificacion_de_rutas.sql`).
 enum EstadoRuta {
-  /// Esperando a que un Runner Experto le asigne la dificultad (criterio 1
-  /// de SCRUM-241 y de SCRUM-363). Solo la ven su autor, los expertos y el
-  /// administrador.
+  /// Recién publicada: espera la revisión del administrador (SCRUM-321).
+  /// Solo la ven su autor y el administrador.
   enRevision('en_revision'),
+
+  /// El administrador la aprobó: espera a que un Runner Experto le asigne la
+  /// dificultad (criterio 1 de SCRUM-363). Solo la ven su autor, los
+  /// expertos y el administrador.
+  revisionExperto('revision_experto'),
 
   /// Clasificada y confirmada por su autor: visible para toda la comunidad.
   publicada('publicada'),
 
-  /// El experto no la aprobó. La ve su autor con el motivo.
+  /// El administrador o el experto no la aprobó. La ve su autor con el
+  /// motivo.
   rechazada('rechazada'),
 
   /// Un Runner Experto ya le asignó la dificultad: espera a que su autor
@@ -35,7 +40,8 @@ enum EstadoRuta {
   /// Cómo se le dice al autor en qué va su ruta (SCRUM-363). Lo usan el
   /// detalle y la pantalla de publicar, para que digan lo mismo.
   String get etiqueta => switch (this) {
-    enRevision => 'Pendiente de revisión',
+    enRevision => 'Pendiente de revisión del administrador',
+    revisionExperto => 'Pendiente de revisión del Runner Experto',
     publicada => 'Publicada',
     rechazada => 'Rechazada',
     clasificada => 'Lista para publicar',
@@ -176,15 +182,15 @@ class Ruta {
   bool get tieneDistancia => distanciaKm != null;
 
   /// Si [usuarioId], con o sin el rol de Runner Experto según [esExperto],
-  /// puede asignarle la dificultad: está en revisión y no es suya
-  /// (SCRUM-363).
+  /// puede asignarle la dificultad: el administrador ya la aprobó y no es
+  /// suya (SCRUM-363 + SCRUM-321).
   ///
-  /// Lo mismo exige `clasificar_ruta` (0045); aquí solo decide si se ofrece.
+  /// Lo mismo exige `clasificar_ruta` (0048); aquí solo decide si se ofrece.
   bool clasificablePor(String? usuarioId, {required bool esExperto}) =>
       esExperto &&
       usuarioId != null &&
       usuarioId != autorId &&
-      estado == EstadoRuta.enRevision;
+      estado == EstadoRuta.revisionExperto;
 
   /// Si [usuarioId] puede confirmar su publicación: es el autor y un experto
   /// ya la clasificó (criterio 2 de SCRUM-363).

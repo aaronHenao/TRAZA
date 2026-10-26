@@ -79,8 +79,8 @@ class PublicacionRuta {
   /// que pide el criterio 1: publicar la manda a revisión de un Runner
   /// Experto (SCRUM-363).
   static const enRevision =
-      'Tu ruta quedó pendiente de revisión. Un Runner Experto le asignará la '
-      'dificultad.';
+      'Tu ruta quedó pendiente de revisión: primero la revisa el '
+      'administrador y después un Runner Experto le asigna la dificultad.';
 
   /// Criterio 3 de SCRUM-363: no se pudo clasificar, pero quedó guardada.
   static const sinDatosParaClasificar =

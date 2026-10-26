@@ -7,16 +7,20 @@ import 'package:traza/services/rutas_service.dart';
 
 import '../utiles/rutas_repository_falso.dart';
 
-/// Un Runner Experto le asigna la dificultad a una ruta en revisión
-/// (SCRUM-363): qué devuelve, qué le dice y qué refresca.
+/// Un Runner Experto le asigna la dificultad a una ruta que el
+/// administrador ya aprobó (SCRUM-363 + SCRUM-321): qué devuelve, qué le
+/// dice y qué refresca.
 ///
-/// Quien decide si puede es `clasificar_ruta` (0045); el doble repite sus
+/// Quien decide si puede es `clasificar_ruta` (0048); el doble repite sus
 /// reglas para que aquí se pruebe cómo la app traduce cada respuesta.
 void main() {
   late RutasRepositorioFalso repositorio;
   late ProviderContainer container;
 
-  final enRevision = rutaDePrueba(autorId: 'autor-1');
+  final enRevision = rutaDePrueba(
+    autorId: 'autor-1',
+    estado: EstadoRuta.revisionExperto,
+  );
 
   setUp(() {
     repositorio = RutasRepositorioFalso(
@@ -46,7 +50,7 @@ void main() {
     ]);
     expect(
       (await container.read(rutaProvider('ruta-1').future))?.estado,
-      EstadoRuta.enRevision,
+      EstadoRuta.revisionExperto,
     );
   }
 
@@ -105,7 +109,7 @@ void main() {
         (resultado as ClasificacionNoGuardada).mensaje,
         ClasificacionRuta.sinPermiso,
       );
-      expect(repositorio.rutas.single.estado, EstadoRuta.enRevision);
+      expect(repositorio.rutas.single.estado, EstadoRuta.revisionExperto);
     });
 
     test('un corredor sin el rol tampoco', () async {
@@ -137,6 +141,23 @@ void main() {
         expect(repositorio.rutas.single.dificultad, Dificultad.facil);
       },
     );
+
+    test('la que todavia espera al administrador no se clasifica '
+        '(SCRUM-321)', () async {
+      // Como `clasificar_ruta` (0048): TZ409 si no está en
+      // `revision_experto`.
+      repositorio.rutas
+        ..clear()
+        ..add(rutaDePrueba(autorId: 'autor-1'));
+
+      final resultado = await clasificar();
+
+      expect(
+        (resultado as ClasificacionNoGuardada).mensaje,
+        ClasificacionRuta.yaCambio,
+      );
+      expect(repositorio.rutas.single.estado, EstadoRuta.enRevision);
+    });
 
     test('sin sesion pide iniciarla', () async {
       repositorio.usuario = null;

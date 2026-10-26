@@ -262,22 +262,27 @@ void main() {
   });
 
   group('porClasificar (criterio 1 de SCRUM-363)', () {
-    test('pide las que estan en revision, la mas antigua primero, sin '
-        'trazado', () async {
-      final supabase = _SupabaseFalso(filas: [fila]);
+    test('pide las que esperan al Runner Experto, la mas antigua primero, '
+        'sin trazado', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'estado': 'revision_experto'},
+        ],
+      );
       addTearDown(supabase.cerrar);
 
       final rutas = await supabase.repositorio.porClasificar();
 
       expect(rutas.single.id, 'ruta-1');
-      expect(rutas.single.estado, EstadoRuta.enRevision);
+      expect(rutas.single.estado, EstadoRuta.revisionExperto);
 
       final peticion = supabase.peticiones.single;
       expect(peticion.method, 'GET');
       expect(peticion.url.path, '/rest/v1/rutas');
-      // Las que tienen la dificultad pendiente no le llegan al experto
-      // (criterio 3): no habría con qué clasificarlas.
-      expect(peticion.url.queryParameters['estado'], 'eq.en_revision');
+      // Solo las que el administrador ya aprobó (SCRUM-321). Las que
+      // tienen la dificultad pendiente tampoco le llegan (criterio 3): no
+      // habría con qué clasificarlas.
+      expect(peticion.url.queryParameters['estado'], 'eq.revision_experto');
       // La que más lleva esperando, primero.
       expect(
         peticion.url.queryParameters['order'],

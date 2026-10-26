@@ -212,8 +212,16 @@ class _YaPublicada extends StatelessWidget {
         AppColors.ink3,
         EstadoRuta.enRevision.etiqueta,
         'Esta ruta está en revisión',
-        'La publicaste como "${ruta.nombre}". Un Runner Experto le asignará '
-            'la dificultad.',
+        'La publicaste como "${ruta.nombre}". El administrador la revisará y '
+            'después un Runner Experto le asignará la dificultad.',
+      ),
+      EstadoRuta.revisionExperto => (
+        Icons.hourglass_top_rounded,
+        AppColors.ink3,
+        EstadoRuta.revisionExperto.etiqueta,
+        'Esta ruta está en revisión',
+        'El administrador ya aprobó "${ruta.nombre}". Un Runner Experto le '
+            'asignará la dificultad.',
       ),
       EstadoRuta.clasificada => (
         Icons.terrain_outlined,

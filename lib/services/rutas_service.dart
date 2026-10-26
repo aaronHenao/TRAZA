@@ -93,6 +93,18 @@ class DatosDeRutaInvalidosException implements Exception {
   String toString() => 'DatosDeRutaInvalidosException: $detalle';
 }
 
+/// Se lanza cuando la base no deja revisar la clasificación de una ruta
+/// (SCRUM-262): quien lo intenta no es Runner Experto o es su autor
+/// (`puede_revisar_clasificacion`, 0042).
+class SinPermisoParaRevisarException implements Exception {
+  const SinPermisoParaRevisarException();
+
+  @override
+  String toString() =>
+      'SinPermisoParaRevisarException: no puede revisar la clasificación de '
+      'esa ruta';
+}
+
 /// Acceso a la tabla `rutas` (SCRUM-241).
 abstract interface class RutasRepository {
   /// Registra [ruta] a nombre del usuario de la sesión y devuelve la fila
@@ -190,6 +202,30 @@ abstract interface class RutasRepository {
   /// Lanza [SinPermisoSobreRutaException] si no es suya y
   /// [RutaCambioDeEstadoException] si no está esperando su confirmación.
   Future<Ruta> confirmarPublicacion(Ruta ruta);
+
+  /// Si quien tiene la sesión abierta puede revisar la clasificación de la
+  /// ruta [rutaId] (SCRUM-261): es Runner Experto y no es su autor. Lo
+  /// decide la base, con `puede_revisar_clasificacion` (0042).
+  Future<bool> puedeRevisarClasificacion(String rutaId);
+
+  /// Confirma la dificultad propuesta de la ruta [rutaId] y la deja marcada
+  /// como revisada por quien tiene la sesión abierta (SCRUM-262, criterio 3
+  /// de HU-35).
+  ///
+  /// Lo hace la base, con `confirmar_clasificacion`. Esa función todavía no
+  /// existe: depende de que SCRUM-363 cree la dificultad, y lo que tiene que
+  /// hacer está escrito en `docs/deudas.md`. Lanza
+  /// [SinPermisoParaRevisarException] si la base no lo deja.
+  Future<void> confirmarClasificacion(String rutaId);
+
+  /// Reemplaza la dificultad de la ruta [rutaId] por [dificultad] y la deja
+  /// marcada como revisada por quien tiene la sesión abierta: queda como su
+  /// clasificación definitiva (SCRUM-263, criterio 4 de HU-35).
+  ///
+  /// Lo hace la base, con `corregir_clasificacion`, que todavía no existe por
+  /// lo mismo que `confirmar_clasificacion` (`docs/deudas.md`). Lanza
+  /// [SinPermisoParaRevisarException] si la base no lo deja.
+  Future<void> corregirClasificacion(String rutaId, Dificultad dificultad);
 }
 
 /// Lee y escribe en `rutas`.
@@ -449,6 +485,53 @@ class SupabaseRutasRepository implements RutasRepository {
     } on PostgrestException catch (e) {
       if (e.code == _rlsRechazo) throw const SinPermisoSobreRutaException();
       if (e.code == _cambioDeEstado) throw const RutaCambioDeEstadoException();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<bool> puedeRevisarClasificacion(String rutaId) async {
+    _usuarioId();
+
+    // Una función que devuelve un solo valor llega como ese valor, sin
+    // filas alrededor.
+    final puede = await _cliente.rpc<dynamic>(
+      'puede_revisar_clasificacion',
+      params: {'p_ruta_id': rutaId},
+    );
+    if (puede is! bool) {
+      throw FormatException(
+        'puede_revisar_clasificacion devolvió algo inesperado',
+        puede,
+      );
+    }
+    return puede;
+  }
+
+  @override
+  Future<void> confirmarClasificacion(String rutaId) =>
+      _guardarRevision('confirmar_clasificacion', {'p_ruta_id': rutaId});
+
+  @override
+  Future<void> corregirClasificacion(String rutaId, Dificultad dificultad) =>
+      _guardarRevision('corregir_clasificacion', {
+        'p_ruta_id': rutaId,
+        'p_dificultad': dificultad.valorDb,
+      });
+
+  /// Llama a una de las funciones de la base que guardan la revisión de una
+  /// clasificación (SCRUM-262 y SCRUM-263).
+  Future<void> _guardarRevision(
+    String funcion,
+    Map<String, Object> parametros,
+  ) async {
+    _usuarioId();
+
+    try {
+      await _cliente.rpc<void>(funcion, params: parametros);
+    } on PostgrestException catch (e) {
+      // La regla la pone la base: quien no puede revisar recibe 42501.
+      if (e.code == _rlsRechazo) throw const SinPermisoParaRevisarException();
       rethrow;
     }
   }

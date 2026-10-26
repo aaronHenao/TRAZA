@@ -8,6 +8,7 @@ import '../../models/ruta.dart';
 import '../../services/foro_service.dart' show usuarioActualProvider;
 import '../../services/reloj_provider.dart';
 import '../../services/roles_service.dart';
+import '../../services/revision_clasificacion_provider.dart';
 import '../../services/rutas_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -22,6 +23,7 @@ import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
+import 'revisar_clasificacion_screen.dart';
 
 /// El detalle de una ruta de la comunidad (SCRUM-240).
 ///
@@ -32,6 +34,8 @@ import '../../widgets/traza_top_bar.dart';
 /// Del "Detalle de ruta" del prototipo quedan fuera el desnivel y el tiempo
 /// estimado: el primero necesitaría la altitud, que no se guarda a propósito
 /// desde el Sprint 1, y el segundo depende de él.
+///
+/// Dice también su dificultad, y si un Runner Experto la revisó (SCRUM-264).
 ///
 /// Es también donde pasa la clasificación (SCRUM-363): todos ven la
 /// dificultad; el Runner Experto, en una ruta ajena en revisión, la asigna
@@ -56,12 +60,20 @@ class DetalleRutaScreen extends ConsumerWidget {
   static String rutaDe(String rutaId) =>
       '/rutas/${Uri.encodeComponent(rutaId)}';
 
+  /// Quién revisó la dificultad: que fue un Runner Experto, y cuándo
+  /// (SCRUM-264, criterio 5 de HU-35).
+  static String revisadaPorExperto(DateTime en, DateTime ahora) =>
+      'Revisada por un Runner Experto · ${fechaRelativa(en, ahora)}';
+  static const sinRevisar = 'Todavía no la revisa un Runner Experto.';
+  static const sinDificultadAsignada =
+      'Todavía no tiene una dificultad asignada.';
+
   static const claveDistancia = Key('detalle-ruta-distancia');
+  static const claveDificultad = Key('detalle-ruta-dificultad');
   static const claveReintentar = Key('detalle-ruta-reintentar');
   static const claveCargandoTrazado = Key('detalle-ruta-cargando-trazado');
 
   // Clasificación (SCRUM-363).
-  static const claveDificultad = Key('detalle-ruta-dificultad');
   static const claveEstado = Key('detalle-ruta-estado');
   static const clavePublicar = Key('detalle-ruta-publicar');
   static const claveClasificar = Key('detalle-ruta-clasificar');
@@ -189,8 +201,9 @@ class _Contenido extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         _Distancia(ruta: ruta),
-        const SizedBox(height: AppSpacing.md),
-        _Dificultad(dificultad: ruta.dificultad),
+        const SizedBox(height: AppSpacing.sm),
+        _Dificultad(ruta: ruta, ahora: ahora),
+        _RevisarClasificacion(rutaId: ruta.id),
         if (usuario == ruta.autorId && _EstadoDelAutor.aplicaA(ruta)) ...[
           const SizedBox(height: AppSpacing.md),
           _EstadoDelAutor(
@@ -277,64 +290,6 @@ class _Distancia extends StatelessWidget {
                       ? 'Esta ruta se guardó sin su distancia, así que no '
                             'podemos decirte cuánto mide.'
                       : 'Distancia total de la ruta',
-                  style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// La dificultad que le asignó un Runner Experto, o que todavía no tiene
-/// (SCRUM-363).
-class _Dificultad extends StatelessWidget {
-  const _Dificultad({required this.dificultad});
-
-  final Dificultad? dificultad;
-
-  @override
-  Widget build(BuildContext context) {
-    final dificultad = this.dificultad;
-
-    return TrazaCard(
-      key: DetalleRutaScreen.claveDificultad,
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppColors.secondaryTint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.terrain_outlined,
-              size: 20,
-              color: AppColors.secondaryDark,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  dificultad?.etiqueta ?? TarjetaRutaExplorar.sinDificultad,
-                  style: TextStyle(
-                    fontSize: dificultad == null ? 14 : 19,
-                    fontWeight: FontWeight.w800,
-                    color: dificultad == null ? AppColors.ink2 : AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  // Criterio 2: se dice de dónde sale la dificultad.
-                  dificultad == null
-                      ? 'Todavía no tiene dificultad asignada'
-                      : 'Asignada por un Runner Experto',
                   style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
                 ),
               ],
@@ -433,6 +388,100 @@ class _EstadoDelAutorState extends ConsumerState<_EstadoDelAutor> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// La dificultad de la ruta: que la asignó un Runner Experto (criterio 2 de
+/// SCRUM-363) y si otro la revisó (SCRUM-264, criterio 5 de HU-35).
+///
+/// De quién la revisó solo se dice que fue un Runner Experto, y cuándo: eso
+/// es lo que le da confianza a quien la va a correr, y el nombre no le
+/// agrega nada. Se lee de una vez con el lector de pantalla.
+class _Dificultad extends StatelessWidget {
+  const _Dificultad({required this.ruta, required this.ahora});
+
+  final Ruta ruta;
+  final DateTime ahora;
+
+  @override
+  Widget build(BuildContext context) {
+    final dificultad = ruta.dificultad;
+    final revisadaEn = ruta.dificultadRevisadaEn;
+    const detalle = TextStyle(fontSize: 12.5, color: AppColors.ink2);
+
+    return MergeSemantics(
+      child: TrazaCard(
+        key: DetalleRutaScreen.claveDificultad,
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.secondaryTint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.signal_cellular_alt_rounded,
+                size: 20,
+                color: AppColors.secondaryDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dificultad?.etiqueta ?? TarjetaRutaExplorar.sinDificultad,
+                    style: TextStyle(
+                      fontSize: dificultad == null ? 14 : 19,
+                      fontWeight: FontWeight.w800,
+                      color: dificultad == null
+                          ? AppColors.ink2
+                          : AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  if (dificultad != null)
+                    const Text(
+                      'Asignada por un Runner Experto',
+                      style: detalle,
+                    ),
+                  if (dificultad != null && revisadaEn != null)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 14,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            DetalleRutaScreen.revisadaPorExperto(
+                              revisadaEn,
+                              ahora,
+                            ),
+                            style: detalle,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      dificultad == null
+                          ? DetalleRutaScreen.sinDificultadAsignada
+                          : DetalleRutaScreen.sinRevisar,
+                      style: detalle,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -545,6 +594,32 @@ class _ClasificarState extends ConsumerState<_Clasificar> {
             child: const Text('Asignar dificultad'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// La entrada a revisar la clasificación de la ruta (SCRUM-261), solo para
+/// quien la base dice que puede: un Runner Experto que no es su autor
+/// (0042). A los demás no se les muestra nada, ni mientras se pregunta.
+class _RevisarClasificacion extends ConsumerWidget {
+  const _RevisarClasificacion({required this.rutaId});
+
+  final String rutaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final puede = ref.watch(puedeRevisarClasificacionProvider(rutaId));
+    if (puede.valueOrNull != true) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: OutlinedButton.icon(
+        key: RevisarClasificacionScreen.claveAbrir,
+        onPressed: () =>
+            context.push(RevisarClasificacionScreen.rutaDe(rutaId)),
+        icon: const Icon(Icons.fact_check_outlined),
+        label: const Text(RevisarClasificacionScreen.titulo),
       ),
     );
   }

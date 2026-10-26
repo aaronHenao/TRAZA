@@ -4,6 +4,7 @@ import '../../models/resumen_entrenamiento.dart';
 import '../../models/ruta.dart';
 import 'detalle_ruta_screen.dart';
 import 'publicar_ruta_screen.dart';
+import 'revisar_clasificacion_screen.dart';
 import 'rutas_screen.dart';
 
 /// La sección de Rutas: Explorar rutas y lo que se abre desde ella
@@ -46,6 +47,17 @@ final seccionRutas = GoRoute(
         rutaId: state.pathParameters['rutaId']!,
         vistaPrevia: state.extra as Ruta?,
       ),
+      routes: [
+        // Revisar su clasificación (SCRUM-261): solo para un Runner Experto
+        // que no sea el autor. Se abre con `push` desde el detalle, así que
+        // "atrás" vuelve a él.
+        GoRoute(
+          path: 'revisar',
+          builder: (context, state) => RevisarClasificacionScreen(
+            rutaId: state.pathParameters['rutaId']!,
+          ),
+        ),
+      ],
     ),
   ],
 );

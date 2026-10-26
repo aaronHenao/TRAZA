@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_cercana.dart';
@@ -53,9 +55,6 @@ class RutasRepositorioFalso implements RutasRepository {
   Object? errorConfirmacion;
 
   int consultasPorClasificar = 0;
-
-  /// Cuántas veces se pidió el detalle de una ruta (SCRUM-363).
-  int consultasDeRuta = 0;
 
   /// Cada clasificación que llegó, aunque la base la rechazara.
   final clasificaciones = <({String rutaId, Dificultad dificultad})>[];
@@ -292,6 +291,66 @@ class RutasRepositorioFalso implements RutasRepository {
     ];
   }
 
+  /// Lo que contesta `puedeRevisarClasificacion` (SCRUM-261). Por defecto,
+  /// que no: así es para casi todos los usuarios.
+  bool puedeRevisar = false;
+
+  /// Lo que lanza `puedeRevisarClasificacion`, si algo.
+  Object? errorPermisoRevision;
+
+  /// Las rutas por las que se preguntó si se podían revisar.
+  final permisosDeRevision = <String>[];
+
+  @override
+  Future<bool> puedeRevisarClasificacion(String rutaId) async {
+    permisosDeRevision.add(rutaId);
+    final error = errorPermisoRevision;
+    if (error != null) throw error;
+    return puedeRevisar;
+  }
+
+  /// Las rutas cuya clasificación se confirmó (SCRUM-262).
+  final confirmadas = <String>[];
+
+  /// Lo que lanza `confirmarClasificacion`, si algo.
+  Object? errorConfirmar;
+
+  /// Si está, `confirmarClasificacion` no termina hasta que la prueba lo
+  /// complete.
+  Completer<void>? confirmacionPendiente;
+
+  @override
+  Future<void> confirmarClasificacion(String rutaId) async {
+    confirmadas.add(rutaId);
+    final error = errorConfirmar;
+    if (error != null) throw error;
+    await confirmacionPendiente?.future;
+  }
+
+  /// Las correcciones de la clasificación que llegaron, en orden (SCRUM-263).
+  final corregidas = <(String, Dificultad)>[];
+
+  /// Lo que lanza `corregirClasificacion`, si algo.
+  Object? errorCorregir;
+
+  /// Si está, `corregirClasificacion` no termina hasta que la prueba lo
+  /// complete.
+  Completer<void>? correccionPendiente;
+
+  @override
+  Future<void> corregirClasificacion(
+    String rutaId,
+    Dificultad dificultad,
+  ) async {
+    corregidas.add((rutaId, dificultad));
+    final error = errorCorregir;
+    if (error != null) throw error;
+    await correccionPendiente?.future;
+  }
+
+  /// Cuántas veces se pidió una ruta con su trazado.
+  int consultasDeRuta = 0;
+
   @override
   Future<Ruta?> ruta(String id) async {
     consultasDeRuta++;
@@ -334,6 +393,7 @@ Ruta rutaDePrueba({
   EstadoRuta estado = EstadoRuta.enRevision,
   double? distanciaKm = 5.23,
   Dificultad? dificultad,
+  DateTime? dificultadRevisadaEn,
   List<PuntoRuta> trazado = const [],
   List<PuntoRuta> miniatura = const [],
   DateTime? fechaCreacion,
@@ -348,6 +408,7 @@ Ruta rutaDePrueba({
   estado: estado,
   distanciaKm: distanciaKm,
   dificultad: dificultad,
+  dificultadRevisadaEn: dificultadRevisadaEn,
   trazado: trazado,
   miniatura: miniatura,
   fechaCreacion: fechaCreacion ?? DateTime(2026, 10, 17, 9),

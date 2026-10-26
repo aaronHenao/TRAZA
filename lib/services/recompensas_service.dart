@@ -21,9 +21,9 @@ class SesionRequeridaParaRecompensasException implements Exception {
 
 /// Se lanza cuando la base rechaza los datos de la recompensa.
 ///
-/// No debería ocurrir: `BorradorRecompensa` valida las mismas reglas antes. Si
-/// llega aquí, los `check` de la tabla y la validación de Dart se
-/// desalinearon.
+/// No debería ocurrir: `BorradorRecompensa` y `errorDePuntos` validan las
+/// mismas reglas antes. Si llega aquí, los `check` de la tabla y la
+/// validación de Dart se desalinearon.
 class DatosDeRecompensaInvalidosException implements Exception {
   const DatosDeRecompensaInvalidosException(this.detalle);
 
@@ -47,6 +47,14 @@ abstract interface class RecompensasRepository {
   /// Todas, disponibles o no, para la gestión del administrador. La más
   /// reciente primero.
   Future<List<Recompensa>> todas();
+
+  /// Cambia los puntos de [recompensa] y devuelve la fila guardada
+  /// (SCRUM-380). Solo manda los puntos: los canjes ya hechos guardan su
+  /// propio valor y no se tocan (criterio 3).
+  ///
+  /// Lanza [SoloAdministradorException] si la base no deja y
+  /// [DatosDeRecompensaInvalidosException] si un `check` lo rechaza.
+  Future<Recompensa> cambiarPuntos(Recompensa recompensa, int puntos);
 }
 
 class SupabaseRecompensasRepository implements RecompensasRepository {
@@ -62,6 +70,10 @@ class SupabaseRecompensasRepository implements RecompensasRepository {
 
   static const _rlsDenegado = '42501';
   static const _restriccionIncumplida = '23514';
+
+  /// La consulta pidió una fila y no vino ninguna: en un update, la policy
+  /// no dejó tocar la fila.
+  static const _sinFilas = 'PGRST116';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -122,5 +134,30 @@ class SupabaseRecompensasRepository implements RecompensasRepository {
         .order('fecha_creacion', ascending: false);
 
     return filas.map(Recompensa.desdeSupabase).toList();
+  }
+
+  @override
+  Future<Recompensa> cambiarPuntos(Recompensa recompensa, int puntos) async {
+    _exigirSesion();
+
+    try {
+      final fila = await _cliente
+          .from(_tabla)
+          .update({'puntos_requeridos': puntos})
+          .eq('id', recompensa.id)
+          .select()
+          .single();
+
+      return Recompensa.desdeSupabase(fila);
+    } on PostgrestException catch (e) {
+      // Sin es_admin() el update no ve la fila (0 filas) o RLS lo niega.
+      if (e.code == _rlsDenegado || e.code == _sinFilas) {
+        throw const SoloAdministradorException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw DatosDeRecompensaInvalidosException(e.message);
+      }
+      rethrow;
+    }
   }
 }

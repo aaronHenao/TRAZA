@@ -1,5 +1,7 @@
 import 'package:traza/models/recompensa.dart';
 import 'package:traza/services/recompensas_service.dart';
+import 'package:traza/services/retos_service.dart'
+    show SoloAdministradorException;
 
 /// Repositorio de recompensas en memoria (SCRUM-374): anota lo que le mandan
 /// y responde como lo haría la base.
@@ -24,6 +26,15 @@ class RecompensasRepositorioFalso implements RecompensasRepository {
 
   /// Cuántas veces se pidió la lista completa del administrador.
   var consultasTodas = 0;
+
+  /// La recompensa a la que se le pidió cambiar los puntos la última vez
+  /// (SCRUM-380). Null si nadie lo pidió.
+  Recompensa? recompensaPorCambiar;
+
+  /// Los puntos que llegaron en el último cambio. Null si no llegó ninguno:
+  /// así se comprueba que una cantidad inválida ni siquiera se intentó
+  /// guardar.
+  int? puntosRecibidos;
 
   @override
   Future<Recompensa> crear(NuevaRecompensa recompensa) async {
@@ -66,6 +77,42 @@ class RecompensasRepositorioFalso implements RecompensasRepository {
 
     return [...recompensas]
       ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
+  }
+
+  /// Como el update de la base (SCRUM-380): solo cambian los puntos de esa
+  /// recompensa, lo demás queda igual, y lo siguiente que se consulte ya trae
+  /// el valor nuevo. Si hay [error], no cambia nada.
+  @override
+  Future<Recompensa> cambiarPuntos(Recompensa recompensa, int puntos) async {
+    recompensaPorCambiar = recompensa;
+    puntosRecibidos = puntos;
+    final error = this.error;
+    if (error != null) throw error;
+
+    // Como la base: sin la fila, el update no toca nada (PGRST116), y el
+    // check `recompensas_puntos_validos` rechaza lo que está fuera de rango.
+    final guardada = recompensas
+        .where((r) => r.id == recompensa.id)
+        .firstOrNull;
+    if (guardada == null) throw const SoloAdministradorException();
+    if (puntos < 1 || puntos > maxPuntosRecompensa) {
+      throw const DatosDeRecompensaInvalidosException(
+        'recompensas_puntos_validos',
+      );
+    }
+    // Lo demás sale de la fila guardada, no de lo que mandó la pantalla.
+    final cambiada = Recompensa(
+      id: guardada.id,
+      nombre: guardada.nombre,
+      descripcion: guardada.descripcion,
+      puntosRequeridos: puntos,
+      disponible: guardada.disponible,
+      fechaCreacion: guardada.fechaCreacion,
+    );
+    recompensas = [
+      for (final r in recompensas) r.id == recompensa.id ? cambiada : r,
+    ];
+    return cambiada;
   }
 
   DateTime _siguienteFecha() {

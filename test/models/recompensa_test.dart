@@ -305,4 +305,68 @@ void main() {
       );
     });
   });
+
+  group('cantidad de puntos al cambiarlos (criterio 2 de SCRUM-380)', () {
+    test('sin puntos, o con solo espacios, pide cuántos cuesta', () {
+      expect(errorDePuntos(''), 'Indica cuántos puntos cuesta.');
+      expect(errorDePuntos('  '), 'Indica cuántos puntos cuesta.');
+    });
+
+    test('un valor no numérico indica que la cantidad no es válida', () {
+      expect(errorDePuntos('abc'), 'Usa solo números enteros.');
+      // `int.tryParse` sin base acepta hexadecimal: '0x10' serían 16.
+      expect(errorDePuntos('0x10'), 'Usa solo números enteros.');
+      expect(const BorradorRecompensa(puntos: '0X1F').puntosRequeridos, isNull);
+    });
+
+    test('los decimales tampoco valen', () {
+      expect(errorDePuntos('2.5'), 'Usa solo números enteros.');
+    });
+
+    test('cero puntos indica que la cantidad no es válida', () {
+      expect(errorDePuntos('0'), 'Los puntos deben ser mayores que cero.');
+    });
+
+    test('unos puntos negativos indican que la cantidad no es válida', () {
+      expect(errorDePuntos('-5'), 'Los puntos deben ser mayores que cero.');
+    });
+
+    test('uno más del tope se rechaza, como el check de la tabla', () {
+      expect(errorDePuntos('1000001'), 'Máximo 1000000 puntos.');
+    });
+
+    test('1, 150 y 1000000 son cantidades válidas (criterio 1 de '
+        'SCRUM-380)', () {
+      expect(errorDePuntos('1'), isNull);
+      expect(errorDePuntos('150'), isNull);
+      expect(errorDePuntos('1000000'), isNull);
+    });
+
+    test('los espacios de los extremos no cuentan, como al crear', () {
+      expect(errorDePuntos(' 200 '), isNull);
+    });
+
+    test('es la misma regla del formulario de creación: no hay dos '
+        'versiones de qué puntos valen', () {
+      for (final texto in [
+        '',
+        '  ',
+        'abc',
+        '2.5',
+        '0',
+        '-5',
+        '1',
+        '150',
+        '1000000',
+        '1000001',
+        '2147483648',
+      ]) {
+        expect(
+          errorDePuntos(texto),
+          BorradorRecompensa(puntos: texto).errores[CampoRecompensa.puntos],
+          reason: 'con "$texto"',
+        );
+      }
+    });
+  });
 }

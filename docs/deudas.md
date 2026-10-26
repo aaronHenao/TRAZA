@@ -217,6 +217,23 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 
 **Qué falta:**
 
-- **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. SCRUM-380 va a crear la tabla `canjes_recompensa` solo para guardar los puntos del momento del canje; el flujo de canjear (una función `security definer` que valide el saldo y descuente) es de otra HU. Coordinar con quien la tenga para no crear dos tablas.
-- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, va con una policy de update (la que agregue SCRUM-380 para cambiar los puntos) y un interruptor en la tarjeta de la gestión.
+- **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. La tabla `canjes_recompensa` ya existe (SCRUM-380, ver abajo); el flujo de canjear es de otra HU.
+- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, la policy de update de `0050_canjes_recompensa.sql` ya lo permite al administrador: falta un interruptor en la tarjeta de la gestión.
 - **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`.
+
+## SCRUM-380: cambiar los puntos de una recompensa
+
+**Qué quedó hecho:**
+
+- `0050_canjes_recompensa.sql`: policy de update de `recompensas` para el administrador y tabla `canjes_recompensa`. Cada canje guarda los puntos que costó: el trigger `preparar_canje_recompensa` los copia del precio vigente al insertar (lo que mande el cliente se ignora) y `proteger_canje_recompensa` los deja fijos en cualquier update. Trae su script de verificación para el SQL Editor.
+- Botón "Cambiar puntos" en cada tarjeta de la gestión, con un diálogo que no guarda una cantidad inválida.
+
+**Qué falta:**
+
+- **El flujo de canjear.** Nadie inserta en `canjes_recompensa` todavía (no hay policy de insert). La HU que lo haga debería:
+  - entrar por una función `security definer` con `set search_path = public` que valide `auth.uid()`;
+  - no calcular el precio a mano: el trigger ya lo pone, y descontar del saldo el `puntos_canjeados` que devuelve el `insert ... returning`;
+  - bloquear la recompensa (`select ... from recompensas where id = $1 and disponible for share`) para que un cambio de precio a la mitad no deje el saldo validado contra un valor y el canje con otro, y bloquear por usuario contra canjes dobles;
+  - traducir el `23503` del trigger (la recompensa no existe).
+- **El criterio 3 solo se verifica en SQL** hasta que exista el canje: no hay pantalla de "mis canjes".
+

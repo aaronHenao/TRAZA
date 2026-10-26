@@ -140,7 +140,125 @@ void main() {
     });
   });
 
+  group('cambiar los puntos (SCRUM-380)', () {
+    final recompensa = Recompensa.desdeSupabase(fila);
+
+    test('actualiza solo esa recompensa, en recompensas y por su id, y '
+        'devuelve la fila guardada (criterio 1 de SCRUM-380)', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'puntos_requeridos': 200},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final cambiada = await supabase.repositorio.cambiarPuntos(
+        recompensa,
+        200,
+      );
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'PATCH');
+      expect(peticion.url.path, '/rest/v1/recompensas');
+      final consulta = peticion.url.queryParameters;
+      expect(consulta['id'], 'eq.recompensa-1');
+      // Pide de vuelta la fila, y una sola (`.single()`).
+      expect(consulta.keys, contains('select'));
+      expect(peticion.headers['Accept'], contains('vnd.pgrst.object+json'));
+      // Lo que vuelve es lo que quedó en la base.
+      expect(cambiada.id, 'recompensa-1');
+      expect(cambiada.puntosRequeridos, 200);
+    });
+
+    test('manda únicamente puntos_requeridos y no toca ninguna otra tabla: '
+        'los canjes ya hechos quedan como estaban (criterio 3 de '
+        'SCRUM-380)', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          {...fila, 'puntos_requeridos': 200},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.cambiarPuntos(recompensa, 200);
+
+      // Una sola petición, a recompensas: nada hacia los canjes.
+      expect(supabase.peticiones.map((p) => (p.method, p.url.path)), [
+        ('PATCH', '/rest/v1/recompensas'),
+      ]);
+      // Ni nombre, ni descripción, ni disponibilidad: solo los puntos.
+      expect(jsonDecode(supabase.peticiones.single.body), {
+        'puntos_requeridos': 200,
+      });
+      // Y filtra por esa recompensa, no por otra cosa.
+      expect(supabase.peticiones.single.url.queryParameters.keys.toSet(), {
+        'id',
+        'select',
+      });
+    });
+
+    test('los puntos viajan como entero, no como texto', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.cambiarPuntos(recompensa, 150);
+
+      expect(
+        (jsonDecode(supabase.peticiones.single.body)
+            as Map)['puntos_requeridos'],
+        isA<int>(),
+      );
+    });
+
+    test('si la tabla rechaza la cantidad (23514) lo dice con su excepción '
+        '(criterio 2 de SCRUM-380)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '23514');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.cambiarPuntos(recompensa, 0),
+        throwsA(isA<DatosDeRecompensaInvalidosException>()),
+      );
+    });
+
+    for (final (codigo, causa) in [
+      ('42501', 'la seguridad a nivel de fila lo negó'),
+      ('PGRST116', 'la policy no dejó tocar la fila'),
+    ]) {
+      test('si $causa ($codigo), es que la cuenta no es administradora', () {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.cambiarPuntos(recompensa, 200),
+          throwsA(isA<SoloAdministradorException>()),
+        );
+      });
+    }
+
+    test('un error que no es de permisos ni de datos no se disfraza', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '08006');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.cambiarPuntos(recompensa, 200),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+  });
+
   group('sin sesión', () {
+    test('cambiar los puntos no sale a la red (SCRUM-380)', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.cambiarPuntos(Recompensa.desdeSupabase(fila), 200),
+        throwsA(isA<SesionRequeridaParaRecompensasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+
     test('crear no sale a la red', () async {
       final supabase = _SupabaseFalso(usuarioActual: null);
       addTearDown(supabase.cerrar);

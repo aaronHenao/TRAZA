@@ -16,6 +16,24 @@ const maxCaracteresDescripcionRecompensa = 280;
 /// campo corregir.
 const maxPuntosRecompensa = 1000000;
 
+/// Qué tiene de malo [texto] como cantidad de puntos, o null si sirve.
+///
+/// La usan el formulario de creación (SCRUM-374) y el cambio de puntos
+/// (SCRUM-380): las dos piden lo mismo que `recompensas_puntos_validos`.
+String? errorDePuntos(String texto) {
+  final limpio = texto.trim();
+  if (limpio.isEmpty) return 'Indica cuántos puntos cuesta.';
+  // Base 10 explícita: sin ella, `int.tryParse` acepta hexadecimal y '0x10'
+  // pasaría como 16 puntos.
+  final puntos = int.tryParse(limpio, radix: 10);
+  if (puntos == null) return 'Usa solo números enteros.';
+  if (puntos <= 0) return 'Los puntos deben ser mayores que cero.';
+  if (puntos > maxPuntosRecompensa) {
+    return 'Máximo $maxPuntosRecompensa puntos.';
+  }
+  return null;
+}
+
 /// Una recompensa del catálogo, tal como vive en `recompensas` (SCRUM-374).
 @immutable
 class Recompensa {
@@ -114,7 +132,7 @@ class BorradorRecompensa {
   );
 
   /// Los puntos escritos, o null si no son un entero.
-  int? get puntosRequeridos => int.tryParse(puntos.trim());
+  int? get puntosRequeridos => int.tryParse(puntos.trim(), radix: 10);
 
   /// Qué le falta o qué está mal, por campo. Vacío si se puede guardar.
   ///
@@ -140,16 +158,8 @@ class BorradorRecompensa {
           'Máximo $maxCaracteresDescripcionRecompensa caracteres.';
     }
 
-    final puntos = puntosRequeridos;
-    if (this.puntos.trim().isEmpty) {
-      errores[CampoRecompensa.puntos] = 'Indica cuántos puntos cuesta.';
-    } else if (puntos == null) {
-      errores[CampoRecompensa.puntos] = 'Usa solo números enteros.';
-    } else if (puntos <= 0) {
-      errores[CampoRecompensa.puntos] =
-          'Los puntos deben ser mayores que cero.';
-    } else if (puntos > maxPuntosRecompensa) {
-      errores[CampoRecompensa.puntos] = 'Máximo $maxPuntosRecompensa puntos.';
+    if (errorDePuntos(puntos) case final error?) {
+      errores[CampoRecompensa.puntos] = error;
     }
 
     return errores;

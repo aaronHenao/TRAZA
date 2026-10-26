@@ -207,3 +207,16 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
   Cuando exista, hay que sumarlo a `_columnasConTrazado` de `SupabaseRutasRepository`, que es lo que pide el detalle. El quién no se le muestra a nadie: el criterio 5 pide decir que fue un Runner Experto, no cuál.
 - **Quién propone la dificultad.** HU-35 dice que el experto revisa una dificultad ya propuesta; SCRUM-363 dice que el experto la asigna. Está por decidir con el equipo, y define qué muestra la pantalla como "propuesta".
 - **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en la sección anterior).
+
+## SCRUM-374: recompensas
+
+**Qué quedó hecho:**
+
+- `0049_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
+- Gestión del administrador (`/admin/recompensas`, desde el Panel) con su formulario, y catálogo del corredor (`/recompensas`, desde Inicio) con los puntos de cada recompensa.
+
+**Qué falta:**
+
+- **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. SCRUM-380 va a crear la tabla `canjes_recompensa` solo para guardar los puntos del momento del canje; el flujo de canjear (una función `security definer` que valide el saldo y descuente) es de otra HU. Coordinar con quien la tenga para no crear dos tablas.
+- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, va con una policy de update (la que agregue SCRUM-380 para cambiar los puntos) y un interruptor en la tarjeta de la gestión.
+- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`.

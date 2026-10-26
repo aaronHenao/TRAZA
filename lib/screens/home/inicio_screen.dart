@@ -18,6 +18,7 @@ import '../../widgets/tarjeta_nivel.dart';
 import '../../widgets/traza_card.dart';
 import '../notificaciones/notificaciones_screen.dart';
 import '../onboarding/perfil_screen.dart';
+import '../recompensas/catalogo_recompensas_screen.dart';
 
 /// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
 /// el usuario al entrar y desde donde arranca todo.
@@ -29,6 +30,7 @@ import '../onboarding/perfil_screen.dart';
 class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
+  static const claveAccesoRecompensas = Key('inicio-recompensas');
   static const claveNotificaciones = Key('inicio-notificaciones');
 
   @override
@@ -80,6 +82,9 @@ class InicioScreen extends ConsumerWidget {
               SizedBox(height: AppSpacing.lg),
               // Las rutas de la comunidad, de lado (SCRUM-289).
               CarruselRutasCercanas(),
+              SizedBox(height: AppSpacing.lg),
+              // Lo que puede obtener con sus puntos (SCRUM-374).
+              _AccesoRecompensas(),
               SizedBox(height: AppSpacing.lg),
               _UltimosEntrenamientos(),
             ],
@@ -161,6 +166,61 @@ class _Campana extends ConsumerWidget {
         fixedSize: const Size(38, 38),
         minimumSize: const Size(38, 38),
         padding: EdgeInsets.zero,
+      ),
+    );
+  }
+}
+
+/// Acceso al catálogo de recompensas (SCRUM-374): lo que el corredor puede
+/// obtener con sus puntos.
+class _AccesoRecompensas extends StatelessWidget {
+  const _AccesoRecompensas();
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      key: InicioScreen.claveAccesoRecompensas,
+      // `push`: al cerrarlo se vuelve a la portada.
+      onTap: () => context.push(CatalogoRecompensasScreen.ruta),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryTint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.card_giftcard_outlined,
+              size: 20,
+              color: AppColors.secondaryDark,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Recompensas',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Mira lo que puedes obtener con tus puntos',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.ink3),
+        ],
       ),
     );
   }

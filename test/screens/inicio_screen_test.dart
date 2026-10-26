@@ -33,6 +33,7 @@ import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_service.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
+import 'package:traza/screens/recompensas/catalogo_recompensas_screen.dart';
 import 'package:traza/widgets/bloque_reto_activo.dart';
 import 'package:traza/widgets/carrusel_rutas_cercanas.dart';
 import 'package:traza/widgets/indicadores_semana.dart';
@@ -240,6 +241,10 @@ void main() {
           path: NotificacionesScreen.ruta,
           builder: (_, _) =>
               const Scaffold(body: Text('Pantalla Notificaciones')),
+        ),
+        GoRoute(
+          path: CatalogoRecompensasScreen.ruta,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Recompensas')),
         ),
       ],
     );
@@ -806,6 +811,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Mapa'), findsOneWidget);
+    });
+
+    testWidgets('la tarjeta de recompensas lleva al catálogo de beneficios '
+        '(criterio 3 de SCRUM-374)', (tester) async {
+      // Va debajo de las rutas de la portada: una pantalla alta la deja a
+      // la vista, lejos de la barra de abajo.
+      await abrirPortada(tester, tamano: const Size(390, 2000));
+
+      final acceso = find.byKey(InicioScreen.claveAccesoRecompensas);
+      expect(
+        find.descendant(of: acceso, matching: find.text('Recompensas')),
+        findsOneWidget,
+      );
+
+      await tester.tap(acceso);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Recompensas'), findsOneWidget);
     });
   });
 }

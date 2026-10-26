@@ -386,11 +386,17 @@ class _CabeceraPerfil extends StatelessWidget {
 }
 
 /// La entrada a los requisitos y ventajas de Runner Experto (SCRUM-212).
-class _InvitacionRunnerExperto extends StatelessWidget {
+/// A quien ya lo es no se le invita: en su lugar tiene la tarjeta de las
+/// rutas por clasificar (SCRUM-363).
+class _InvitacionRunnerExperto extends ConsumerWidget {
   const _InvitacionRunnerExperto();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(esExpertoProvider).valueOrNull == true) {
+      return const SizedBox.shrink();
+    }
+
     return TrazaCard(
       key: PerfilScreen.claveRunnerExperto,
       // `push`: al cerrarla se vuelve al perfil.
@@ -435,7 +441,8 @@ class _InvitacionRunnerExperto extends StatelessWidget {
 }
 
 /// Lo que el Runner Experto tiene por clasificar (SCRUM-363). A quien no tiene
-/// el rol no se le muestra nada: para él ya está la invitación de arriba.
+/// el rol no se le muestra nada: para esa persona está la invitación de
+/// arriba.
 class _AccesoRutasPorClasificar extends ConsumerWidget {
   const _AccesoRutasPorClasificar();
 

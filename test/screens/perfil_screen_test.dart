@@ -617,6 +617,28 @@ void main() {
       expect(find.byKey(PerfilScreen.claveRunnerExperto), findsNothing);
     });
 
+    testWidgets('a quien ya es Runner Experto no lo invita a serlo: tiene su '
+        'entrada a las rutas por clasificar (SCRUM-363)', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto(),
+      );
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsNothing);
+      expect(find.text('¿Quieres ser Runner Experto?'), findsNothing);
+    });
+
+    testWidgets('si no se pudo saber el rol, lo invita igual', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto()..error = StateError('sin red'),
+      );
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsOneWidget);
+    });
+
     testWidgets('al tocarla abre los requisitos y ventajas', (tester) async {
       await _montarPerfil(tester, enOnboarding: false);
 

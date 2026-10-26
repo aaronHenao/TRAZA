@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 /// avisar que algo está mal: por eso los errores se devuelven por campo.
 enum CampoRecompensa { nombre, descripcion, puntos }
 
-/// Lo que admiten los `check` de `recompensas` (`0037_recompensas.sql`).
+/// Lo que admiten los `check` de `recompensas` (`0049_recompensas.sql`).
 const maxCaracteresNombreRecompensa = 60;
 const maxCaracteresDescripcionRecompensa = 280;
 

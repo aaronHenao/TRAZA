@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/dificultad.dart';
 import '../../models/punto_gps.dart';
 import '../../models/ruta.dart';
+import '../../services/foro_service.dart' show usuarioActualProvider;
 import '../../services/reloj_provider.dart';
+import '../../services/roles_service.dart';
 import '../../services/revision_clasificacion_provider.dart';
 import '../../services/rutas_provider.dart';
 import '../../theme/app_colors.dart';
@@ -18,6 +21,7 @@ import '../../widgets/tarjeta_reto.dart' show TarjetaReto;
 import '../../widgets/tarjeta_ruta.dart';
 import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_card.dart';
+import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import 'revisar_clasificacion_screen.dart';
 
@@ -32,6 +36,11 @@ import 'revisar_clasificacion_screen.dart';
 /// desde el Sprint 1, y el segundo depende de él.
 ///
 /// Dice también su dificultad, y si un Runner Experto la revisó (SCRUM-264).
+///
+/// Es también donde pasa la clasificación (SCRUM-363): todos ven la
+/// dificultad; el Runner Experto, en una ruta ajena en revisión, la asigna
+/// mirando el mapa; y el autor ve en qué va la suya y, ya clasificada,
+/// confirma su publicación.
 class DetalleRutaScreen extends ConsumerWidget {
   const DetalleRutaScreen({required this.rutaId, this.vistaPrevia, super.key});
 
@@ -64,10 +73,19 @@ class DetalleRutaScreen extends ConsumerWidget {
   static const claveReintentar = Key('detalle-ruta-reintentar');
   static const claveCargandoTrazado = Key('detalle-ruta-cargando-trazado');
 
+  // Clasificación (SCRUM-363).
+  static const claveEstado = Key('detalle-ruta-estado');
+  static const clavePublicar = Key('detalle-ruta-publicar');
+  static const claveClasificar = Key('detalle-ruta-clasificar');
+  static Key claveOpcionDificultad(Dificultad dificultad) =>
+      Key('detalle-ruta-dificultad-${dificultad.valorDb}');
+  static const claveAsignar = Key('detalle-ruta-asignar');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ruta = ref.watch(rutaProvider(rutaId));
     final vistaPrevia = this.vistaPrevia;
+    final usuario = _usuarioActual(ref);
 
     return Scaffold(
       body: SafeArea(
@@ -80,6 +98,7 @@ class DetalleRutaScreen extends ConsumerWidget {
                   AsyncData(value: final ruta?) => _Contenido(
                     ruta: ruta,
                     ahora: ref.read(relojProvider)(),
+                    usuario: usuario,
                   ),
                   // Null: no existe, o dejó de estar publicada mientras se
                   // miraba el listado.
@@ -120,11 +139,24 @@ class DetalleRutaScreen extends ConsumerWidget {
   }
 }
 
+/// Quién tiene la sesión, o null si no hay ninguna o Supabase todavía no
+/// está inicializado (como en las pruebas de widget que no la sustituyen),
+/// igual que `_usuarioActual()` de `perfil_screen.dart`. Sin sesión el detalle
+/// se ve igual, solo sin las acciones de SCRUM-363.
+String? _usuarioActual(WidgetRef ref) {
+  try {
+    return ref.read(usuarioActualProvider)();
+  } on Object {
+    return null;
+  }
+}
+
 class _Contenido extends StatelessWidget {
   const _Contenido({
     required this.ruta,
     required this.ahora,
     this.cargandoTrazado = false,
+    this.usuario,
   });
 
   final Ruta ruta;
@@ -132,6 +164,10 @@ class _Contenido extends StatelessWidget {
 
   /// Si [ruta] es la del listado y su trazado todavía no llega (SCRUM-250).
   final bool cargandoTrazado;
+
+  /// Quién la mira: decide qué acciones se ofrecen (SCRUM-363). Con la
+  /// vista previa del listado no se ofrece ninguna.
+  final String? usuario;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +204,16 @@ class _Contenido extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         _Dificultad(ruta: ruta, ahora: ahora),
         _RevisarClasificacion(rutaId: ruta.id),
+        if (usuario == ruta.autorId && _EstadoDelAutor.aplicaA(ruta)) ...[
+          const SizedBox(height: AppSpacing.md),
+          _EstadoDelAutor(
+            ruta: ruta,
+            puedePublicar: ruta.publicablePor(usuario),
+          ),
+        ],
+        // El rol solo se pregunta si, por lo demás, la podría clasificar.
+        if (ruta.clasificablePor(usuario, esExperto: true))
+          _ClasificarSiEsExperto(ruta: ruta, usuario: usuario),
         if (descripcion != null && descripcion.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
           const Text(
@@ -255,8 +301,105 @@ class _Distancia extends StatelessWidget {
   }
 }
 
-/// La dificultad de la ruta y si un Runner Experto la revisó (SCRUM-264,
-/// criterio 5 de HU-35).
+/// En qué va la ruta, para su autor (SCRUM-363): pendiente de revisión
+/// (criterio 1), lista para publicar (criterio 2) o con la dificultad
+/// pendiente (criterio 3).
+class _EstadoDelAutor extends ConsumerStatefulWidget {
+  const _EstadoDelAutor({required this.ruta, required this.puedePublicar});
+
+  final Ruta ruta;
+
+  /// `Ruta.publicablePor`: ya clasificada y es suya (criterio 2).
+  final bool puedePublicar;
+
+  static bool aplicaA(Ruta ruta) => switch (ruta.estado) {
+    EstadoRuta.enRevision ||
+    EstadoRuta.revisionExperto ||
+    EstadoRuta.clasificada ||
+    EstadoRuta.datosIncompletos => true,
+    _ => false,
+  };
+
+  @override
+  ConsumerState<_EstadoDelAutor> createState() => _EstadoDelAutorState();
+}
+
+class _EstadoDelAutorState extends ConsumerState<_EstadoDelAutor> {
+  bool _publicando = false;
+
+  Future<void> _publicar() async {
+    if (_publicando) return;
+    setState(() => _publicando = true);
+    try {
+      final resultado = await ref
+          .read(confirmacionPublicacionRutaProvider)
+          .confirmar(widget.ruta);
+      if (!mounted) return;
+
+      mostrarToast(context, switch (resultado) {
+        // El detalle se recarga solo: `confirmar` invalida la ruta.
+        RutaPublicadaConDificultad() => ConfirmacionPublicacionRuta.publicada,
+        ConfirmacionNoGuardada(:final mensaje) => mensaje,
+      });
+    } finally {
+      if (mounted) setState(() => _publicando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final titulo = widget.ruta.estado.etiqueta;
+    final detalle = switch (widget.ruta.estado) {
+      EstadoRuta.clasificada =>
+        'Un Runner Experto ya le asignó la dificultad. Publícala para que la '
+            'vea la comunidad.',
+      EstadoRuta.datosIncompletos =>
+        'No se puede clasificar: falta la distancia de la ruta.',
+      // Primero el administrador (SCRUM-321).
+      EstadoRuta.enRevision =>
+        'El administrador la revisará y después un Runner Experto le '
+            'asignará la dificultad.',
+      _ => 'Un Runner Experto le asignará la dificultad.',
+    };
+
+    return TrazaCard(
+      key: DetalleRutaScreen.claveEstado,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            titulo,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            detalle,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.ink2,
+              height: 1.4,
+            ),
+          ),
+          if (widget.puedePublicar) ...[
+            const SizedBox(height: AppSpacing.md),
+            FilledButton(
+              key: DetalleRutaScreen.clavePublicar,
+              onPressed: _publicando ? null : _publicar,
+              child: const Text('Publicar ruta'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// La dificultad de la ruta: que la asignó un Runner Experto (criterio 2 de
+/// SCRUM-363) y si otro la revisó (SCRUM-264, criterio 5 de HU-35).
 ///
 /// De quién la revisó solo se dice que fue un Runner Experto, y cuándo: eso
 /// es lo que le da confianza a quien la va a correr, y el nombre no le
@@ -307,6 +450,11 @@ class _Dificultad extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
+                  if (dificultad != null)
+                    const Text(
+                      'Asignada por un Runner Experto',
+                      style: detalle,
+                    ),
                   if (dificultad != null && revisadaEn != null)
                     Row(
                       children: [
@@ -339,6 +487,118 @@ class _Dificultad extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Muestra [_Clasificar] solo si quien mira es Runner Experto. Consulta el
+/// rol aquí y no en toda la pantalla: así abrir una ruta publicada no lo
+/// pregunta.
+class _ClasificarSiEsExperto extends ConsumerWidget {
+  const _ClasificarSiEsExperto({required this.ruta, required this.usuario});
+
+  final Ruta ruta;
+  final String? usuario;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Si falla o no ha llegado, no es experto: no se ofrece nada que la base
+    // después rechazaría.
+    final esExperto = ref.watch(esExpertoProvider).valueOrNull ?? false;
+    if (!ruta.clasificablePor(usuario, esExperto: esExperto)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: _Clasificar(ruta: ruta),
+    );
+  }
+}
+
+/// La dificultad que asigna el Runner Experto (criterio 1 de SCRUM-363).
+/// Mira el mapa y la distancia de arriba, elige y asigna.
+class _Clasificar extends ConsumerStatefulWidget {
+  const _Clasificar({required this.ruta});
+
+  final Ruta ruta;
+
+  @override
+  ConsumerState<_Clasificar> createState() => _ClasificarState();
+}
+
+class _ClasificarState extends ConsumerState<_Clasificar> {
+  Dificultad? _elegida;
+  bool _asignando = false;
+
+  Future<void> _asignar(Dificultad dificultad) async {
+    if (_asignando) return;
+    setState(() => _asignando = true);
+    try {
+      final resultado = await ref
+          .read(clasificacionRutaProvider)
+          .clasificar(widget.ruta, dificultad);
+      if (!mounted) return;
+
+      switch (resultado) {
+        case RutaClasificada():
+          // Ya no está en revisión: el experto deja de verla. Vuelve a su
+          // bandeja, que se recarga sin ella.
+          context.pop();
+          mostrarToast(context, ClasificacionRuta.clasificada);
+        case ClasificacionNoGuardada(:final mensaje):
+          mostrarToast(context, mensaje);
+      }
+    } finally {
+      if (mounted) setState(() => _asignando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elegida = _elegida;
+
+    return TrazaCard(
+      key: DetalleRutaScreen.claveClasificar,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Asigna la dificultad',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Mira el recorrido y su distancia. El autor la publica cuando '
+            'la tenga.',
+            style: TextStyle(fontSize: 13, color: AppColors.ink2, height: 1.4),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final dificultad in Dificultad.values)
+                ChoiceChip(
+                  key: DetalleRutaScreen.claveOpcionDificultad(dificultad),
+                  label: Text(dificultad.etiqueta),
+                  selected: dificultad == elegida,
+                  onSelected: (_) => setState(() => _elegida = dificultad),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(
+            key: DetalleRutaScreen.claveAsignar,
+            onPressed: elegida == null || _asignando
+                ? null
+                : () => _asignar(elegida),
+            child: const Text('Asignar dificultad'),
+          ),
+        ],
       ),
     );
   }

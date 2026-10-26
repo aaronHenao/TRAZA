@@ -22,6 +22,7 @@ import 'screens/home/runner_experto_screen.dart';
 import 'widgets/navegacion_principal.dart';
 import 'screens/notificaciones/notificaciones_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
+import 'screens/rutas/rutas_por_clasificar_screen.dart';
 import 'screens/rutas/seccion_rutas.dart';
 import 'screens/onboarding/permisos_screen.dart';
 import 'screens/retos/detalle_reto_screen.dart';
@@ -36,6 +37,7 @@ import 'theme/app_theme.dart';
 import 'widgets/puerta_admin.dart';
 import 'widgets/requiere_permiso_ubicacion.dart';
 import 'widgets/solo_administrador.dart';
+import 'widgets/solo_experto.dart';
 import 'widgets/ventana_rol_experto.dart';
 
 Future<void> main() async {
@@ -178,6 +180,14 @@ final _navegacion = GoRouter(
     GoRoute(
       path: RunnerExpertoScreen.ruta,
       builder: (context, state) => const RunnerExpertoScreen(),
+    ),
+    // La bandeja del Runner Experto (SCRUM-363), desde su perfil. Tras
+    // SoloExperto: escribir la dirección a mano no es un atajo. La barrera de
+    // verdad es `clasificar_ruta` en la base.
+    GoRoute(
+      path: RutasPorClasificarScreen.ruta,
+      builder: (context, state) =>
+          const SoloExperto(hijo: RutasPorClasificarScreen()),
     ),
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(

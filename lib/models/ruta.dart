@@ -6,21 +6,47 @@ import 'punto_gps.dart';
 /// En qué situación está una ruta de la comunidad.
 ///
 /// Los nombres coinciden con la restricción `estado in (...)` de la tabla
-/// `rutas` (`0029_rutas.sql`).
+/// `rutas` (`0029_rutas.sql`, ampliada en `0045_clasificacion_de_rutas.sql`).
 enum EstadoRuta {
-  /// Esperando a que un Runner Experto la apruebe (criterio 1 de SCRUM-241).
-  /// Solo la ven su autor, el experto y el administrador.
+  /// Recién publicada: espera la revisión del administrador (SCRUM-321).
+  /// Solo la ven su autor y el administrador.
   enRevision('en_revision'),
 
-  /// Aprobada y visible para toda la comunidad.
+  /// El administrador la aprobó: espera a que un Runner Experto le asigne la
+  /// dificultad (criterio 1 de SCRUM-363). Solo la ven su autor, los
+  /// expertos y el administrador.
+  revisionExperto('revision_experto'),
+
+  /// Clasificada y confirmada por su autor: visible para toda la comunidad.
   publicada('publicada'),
 
-  /// El experto no la aprobó. La ve su autor con el motivo.
-  rechazada('rechazada');
+  /// El administrador o el experto no la aprobó. La ve su autor con el
+  /// motivo.
+  rechazada('rechazada'),
+
+  /// Un Runner Experto ya le asignó la dificultad: espera a que su autor
+  /// confirme la publicación (criterio 2 de SCRUM-363).
+  clasificada('clasificada'),
+
+  /// Le faltan datos para clasificarla (la distancia): quedó registrada con
+  /// la dificultad pendiente y no llega a los expertos (criterio 3 de
+  /// SCRUM-363).
+  datosIncompletos('datos_incompletos');
 
   const EstadoRuta(this.valorDb);
 
   final String valorDb;
+
+  /// Cómo se le dice al autor en qué va su ruta (SCRUM-363). Lo usan el
+  /// detalle y la pantalla de publicar, para que digan lo mismo.
+  String get etiqueta => switch (this) {
+    enRevision => 'Pendiente de revisión del administrador',
+    revisionExperto => 'Pendiente de revisión del Runner Experto',
+    publicada => 'Publicada',
+    rechazada => 'Rechazada',
+    clasificada => 'Lista para publicar',
+    datosIncompletos => 'Dificultad pendiente',
+  };
 
   static EstadoRuta? desdeDb(String? valor) {
     for (final estado in values) {
@@ -131,8 +157,7 @@ class Ruta {
   final double? distanciaKm;
 
   /// La que le asignó un Runner Experto (SCRUM-363), o null si todavía no
-  /// tiene: "Sin clasificar". Hasta que la base guarde `rutas.dificultad`,
-  /// todas llegan así.
+  /// tiene: "Sin clasificar".
   final Dificultad? dificultad;
 
   /// Cuándo un Runner Experto confirmó o corrigió su dificultad (SCRUM-264),
@@ -155,6 +180,24 @@ class Ruta {
   /// Si se le puede mostrar la distancia a alguien (criterio 4 de
   /// SCRUM-240: cuando no, hay que avisar).
   bool get tieneDistancia => distanciaKm != null;
+
+  /// Si [usuarioId], con o sin el rol de Runner Experto según [esExperto],
+  /// puede asignarle la dificultad: el administrador ya la aprobó y no es
+  /// suya (SCRUM-363 + SCRUM-321).
+  ///
+  /// Lo mismo exige `clasificar_ruta` (0048); aquí solo decide si se ofrece.
+  bool clasificablePor(String? usuarioId, {required bool esExperto}) =>
+      esExperto &&
+      usuarioId != null &&
+      usuarioId != autorId &&
+      estado == EstadoRuta.revisionExperto;
+
+  /// Si [usuarioId] puede confirmar su publicación: es el autor y un experto
+  /// ya la clasificó (criterio 2 de SCRUM-363).
+  bool publicablePor(String? usuarioId) =>
+      usuarioId != null &&
+      usuarioId == autorId &&
+      estado == EstadoRuta.clasificada;
 
   factory Ruta.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];

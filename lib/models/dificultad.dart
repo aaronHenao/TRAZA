@@ -2,12 +2,11 @@
 /// rutas (criterio 1 de HU-36).
 ///
 /// La asigna un Runner Experto antes de publicar la ruta (SCRUM-363). Una
-/// ruta que todavía no la tiene va "Sin clasificar", y así van todas
-/// mientras la base no la guarde: la app ya sabe leerla, mostrarla y
-/// filtrar por ella (SCRUM-275).
+/// ruta que todavía no la tiene va "Sin clasificar". La app la lee, la
+/// muestra y filtra por ella (SCRUM-275).
 ///
-/// En la base va en `rutas.dificultad`, como [valorDb]. Quien cree esa
-/// columna en SCRUM-363 tiene que usar esos mismos valores.
+/// En la base va en `rutas.dificultad`, como [valorDb]: los mismos valores
+/// que admite `rutas_dificultad_valida` (0045).
 enum Dificultad {
   facil('facil', 'Fácil', 'fáciles'),
   moderada('moderada', 'Moderada', 'moderadas'),

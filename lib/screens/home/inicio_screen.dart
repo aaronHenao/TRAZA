@@ -3,30 +3,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/resumen_entrenamiento.dart';
-import '../../models/resumen_semana.dart';
 import '../../services/inicio_provider.dart';
 import '../../services/notificaciones_provider.dart';
+import '../../services/permisos_provider.dart';
+import '../../services/progresion_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/bloque_reto_activo.dart';
+import '../../widgets/carrusel_rutas_cercanas.dart';
+import '../../widgets/indicadores_semana.dart';
 import '../../widgets/navegacion_principal.dart';
+import '../../widgets/tarjeta_nivel.dart';
 import '../../widgets/traza_card.dart';
 import '../notificaciones/notificaciones_screen.dart';
+import '../onboarding/perfil_screen.dart';
 import '../recompensas/catalogo_recompensas_screen.dart';
-import 'progresion_screen.dart';
 
 /// Portada de la app (`screen-inicio` del prototipo completo): a dónde llega
 /// el usuario al entrar y desde donde arranca todo.
 ///
 /// Del prototipo se toman el saludo, el bloque de progreso y el botón "+".
-/// Los retos y las rutas quedan fuera: son historias que todavía no existen.
-/// En su lugar, el progreso muestra lo que el usuario sí tiene hoy: el
-/// objetivo semanal del perfil, sus últimos entrenamientos y el acceso a su
-/// progresión de niveles (SCRUM-178).
+/// Hoy muestra la tarjeta de nivel (SCRUM-286), el objetivo semanal del perfil
+/// y los últimos entrenamientos. Los retos y las rutas llegan con sus propias
+/// subtareas, cuando las historias que los producen existan.
 class InicioScreen extends ConsumerWidget {
   const InicioScreen({super.key});
 
-  static const claveAccesoProgresion = Key('inicio-progresion');
   static const claveAccesoRecompensas = Key('inicio-recompensas');
   static const claveNotificaciones = Key('inicio-notificaciones');
 
@@ -40,11 +43,22 @@ class InicioScreen extends ConsumerWidget {
         bottom: false,
         child: RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(resumenSemanaProvider);
-            ref.invalidate(ultimosEntrenamientosProvider);
-            // Y la campana, que es lo que puede haber cambiado sin que el
-            // usuario hiciera nada.
-            ref.invalidate(notificacionesSinLeerProvider);
+            ref
+              ..invalidate(resumenSemanaProvider)
+              ..invalidate(ultimosEntrenamientosProvider)
+              // Los retos del indicador y del bloque (SCRUM-287 y SCRUM-288).
+              ..invalidate(retosEnCursoProvider)
+              // Las rutas del carrusel: la comunidad publica mientras el
+              // usuario hace otra cosa (SCRUM-289).
+              ..invalidate(rutasCercanasProvider)
+              // Y el permiso de ubicación, que el usuario pudo conceder en los
+              // ajustes del teléfono (SCRUM-290).
+              ..read(permisosProvider.notifier).actualizar()
+              // La XP y los niveles de la tarjeta (SCRUM-286).
+              ..invalidate(progresionProvider)
+              // Y la campana, que es lo que puede haber cambiado sin que el
+              // usuario hiciera nada.
+              ..invalidate(notificacionesSinLeerProvider);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -57,10 +71,19 @@ class InicioScreen extends ConsumerWidget {
             children: const [
               _Saludo(),
               SizedBox(height: AppSpacing.lg),
-              _ProgresoSemanal(),
+              // El nivel primero, como en el prototipo (SCRUM-286).
+              TarjetaNivel(),
               SizedBox(height: AppSpacing.md),
-              _AccesoProgresion(),
-              SizedBox(height: AppSpacing.md),
+              // Los tres indicadores de la semana (SCRUM-287).
+              IndicadoresSemana(),
+              SizedBox(height: AppSpacing.lg),
+              // El reto que hay que atender hoy (SCRUM-288).
+              BloqueRetoActivo(),
+              SizedBox(height: AppSpacing.lg),
+              // Las rutas de la comunidad, de lado (SCRUM-289).
+              CarruselRutasCercanas(),
+              SizedBox(height: AppSpacing.lg),
+              // Lo que puede obtener con sus puntos (SCRUM-374).
               _AccesoRecompensas(),
               SizedBox(height: AppSpacing.lg),
               _UltimosEntrenamientos(),
@@ -148,168 +171,6 @@ class _Campana extends ConsumerWidget {
   }
 }
 
-/// Lo que lleva esta semana frente a su objetivo de distancia, con la barra
-/// de progreso del prototipo (`.lv-track`).
-class _ProgresoSemanal extends ConsumerWidget {
-  const _ProgresoSemanal();
-
-  static const claveAvance = Key('inicio-avance-semanal');
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final resumen = ref.watch(resumenSemanaProvider);
-
-    return TrazaCard(
-      child: switch (resumen) {
-        AsyncData(:final value) => _Avance(resumen: value),
-        AsyncError() => const _AvisoTarjeta(
-          'No pudimos cargar tu progreso de esta semana.',
-        ),
-        _ => const _AvisoTarjeta('Cargando tu progreso…'),
-      },
-    );
-  }
-}
-
-class _Avance extends StatelessWidget {
-  const _Avance({required this.resumen});
-
-  final ResumenSemana resumen;
-
-  @override
-  Widget build(BuildContext context) {
-    final progreso = resumen.progreso;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'ESTA SEMANA',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.66,
-            color: AppColors.ink2,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Flexible(
-              child: Text(
-                resumen.avanceTexto,
-                key: _ProgresoSemanal.claveAvance,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            // Expanded y no Spacer: el conteo queda igual contra el borde
-            // derecho, pero con el texto del sistema en grande cede espacio
-            // en vez de desbordar la tarjeta.
-            Expanded(
-              child: Text(
-                resumen.entrenamientos == 1
-                    ? '1 entrenamiento'
-                    : '${resumen.entrenamientos} entrenamientos',
-                textAlign: TextAlign.end,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
-              ),
-            ),
-          ],
-        ),
-        if (progreso != null) ...[
-          const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: LinearProgressIndicator(
-              value: progreso,
-              minHeight: 8,
-              backgroundColor: AppColors.bgAlt,
-              valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-            ),
-          ),
-        ] else ...[
-          const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Ponte una meta de distancia en tu perfil para seguirla desde aquí.',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.ink2,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// Entrada a la progresión de niveles (SCRUM-178).
-///
-/// La portada no repite los datos: quien quiere saber cuánto le falta para
-/// subir entra aquí y los ve juntos, sin que esta tarjeta tenga que consultar
-/// nada para pintarse.
-class _AccesoProgresion extends StatelessWidget {
-  const _AccesoProgresion();
-
-  @override
-  Widget build(BuildContext context) {
-    return TrazaCard(
-      key: InicioScreen.claveAccesoProgresion,
-      // `push`: al cerrarla se vuelve a la portada.
-      onTap: () => context.push(ProgresionScreen.ruta),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppColors.secondaryTint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.stairs_outlined,
-              size: 20,
-              color: AppColors.secondaryDark,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tu progresión',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Mira cuánto te falta para el siguiente nivel',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.ink2),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(Icons.chevron_right, size: 20, color: AppColors.ink3),
-        ],
-      ),
-    );
-  }
-}
-
 /// Acceso al catálogo de recompensas (SCRUM-374): lo que el corredor puede
 /// obtener con sus puntos.
 class _AccesoRecompensas extends StatelessWidget {
@@ -391,7 +252,9 @@ class _UltimosEntrenamientos extends ConsumerWidget {
             ),
             if (ultimos.valueOrNull?.isNotEmpty ?? false)
               GestureDetector(
-                onTap: () => context.go('/historial'),
+                // El historial completo vive en el perfil desde SCRUM-285.
+                onTap: () =>
+                    context.go(PerfilScreen.rutaCon(PestanaPerfil.actividades)),
                 child: const Text(
                   'Ver todos',
                   style: TextStyle(

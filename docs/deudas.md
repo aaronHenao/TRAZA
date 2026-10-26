@@ -155,24 +155,77 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
 - **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
 
+## SCRUM-289 y SCRUM-247: las rutas de la portada y de Explorar rutas
+
+**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240). Desde SCRUM-247, cada ruta va en `TarjetaRutaExplorar` (`lib/widgets/tarjeta_ruta_explorar.dart`), la misma tarjeta de la lista de Explorar rutas: miniatura del recorrido, nombre, dificultad, distancia, desnivel y quién la creó.
+
+**Qué falta, y de quién depende:**
+
+- **La cercanía en el carrusel.** Explorar rutas ya ordena por cercanía (SCRUM-246, con `rutas_cercanas` de 0037), pero el carrusel todavía muestra las últimas publicadas. Lo que falta es que `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) use la misma consulta y la ubicación del usuario; el widget no cambia. Mientras tanto, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
+- **El desnivel.** No hay historia que lo produzca: los puntos GPS que guarda la app no llevan altitud, así que haría falta guardarla al entrenar o pedírsela a un servicio de elevación. Hasta entonces la tarjeta dice "Desnivel no disponible" (`TarjetaRutaExplorar.sinDesnivel`).
+
+## SCRUM-363: clasificación de la ruta por un Runner Experto
+
+**Qué quedó hecho:**
+
+- `0045_clasificacion_de_rutas.sql`: `rutas.dificultad` y `clasificada_por`, los estados `clasificada` y `datos_incompletos`, y `preparar_ruta`, que manda la ruta a revisión si tiene distancia o la deja con la dificultad pendiente si no (criterio 3). El experto asigna con `clasificar_ruta` y el autor publica con `confirmar_publicacion_ruta`, las dos `security definer` (nadie actualiza `rutas` directo). Aviso `ruta_clasificada` para el autor. Trae su script de verificación para el SQL Editor.
+- Bandeja "Rutas por clasificar" desde el Perfil del Runner Experto; en el detalle de la ruta, la dificultad para todos, el selector para el experto y el estado y el botón "Publicar ruta" para el autor.
+
+- `0048_flujo_unico_de_revision.sql`: une esta HU con SCRUM-321, que dejó en la base (a mano, sin migración en el repo) una revisión en dos etapas. El camino queda así: publicar → `en_revision` (espera al administrador) → `revision_experto` (espera al Runner Experto) → `clasificada` (el experto aprobó asignando la dificultad) → `publicada` (el autor confirmó). El administrador y el experto pueden rechazar con motivo (`decidir_revision_ruta`). El experto ya no aprueba por `decidir_revision_ruta`: aprobar es `clasificar_ruta`, que ahora parte de `revision_experto` y deja su fila en `revisiones_ruta`. Quita la policy de 0047 (`en_revision` ahora es del administrador). Trae su script de verificación, que recorre el flujo completo y los rechazos.
+
+Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la guarda la base, `rutas_cercanas` y `buscar_rutas` la devuelven, Explorar rutas filtra por ella y el detalle la muestra.
+
+**Qué falta:**
+
+- **Pendiente y desnivel.** La HU los nombra, pero la app no guarda altitud (`0001`: "puntos_gps SIN altitud, a petición explícita"). Acordado con el equipo: el experto clasifica con la distancia y el mapa. Para usarlos haría falta guardar la altitud al entrenar o pedírsela a un servicio de elevación al guardar la ruta; con ellos, `preparar_ruta` podría exigirlos para "datos suficientes" y el detalle mostrarlos.
+- **Completar los datos.** Una ruta en `datos_incompletos` se queda así: no hay de dónde sacar la distancia que le falta, y el índice de `0031` no deja volver a publicar ese entrenamiento (solo las rechazadas se pueden mandar de nuevo). Si se resuelve la distancia, haría falta una función que la recalcule y la pase a `en_revision`.
+- **La migración de SCRUM-321 en el repo.** `revisiones_ruta`, `decidir_revision_ruta`, `avisar_ruta_rechazada` y la policy `"el runner experto ve las rutas pendientes de su revision"` están en la base, pero en ninguna migración. `0048` depende de ellas: quien hizo la 321 tiene que subir su `.sql` con un número anterior al de `0048`, o un proyecto nuevo armado desde el repo falla al correr `0048`.
+- **Las pantallas del administrador y del rechazo (SCRUM-321).** Tampoco están en el repo. Mientras no lleguen, una ruta recién publicada se queda en `en_revision` hasta que el administrador la apruebe desde el SQL Editor (`update rutas set estado = 'revision_experto' where id = '...'`), y el experto no tiene botón para rechazar: solo asigna la dificultad. Las pruebas de la app simulan la aprobación con `RutasRepositorioFalso.aprobarComoAdministrador`.
+- **Los scripts de verificación de 0045 y 0047** describen el flujo de antes (el experto clasifica desde `en_revision`): después de `0048` fallan a propósito. El que vale es el de `0048`.
+- **Tocar el aviso.** La bandeja de notificaciones no abre la ruta. El autor llega a confirmarla por "Ver mi ruta" en la pantalla de publicar de ese entrenamiento.
+
+## SCRUM-259 (HU-35): revisar la clasificación del Runner Experto
+
+**Qué quedó hecho:** la regla de quién puede revisar está en la base: `puede_revisar_clasificacion(ruta_id)` (0042, SCRUM-260) dice que sí a un Runner Experto que no sea el autor de la ruta. La pantalla de revisión (`lib/screens/rutas/revisar_clasificacion_screen.dart`, SCRUM-261) muestra la ruta, su dificultad propuesta y los datos en que se basa, y se abre desde el detalle de la ruta solo para quien puede revisar. Los botones de confirmar (SCRUM-262) y de elegir otra dificultad (SCRUM-263) ya están, y llaman a `confirmar_clasificacion` y a `corregir_clasificacion`; aparecen solo si la ruta tiene una dificultad propuesta, así que hoy no se ven. El detalle de la ruta muestra su dificultad y, si un Runner Experto la revisó, lo dice con la fecha (SCRUM-264); hoy todas van "Sin clasificar".
+
+**Qué falta, y de quién depende:**
+
+- **La función `confirmar_clasificacion` en la base.** Depende de que exista `rutas.dificultad` (SCRUM-363); la puede escribir quien haga la 363, o Steven cuando la columna exista. La app la llama así y espera esto:
+  - `confirmar_clasificacion(p_ruta_id uuid)`, que no devuelve nada.
+  - Solo la usa quien pase `puede_revisar_clasificacion(p_ruta_id)`. A los demás les responde con el error `42501`, que la app muestra como "Ya no puedes revisar esta ruta".
+  - Si la ruta no tiene dificultad, no hay nada que confirmar: error `22023`.
+  - Deja la ruta marcada como revisada, con quién y cuándo, sin cambiar la dificultad. Dónde se guarda eso —columnas nuevas en `rutas` o la fila de `revisiones_ruta` de la etapa `experto` (SCRUM-321)— está por acordar con el equipo.
+  - Solo con sesión: quitársela a `public` y a `anon`, y dársela a `authenticated`.
+- **La función `corregir_clasificacion` en la base**, con la misma dependencia. La app la llama así y espera esto:
+  - `corregir_clasificacion(p_ruta_id uuid, p_dificultad text)`, que no devuelve nada. `p_dificultad` llega como `facil`, `moderada` o `dificil`; cualquier otro valor es error `22023`.
+  - Los mismos permisos que `confirmar_clasificacion`: `puede_revisar_clasificacion(p_ruta_id)`, o error `42501`.
+  - Reemplaza `rutas.dificultad` por `p_dificultad` y deja la ruta marcada como revisada, con quién y cuándo, donde se acuerde. Esa es su clasificación definitiva.
+- **Registrar la revisión (SCRUM-264).** `confirmar_clasificacion` y `corregir_clasificacion` tienen que guardar quién revisó (`auth.uid()`) y cuándo (`now()`). La app lee el cuándo como `dificultad_revisada_en` en la fila de la ruta, y le da igual de dónde salga:
+  - Puede ser una columna de `rutas`, con `dificultad_revisada_por` al lado.
+  - O un campo calculado `dificultad_revisada_en(rutas)` que lo saque de `revisiones_ruta` (SCRUM-321), como `miniatura` en 0038.
+
+  Cuando exista, hay que sumarlo a `_columnasConTrazado` de `SupabaseRutasRepository`, que es lo que pide el detalle. El quién no se le muestra a nadie: el criterio 5 pide decir que fue un Runner Experto, no cuál.
+- **Quién propone la dificultad.** HU-35 dice que el experto revisa una dificultad ya propuesta; SCRUM-363 dice que el experto la asigna. Está por decidir con el equipo, y define qué muestra la pantalla como "propuesta".
+- **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en la sección anterior).
+
 ## SCRUM-374: recompensas
 
 **Qué quedó hecho:**
 
-- `0037_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
+- `0049_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
 - Gestión del administrador (`/admin/recompensas`, desde el Panel) con su formulario, y catálogo del corredor (`/recompensas`, desde Inicio) con los puntos de cada recompensa.
 
 **Qué falta:**
 
 - **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. La tabla `canjes_recompensa` ya existe (SCRUM-380, ver abajo); el flujo de canjear es de otra HU.
-- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, la policy de update de `0038_canjes_recompensa.sql` ya lo permite al administrador: falta un interruptor en la tarjeta de la gestión.
-- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`. Lo mismo con `_AccesoRecompensas` y `_AccesoProgresion` de `inicio_screen.dart`: si llega una tercera tarjeta de acceso, conviene un `_Acceso` común.
+- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, la policy de update de `0050_canjes_recompensa.sql` ya lo permite al administrador: falta un interruptor en la tarjeta de la gestión.
+- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`.
 
 ## SCRUM-380: cambiar los puntos de una recompensa
 
 **Qué quedó hecho:**
 
-- `0038_canjes_recompensa.sql`: policy de update de `recompensas` para el administrador y tabla `canjes_recompensa`. Cada canje guarda los puntos que costó: el trigger `preparar_canje_recompensa` los copia del precio vigente al insertar (lo que mande el cliente se ignora) y `proteger_canje_recompensa` los deja fijos en cualquier update. Trae su script de verificación para el SQL Editor.
+- `0050_canjes_recompensa.sql`: policy de update de `recompensas` para el administrador y tabla `canjes_recompensa`. Cada canje guarda los puntos que costó: el trigger `preparar_canje_recompensa` los copia del precio vigente al insertar (lo que mande el cliente se ignora) y `proteger_canje_recompensa` los deja fijos en cualquier update. Trae su script de verificación para el SQL Editor.
 - Botón "Cambiar puntos" en cada tarjeta de la gestión, con un diálogo que no guarda una cantidad inválida.
 
 **Qué falta:**

@@ -155,15 +155,49 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
 - **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
 
+## SCRUM-289 y SCRUM-247: las rutas de la portada y de Explorar rutas
+
+**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240). Desde SCRUM-247, cada ruta va en `TarjetaRutaExplorar` (`lib/widgets/tarjeta_ruta_explorar.dart`), la misma tarjeta de la lista de Explorar rutas: miniatura del recorrido, nombre, dificultad, distancia, desnivel y quién la creó.
+
+**Qué falta, y de quién depende:**
+
+- **La cercanía en el carrusel.** Explorar rutas ya ordena por cercanía (SCRUM-246, con `rutas_cercanas` de 0037), pero el carrusel todavía muestra las últimas publicadas. Lo que falta es que `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) use la misma consulta y la ubicación del usuario; el widget no cambia. Mientras tanto, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
+- **La dificultad (SCRUM-363, y su revisión en HU-35 / SCRUM-259).** La tabla `rutas` todavía no tiene esa columna, así que todas las tarjetas dicen "Sin clasificar", que es la verdad de hoy (acordado con el equipo). Desde SCRUM-275 la app está lista para cuando exista: `Dificultad` (`lib/models/dificultad.dart`) tiene los tres niveles de HU-36, `Ruta.desdeSupabase` lee `rutas.dificultad`, la tarjeta la muestra y Explorar rutas la combina con el filtro de distancia. Lo que falta en la base (SCRUM-363): crear `rutas.dificultad` como texto con los valores `facil`, `moderada` o `dificil` (null mientras nadie la clasifique), y agregarla a `_columnas` de `SupabaseRutasRepository` y a lo que devuelven `rutas_cercanas` (0037) y `buscar_rutas` (0041); cambiar lo que devuelve una función obliga a borrarla y crearla de nuevo, con sus permisos. En la app, los chips de dificultad ya están (SCRUM-267) y escriben en `dificultadRutasProvider`; mientras ninguna ruta tenga dificultad, elegir una deja la lista vacía, y el mensaje explica que todavía no hay rutas clasificadas (SCRUM-270). El detalle de la ruta también la muestra, y dice si la revisó un Runner Experto (SCRUM-264).
+- **El desnivel.** No hay historia que lo produzca: los puntos GPS que guarda la app no llevan altitud, así que haría falta guardarla al entrenar o pedírsela a un servicio de elevación. Hasta entonces la tarjeta dice "Desnivel no disponible" (`TarjetaRutaExplorar.sinDesnivel`).
+
+## SCRUM-259 (HU-35): revisar la clasificación del Runner Experto
+
+**Qué quedó hecho:** la regla de quién puede revisar está en la base: `puede_revisar_clasificacion(ruta_id)` (0042, SCRUM-260) dice que sí a un Runner Experto que no sea el autor de la ruta. La pantalla de revisión (`lib/screens/rutas/revisar_clasificacion_screen.dart`, SCRUM-261) muestra la ruta, su dificultad propuesta y los datos en que se basa, y se abre desde el detalle de la ruta solo para quien puede revisar. Los botones de confirmar (SCRUM-262) y de elegir otra dificultad (SCRUM-263) ya están, y llaman a `confirmar_clasificacion` y a `corregir_clasificacion`; aparecen solo si la ruta tiene una dificultad propuesta, así que hoy no se ven. El detalle de la ruta muestra su dificultad y, si un Runner Experto la revisó, lo dice con la fecha (SCRUM-264); hoy todas van "Sin clasificar".
+
+**Qué falta, y de quién depende:**
+
+- **La función `confirmar_clasificacion` en la base.** Depende de que exista `rutas.dificultad` (SCRUM-363); la puede escribir quien haga la 363, o Steven cuando la columna exista. La app la llama así y espera esto:
+  - `confirmar_clasificacion(p_ruta_id uuid)`, que no devuelve nada.
+  - Solo la usa quien pase `puede_revisar_clasificacion(p_ruta_id)`. A los demás les responde con el error `42501`, que la app muestra como "Ya no puedes revisar esta ruta".
+  - Si la ruta no tiene dificultad, no hay nada que confirmar: error `22023`.
+  - Deja la ruta marcada como revisada, con quién y cuándo, sin cambiar la dificultad. Dónde se guarda eso —columnas nuevas en `rutas` o la fila de `revisiones_ruta` de la etapa `experto` (SCRUM-321)— está por acordar con el equipo.
+  - Solo con sesión: quitársela a `public` y a `anon`, y dársela a `authenticated`.
+- **La función `corregir_clasificacion` en la base**, con la misma dependencia. La app la llama así y espera esto:
+  - `corregir_clasificacion(p_ruta_id uuid, p_dificultad text)`, que no devuelve nada. `p_dificultad` llega como `facil`, `moderada` o `dificil`; cualquier otro valor es error `22023`.
+  - Los mismos permisos que `confirmar_clasificacion`: `puede_revisar_clasificacion(p_ruta_id)`, o error `42501`.
+  - Reemplaza `rutas.dificultad` por `p_dificultad` y deja la ruta marcada como revisada, con quién y cuándo, donde se acuerde. Esa es su clasificación definitiva.
+- **Registrar la revisión (SCRUM-264).** `confirmar_clasificacion` y `corregir_clasificacion` tienen que guardar quién revisó (`auth.uid()`) y cuándo (`now()`). La app lee el cuándo como `dificultad_revisada_en` en la fila de la ruta, y le da igual de dónde salga:
+  - Puede ser una columna de `rutas`, con `dificultad_revisada_por` al lado.
+  - O un campo calculado `dificultad_revisada_en(rutas)` que lo saque de `revisiones_ruta` (SCRUM-321), como `miniatura` en 0038.
+
+  Cuando exista, hay que sumarlo a `_columnasConTrazado` de `SupabaseRutasRepository`, que es lo que pide el detalle. El quién no se le muestra a nadie: el criterio 5 pide decir que fue un Runner Experto, no cuál.
+- **Quién propone la dificultad.** HU-35 dice que el experto revisa una dificultad ya propuesta; SCRUM-363 dice que el experto la asigna. Está por decidir con el equipo, y define qué muestra la pantalla como "propuesta".
+- **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en la sección anterior).
+
 ## SCRUM-374: recompensas
 
 **Qué quedó hecho:**
 
-- `0037_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
+- `0049_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
 - Gestión del administrador (`/admin/recompensas`, desde el Panel) con su formulario, y catálogo del corredor (`/recompensas`, desde Inicio) con los puntos de cada recompensa.
 
 **Qué falta:**
 
 - **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. SCRUM-380 va a crear la tabla `canjes_recompensa` solo para guardar los puntos del momento del canje; el flujo de canjear (una función `security definer` que valide el saldo y descuente) es de otra HU. Coordinar con quien la tenga para no crear dos tablas.
 - **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, va con una policy de update (la que agregue SCRUM-380 para cambiar los puntos) y un interruptor en la tarjeta de la gestión.
-- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`. Lo mismo con `_AccesoRecompensas` y `_AccesoProgresion` de `inicio_screen.dart`: si llega una tercera tarjeta de acceso, conviene un `_Acceso` común.
+- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`.

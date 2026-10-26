@@ -89,6 +89,16 @@ abstract class FuenteUbicacion {
 
   /// Stream de posiciones mientras haya alguien suscrito.
   Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion);
+
+  /// Dónde está el usuario ahora mismo, una sola lectura (SCRUM-245).
+  ///
+  /// Para quien necesita saberlo una vez —las rutas cercanas— y no seguir
+  /// al usuario: abrir el stream del rastreo para eso dejaría el GPS
+  /// encendido y gastando batería sin que nadie corra.
+  ///
+  /// Se rinde a los [tiempoMaximo] y lanza: bajo techo el primer fix puede
+  /// no llegar nunca, y una pantalla no puede quedarse esperándolo.
+  Future<PuntoGps> ubicacionActual({required Duration tiempoMaximo});
 }
 
 /// Texto de la notificación persistente de Android mientras se rastrea.
@@ -101,6 +111,21 @@ class UbicacionGeolocator implements FuenteUbicacion {
 
   @override
   Future<bool> servicioActivo() => Geolocator.isLocationServiceEnabled();
+
+  @override
+  Future<PuntoGps> ubicacionActual({required Duration tiempoMaximo}) async {
+    // Precisión media a propósito: esta lectura sirve para ordenar rutas
+    // por cercanía, no para dibujar un recorrido. Pedir la mejor tardaría
+    // más y gastaría más batería para mover la lista lo mismo.
+    final posicion = await Geolocator.getCurrentPosition(
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.medium,
+        timeLimit: tiempoMaximo,
+      ),
+    );
+
+    return aPunto(posicion);
+  }
 
   @override
   Stream<PuntoGps> posiciones(ConfiguracionRastreo configuracion) async* {

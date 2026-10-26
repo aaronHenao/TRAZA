@@ -33,18 +33,28 @@ void main() {
   Color colorDe(WidgetTester tester, String etiqueta) =>
       tester.widget<Text>(find.text(etiqueta)).style!.color!;
 
-  testWidgets('tiene las tres secciones que existen hoy', (tester) async {
+  testWidgets('tiene las seis secciones del prototipo, en su orden', (
+    tester,
+  ) async {
     await montar(tester);
 
-    expect(find.text('Inicio'), findsOneWidget);
-    expect(find.text('Historial'), findsOneWidget);
-    expect(find.text('Perfil'), findsOneWidget);
+    expect(SeccionPrincipal.values.map((s) => s.etiqueta), [
+      'Inicio',
+      'Progreso',
+      'Retos',
+      'Rutas',
+      'Foro',
+      'Perfil',
+    ]);
+    for (final etiqueta in ['Inicio', 'Progreso', 'Perfil']) {
+      expect(find.text(etiqueta), findsOneWidget);
+    }
   });
 
   testWidgets('marca la sección donde está el usuario', (tester) async {
-    await montar(tester, seccion: SeccionPrincipal.historial);
+    await montar(tester, seccion: SeccionPrincipal.foro);
 
-    expect(colorDe(tester, 'Historial'), AppColors.primary);
+    expect(colorDe(tester, 'Foro'), AppColors.primary);
     expect(colorDe(tester, 'Inicio'), AppColors.ink3);
     expect(colorDe(tester, 'Perfil'), AppColors.ink3);
   });
@@ -63,7 +73,7 @@ void main() {
       'nada atrás', (tester) async {
     final router = await montar(tester);
 
-    await tester.tap(find.text('Historial'));
+    await tester.tap(find.text('Retos'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Perfil'));
     await tester.pumpAndSettle();
@@ -152,6 +162,74 @@ void main() {
 
       expect(colorDe(tester, 'Progreso'), AppColors.primary);
       expect(colorDe(tester, 'Inicio'), AppColors.ink3);
+    });
+  });
+
+  group('sección Rutas (SCRUM-284)', () {
+    test('va entre Retos y Foro, con su icono y su ruta', () {
+      // El orden del prototipo: Inicio, Progreso, Retos, Rutas, Foro, Perfil.
+      final orden = SeccionPrincipal.values.map((s) => s.etiqueta).toList();
+      expect(
+        orden.indexOf('Rutas'),
+        orden.indexOf('Retos') + 1,
+        reason: 'Rutas va justo después de Retos',
+      );
+      expect(orden.indexOf('Rutas'), lessThan(orden.indexOf('Foro')));
+
+      expect(SeccionPrincipal.rutas.etiqueta, 'Rutas');
+      expect(SeccionPrincipal.rutas.icono, Icons.map_outlined);
+      expect(SeccionPrincipal.rutas.ruta, '/rutas');
+    });
+
+    testWidgets('tocar "Rutas" lleva a su sección', (tester) async {
+      final router = await montar(tester);
+
+      await tester.tap(find.text('Rutas'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Contenido de Rutas'), findsOneWidget);
+      expect(router.routerDelegate.currentConfiguration.uri.path, '/rutas');
+    });
+
+    testWidgets('está a la vista desde las demás secciones', (tester) async {
+      for (final seccion in SeccionPrincipal.values) {
+        if (seccion == SeccionPrincipal.rutas) continue;
+        await montar(tester, seccion: seccion);
+
+        expect(
+          find.text('Rutas'),
+          findsOneWidget,
+          reason: 'desde ${seccion.etiqueta}',
+        );
+      }
+    });
+
+    testWidgets('con Rutas, la barra sigue cabiendo en 320 px', (tester) async {
+      tester.view.physicalSize = const Size(320 * 3, 568 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await montar(tester, onNuevaActividad: () {});
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Rutas'), findsOneWidget);
+    });
+  });
+
+  group('Historial fuera de la barra (SCRUM-285)', () {
+    testWidgets('la barra ya no lo ofrece', (tester) async {
+      await montar(tester);
+
+      expect(find.text('Historial'), findsNothing);
+    });
+
+    test('ninguna sección lleva a /historial', () {
+      // Sus entrenamientos están en la pestaña "Actividades" del perfil.
+      expect(
+        SeccionPrincipal.values.map((seccion) => seccion.ruta),
+        isNot(contains('/historial')),
+      );
     });
   });
 

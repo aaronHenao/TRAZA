@@ -2,74 +2,59 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../models/historial_entrenamientos.dart';
-import '../../models/resumen_entrenamiento.dart';
-import '../../services/historial_service.dart';
-import '../../services/reloj_provider.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_dimens.dart';
-import '../../widgets/traza_top_bar.dart';
-import '../summary/resumen_screen.dart';
+import '../models/historial_entrenamientos.dart';
+import '../models/resumen_entrenamiento.dart';
+import '../screens/summary/resumen_screen.dart';
+import '../services/historial_service.dart';
+import '../services/reloj_provider.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_dimens.dart';
 
-/// Historial de entrenamientos (`screen-history`, SCRUM-44).
+/// Los entrenamientos que el corredor ya terminó (`screen-history`, SCRUM-44).
 ///
-/// Lista las sesiones finalizadas del usuario (SCRUM-123 y SCRUM-124) y al
-/// tocar una abre su resumen (SCRUM-125).
-class HistorialScreen extends ConsumerWidget {
-  const HistorialScreen({super.key});
+/// Lista las sesiones finalizadas (SCRUM-123 y SCRUM-126), abre el resumen de
+/// la que se toque (SCRUM-125) y se hace cargo de la espera y del error
+/// (SCRUM-127).
+///
+/// Hasta SCRUM-285 fue una pantalla con su propia sección en la barra
+/// inferior. Ahora es la pestaña "Actividades" del perfil, como en el
+/// prototipo, así que se entrega sin `Scaffold` ni barra de título: ocupa el
+/// alto que le dé quien la monte (un `Expanded`, por ejemplo).
+class ListaHistorial extends ConsumerWidget {
+  const ListaHistorial({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Como sección de la barra inferior no lleva flecha: se sale por la
-    // barra. Abierto encima de otra pantalla (el "+" de un resumen, por
-    // ejemplo) sí, para poder devolverse.
-    final volver = context.canPop() ? context.pop : null;
-
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            TrazaTopBar(titulo: 'Historial de entrenamientos', onAtras: volver),
-            Expanded(
-              // SCRUM-127: carga, error y datos.
-              child: ref
-                  .watch(historialProvider)
-                  .when(
-                    // Al reintentar también se ve el indicador de carga.
-                    skipLoadingOnRefresh: false,
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (_, _) => _EstadoCentrado(
-                      icono: Icons.cloud_off_outlined,
-                      titulo: 'No pudimos cargar tu historial',
-                      detalle: 'Revisa tu conexión e inténtalo de nuevo.',
-                      accion: OutlinedButton(
-                        onPressed: () => ref.invalidate(historialProvider),
-                        child: const Text('Reintentar'),
-                      ),
-                    ),
-                    data: (entrenamientos) => entrenamientos.isEmpty
-                        ? _EstadoCentrado(
-                            icono: Icons.schedule,
-                            titulo: 'Aún no tienes entrenamientos',
-                            detalle:
-                                'Cuando termines tu primer entrenamiento, '
-                                'aparecerá aquí.',
-                            accion: FilledButton(
-                              onPressed: () => context.go('/actividad'),
-                              child: const Text(
-                                'Iniciar mi primer entrenamiento',
-                              ),
-                            ),
-                          )
-                        : _Lista(entrenamientos: entrenamientos),
-                  ),
+    // SCRUM-127: carga, error y datos.
+    return ref
+        .watch(historialProvider)
+        .when(
+          // Al reintentar también se ve el indicador de carga.
+          skipLoadingOnRefresh: false,
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, _) => _EstadoCentrado(
+            icono: Icons.cloud_off_outlined,
+            titulo: 'No pudimos cargar tu historial',
+            detalle: 'Revisa tu conexión e inténtalo de nuevo.',
+            accion: OutlinedButton(
+              onPressed: () => ref.invalidate(historialProvider),
+              child: const Text('Reintentar'),
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+          data: (entrenamientos) => entrenamientos.isEmpty
+              ? _EstadoCentrado(
+                  icono: Icons.schedule,
+                  titulo: 'Aún no tienes entrenamientos',
+                  detalle:
+                      'Cuando termines tu primer entrenamiento, '
+                      'aparecerá aquí.',
+                  accion: FilledButton(
+                    onPressed: () => context.go('/actividad'),
+                    child: const Text('Iniciar mi primer entrenamiento'),
+                  ),
+                )
+              : _Lista(entrenamientos: entrenamientos),
+        );
   }
 }
 

@@ -67,6 +67,30 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('muestra el aviso de que un Runner Experto clasificó la ruta '
+        '(SCRUM-363)', (tester) async {
+      await _abrir(
+        tester,
+        notificaciones: [
+          notificacionDePrueba(
+            tipo: TipoNotificacion.rutaClasificada,
+            titulo: 'Tu ruta ya tiene dificultad',
+            mensaje:
+                'Un Runner Experto clasificó «Vuelta al estadio» como '
+                'moderada. Confírmala para publicarla.',
+            fechaCreacion: ahora,
+          ),
+        ],
+      );
+
+      expect(find.text('Tu ruta ya tiene dificultad'), findsOneWidget);
+      expect(find.textContaining('Confírmala para publicarla'), findsOneWidget);
+      expect(
+        find.byIcon(TipoNotificacion.rutaClasificada.icono),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('sin avisos lo dice en vez de dejar la pantalla vacía', (
       tester,
     ) async {

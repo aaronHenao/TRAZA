@@ -12,8 +12,10 @@ import 'package:traza/services/objetivos_service.dart';
 import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/services/perfil_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/roles_service.dart';
 import 'package:traza/screens/home/runner_experto_screen.dart';
 import 'package:traza/screens/onboarding/perfil_screen.dart';
+import 'package:traza/screens/rutas/rutas_por_clasificar_screen.dart';
 import 'package:traza/models/perfil_state.dart';
 import 'package:traza/widgets/configuracion_valor_objetivo.dart';
 import 'package:traza/screens/onboarding/permisos_screen.dart';
@@ -21,6 +23,7 @@ import 'package:traza/widgets/lista_historial.dart';
 import 'package:traza/widgets/seccion_insignias.dart';
 
 import '../utiles/insignias_falsas.dart';
+import '../utiles/roles_falso.dart';
 
 /// Pruebas de la pantalla de perfil: selección de objetivos (SCRUM-86), sus
 /// valores (SCRUM-87 y SCRUM-88), el guardado (SCRUM-89) y la edición de los
@@ -614,6 +617,28 @@ void main() {
       expect(find.byKey(PerfilScreen.claveRunnerExperto), findsNothing);
     });
 
+    testWidgets('a quien ya es Runner Experto no lo invita a serlo: tiene su '
+        'entrada a las rutas por clasificar (SCRUM-363)', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto(),
+      );
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsNothing);
+      expect(find.text('¿Quieres ser Runner Experto?'), findsNothing);
+    });
+
+    testWidgets('si no se pudo saber el rol, lo invita igual', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto()..error = StateError('sin red'),
+      );
+
+      expect(find.byKey(PerfilScreen.claveRunnerExperto), findsOneWidget);
+    });
+
     testWidgets('al tocarla abre los requisitos y ventajas', (tester) async {
       await _montarPerfil(tester, enOnboarding: false);
 
@@ -621,6 +646,83 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pantalla Runner Experto'), findsOneWidget);
+    });
+  });
+
+  group('rutas por clasificar del Runner Experto (SCRUM-363)', () {
+    final tarjeta = find.byKey(PerfilScreen.claveRutasPorClasificar);
+
+    /// Recorre el perfil hasta el final buscando la tarjeta: que no esté
+    /// arriba no basta para decir que no está.
+    Future<void> esperarQueNoEste(WidgetTester tester) async {
+      expect(tarjeta, findsNothing);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      expect(tarjeta, findsNothing);
+    }
+
+    testWidgets('a un Runner Experto le muestra la entrada a las rutas que '
+        'esperan su dificultad (criterio 1 de SCRUM-363)', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto(),
+      );
+
+      await tester.scrollUntilVisible(
+        tarjeta,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.descendant(
+          of: tarjeta,
+          matching: find.text('Rutas por clasificar'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al tocarla abre las rutas por clasificar', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto(),
+      );
+
+      await tester.scrollUntilVisible(
+        tarjeta,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(tarjeta);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla Rutas por clasificar'), findsOneWidget);
+    });
+
+    testWidgets('a un corredor sin el rol no se la muestra', (tester) async {
+      await _montarPerfil(tester, enOnboarding: false, roles: RolesFalso());
+
+      await esperarQueNoEste(tester);
+    });
+
+    testWidgets('si no se pudo saber el rol, tampoco', (tester) async {
+      await _montarPerfil(
+        tester,
+        enOnboarding: false,
+        roles: RolesFalso.experto()..error = StateError('sin red'),
+      );
+
+      await esperarQueNoEste(tester);
+    });
+
+    testWidgets('en el onboarding no aparece, aunque sea experto', (
+      tester,
+    ) async {
+      await _montarPerfil(tester, roles: RolesFalso.experto());
+
+      await esperarQueNoEste(tester);
     });
   });
 
@@ -862,6 +964,7 @@ Future<GoRouter> _montarPerfil(
   bool enOnboarding = true,
   InsigniasFalsas? insignias,
   HistorialRepository? historial,
+  RolesFalso? roles,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -901,6 +1004,11 @@ Future<GoRouter> _montarPerfil(
         builder: (_, _) =>
             const Scaffold(body: Text('Pantalla Runner Experto')),
       ),
+      GoRoute(
+        path: RutasPorClasificarScreen.ruta,
+        builder: (_, _) =>
+            const Scaffold(body: Text('Pantalla Rutas por clasificar')),
+      ),
     ],
   );
   addTearDown(router.dispose);
@@ -918,6 +1026,9 @@ Future<GoRouter> _montarPerfil(
           historial ?? _HistorialFalso(),
         ),
         relojProvider.overrideWithValue(() => _ahora),
+        // Sin roles indicados no se sustituye: el perfil tiene que aguantar
+        // no saber si la cuenta es experta (SCRUM-363).
+        if (roles != null) rolesRepositoryProvider.overrideWithValue(roles),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

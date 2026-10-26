@@ -241,7 +241,7 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 
 **Qué quedó hecho:**
 
-- `0039_retirada_recompensas.sql`: eliminar es retirar (`recompensas.retirada_en`), no borrar, para que los canjes sigan apuntando a su recompensa. La fecha la pone la base y no se puede quitar. Quien la canjeó la sigue pudiendo leer para su historial; los demás ya no la ven. El trigger del canje rechaza las retiradas. Trae su script de verificación para el SQL Editor.
+- `0051_retirada_recompensas.sql`: eliminar es retirar (`recompensas.retirada_en`), no borrar, para que los canjes sigan apuntando a su recompensa. La fecha la pone la base y no se puede quitar. Quien la canjeó la sigue pudiendo leer para su historial; los demás ya no la ven. El trigger del canje rechaza las retiradas. Trae su script de verificación para el SQL Editor.
 - Botón "Eliminar" en cada tarjeta de la gestión, con confirmación explícita. El catálogo y la gestión dejan de mostrar las retiradas.
 
 **Qué falta:**

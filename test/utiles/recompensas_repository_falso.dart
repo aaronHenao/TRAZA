@@ -36,6 +36,15 @@ class RecompensasRepositorioFalso implements RecompensasRepository {
   /// guardar.
   int? puntosRecibidos;
 
+  /// La última recompensa que se pidió retirar (SCRUM-385). Null si nadie lo
+  /// pidió: así se comprueba que sin confirmar no se retira nada.
+  Recompensa? recompensaRetirada;
+
+  /// Los ids de las recompensas retiradas. La fila sigue en [recompensas],
+  /// como en la base: retirar no borra, para que los canjes conserven a qué
+  /// apuntar (criterio 3 de SCRUM-385).
+  final retiradas = <String>{};
+
   @override
   Future<Recompensa> crear(NuevaRecompensa recompensa) async {
     recibida = recompensa;
@@ -56,27 +65,46 @@ class RecompensasRepositorioFalso implements RecompensasRepository {
     return creada;
   }
 
-  /// Lo que ve el corredor: solo lo disponible, de menos a más puntos, igual
-  /// que la consulta real.
+  /// Lo que ve el corredor: solo lo disponible y no retirado, de menos a más
+  /// puntos, igual que la consulta real.
   @override
   Future<List<Recompensa>> catalogo() async {
     consultasCatalogo++;
     final error = this.error;
     if (error != null) throw error;
 
-    return recompensas.where((r) => r.disponible).toList()
+    return recompensas
+        .where((r) => r.disponible && !retiradas.contains(r.id))
+        .toList()
       ..sort((a, b) => a.puntosRequeridos.compareTo(b.puntosRequeridos));
   }
 
-  /// Lo que ve el administrador: todo, de la más reciente a la más antigua.
+  /// Lo que ve el administrador: todo lo que no se retiró (SCRUM-385),
+  /// disponible o no, de la más reciente a la más antigua.
   @override
   Future<List<Recompensa>> todas() async {
     consultasTodas++;
     final error = this.error;
     if (error != null) throw error;
 
-    return [...recompensas]
+    return recompensas.where((r) => !retiradas.contains(r.id)).toList()
       ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
+  }
+
+  /// Como el update de `retirada_en` en la base (SCRUM-385): la fila se queda
+  /// en [recompensas] y desde ahí ni el catálogo ni la gestión la devuelven.
+  /// Si hay [error], no retira nada.
+  @override
+  Future<void> retirar(Recompensa recompensa) async {
+    recompensaRetirada = recompensa;
+    final error = this.error;
+    if (error != null) throw error;
+
+    // Como la base: sin la fila, el update no toca nada (PGRST116).
+    if (!recompensas.any((r) => r.id == recompensa.id)) {
+      throw const SoloAdministradorException();
+    }
+    retiradas.add(recompensa.id);
   }
 
   /// Como el update de la base (SCRUM-380): solo cambian los puntos de esa

@@ -140,6 +140,121 @@ void main() {
     });
   });
 
+  group('lo retirado ya no se muestra (criterio 2 de SCRUM-385)', () {
+    test('el catálogo del corredor deja fuera las retiradas, sin perder el '
+        'filtro de disponibles ni el orden por puntos', () async {
+      final supabase = _SupabaseFalso(filas: [fila]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.catalogo();
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'GET');
+      expect(peticion.url.path, '/rest/v1/recompensas');
+      final consulta = peticion.url.queryParameters;
+      expect(consulta['retirada_en'], 'is.null');
+      expect(consulta['disponible'], 'eq.true');
+      expect(consulta['order'], startsWith('puntos_requeridos.asc'));
+    });
+
+    test('la gestión del administrador también deja fuera las retiradas, '
+        'y sigue trayendo las no disponibles, de la más reciente a la más '
+        'antigua', () async {
+      final supabase = _SupabaseFalso(
+        filas: [
+          fila,
+          {...fila, 'id': 'recompensa-2', 'disponible': false},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final todas = await supabase.repositorio.todas();
+
+      final consulta = supabase.peticiones.single.url.queryParameters;
+      expect(consulta['retirada_en'], 'is.null');
+      expect(consulta.keys, isNot(contains('disponible')));
+      expect(consulta['order'], startsWith('fecha_creacion.desc'));
+      expect(todas.map((r) => r.disponible), [true, false]);
+    });
+  });
+
+  group('retirar (SCRUM-385)', () {
+    final recompensa = Recompensa.desdeSupabase(fila);
+    final filaRetirada = {...fila, 'retirada_en': '2026-10-20T14:00:00+00:00'};
+
+    test('marca esa recompensa como retirada: un PATCH a recompensas, por su '
+        'id, que manda solo retirada_en y pide la fila de vuelta (criterio 2 '
+        'de SCRUM-385)', () async {
+      final supabase = _SupabaseFalso(filas: [filaRetirada]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.retirar(recompensa);
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'PATCH');
+      expect(peticion.url.path, '/rest/v1/recompensas');
+      final consulta = peticion.url.queryParameters;
+      expect(consulta['id'], 'eq.recompensa-1');
+      // Filtra por esa recompensa y pide de vuelta la fila, una sola
+      // (`.single()`): si la policy no deja tocarla, llega PGRST116.
+      expect(consulta.keys.toSet(), {'id', 'select'});
+      expect(peticion.headers['Accept'], contains('vnd.pgrst.object+json'));
+      // Ni nombre, ni puntos, ni disponibilidad: solo la marca de retiro.
+      final cuerpo = jsonDecode(peticion.body) as Map<String, dynamic>;
+      expect(cuerpo.keys.toSet(), {'retirada_en'});
+      // Cualquier instante ISO-8601 sirve: la base lo reemplaza por now().
+      expect(cuerpo['retirada_en'], isA<String>());
+      expect(DateTime.tryParse(cuerpo['retirada_en'] as String), isNotNull);
+    });
+
+    test('no borra la fila ni toca los canjes: una sola petición, un PATCH a '
+        'recompensas, nunca un DELETE (criterio 3 de SCRUM-385)', () async {
+      final supabase = _SupabaseFalso(filas: [filaRetirada]);
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.retirar(recompensa);
+
+      expect(supabase.peticiones.map((p) => (p.method, p.url.path)), [
+        ('PATCH', '/rest/v1/recompensas'),
+      ]);
+      // Dicho explícito: la fila se queda para que los canjes ya hechos
+      // sigan teniendo a qué apuntar.
+      expect(
+        supabase.peticiones.map((p) => p.method),
+        isNot(contains('DELETE')),
+      );
+      expect(
+        supabase.peticiones.map((p) => p.url.path),
+        isNot(contains('/rest/v1/canjes_recompensa')),
+      );
+    });
+
+    for (final (codigo, causa) in [
+      ('42501', 'la seguridad a nivel de fila lo negó'),
+      ('PGRST116', 'la policy no dejó tocar la fila'),
+    ]) {
+      test('si $causa ($codigo), es que la cuenta no es administradora', () {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(
+          () => supabase.repositorio.retirar(recompensa),
+          throwsA(isA<SoloAdministradorException>()),
+        );
+      });
+    }
+
+    test('un error que no es de permisos no se disfraza', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '08006');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar(recompensa),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+  });
+
   group('cambiar los puntos (SCRUM-380)', () {
     final recompensa = Recompensa.desdeSupabase(fila);
 
@@ -248,6 +363,17 @@ void main() {
   });
 
   group('sin sesión', () {
+    test('retirar no sale a la red (SCRUM-385)', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.retirar(Recompensa.desdeSupabase(fila)),
+        throwsA(isA<SesionRequeridaParaRecompensasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+
     test('cambiar los puntos no sale a la red (SCRUM-380)', () async {
       final supabase = _SupabaseFalso(usuarioActual: null);
       addTearDown(supabase.cerrar);

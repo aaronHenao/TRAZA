@@ -273,6 +273,60 @@ void main() {
     });
   });
 
+  group('recompensas eliminadas (SCRUM-385)', () {
+    /// Elimina como lo hace la gestión del administrador, sobre el mismo
+    /// repositorio que consulta el catálogo.
+    Future<ResultadoRetiradaRecompensa> eliminar(
+      WidgetTester tester,
+      Recompensa recompensa,
+    ) => ProviderScope.containerOf(
+      tester.element(find.byType(Navigator).first),
+    ).read(retiradaRecompensaProvider).retirar(recompensa);
+
+    testWidgets('tras eliminarla, el corredor ya no la ve al abrir el '
+        'catálogo (criterio 2 de SCRUM-385)', (tester) async {
+      await montar(tester);
+      await abrirCatalogo(tester);
+      expect(enLaTarjeta('recompensa-botella', '300 puntos'), findsOneWidget);
+      await volver(tester);
+
+      final resultado = await eliminar(tester, botella);
+      expect(resultado, isA<RecompensaRetirada>());
+
+      await abrirCatalogo(tester);
+
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-botella')),
+        findsNothing,
+      );
+      expect(find.text('Botella TRAZA'), findsNothing);
+      expect(nombresEnPantalla(tester), ['Vale de hidratación']);
+    });
+
+    testWidgets('con el catálogo abierto, la eliminada desaparece sin tener '
+        'que salir (criterio 2 de SCRUM-385)', (tester) async {
+      await montar(tester);
+      await abrirCatalogo(tester);
+
+      await eliminar(tester, hidratacion);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vale de hidratación'), findsNothing);
+      expect(nombresEnPantalla(tester), ['Botella TRAZA']);
+    });
+
+    testWidgets('si se eliminan todas las disponibles, el catálogo dice que '
+        'no hay recompensas (criterio 2 de SCRUM-385)', (tester) async {
+      await montar(tester, recompensas: [botella, camiseta]);
+
+      await eliminar(tester, botella);
+      await abrirCatalogo(tester);
+
+      expect(find.byType(TarjetaRecompensa), findsNothing);
+      expect(find.text('Todavía no hay recompensas'), findsOneWidget);
+    });
+  });
+
   group('estados de la lista', () {
     testWidgets('sin recompensas disponibles lo dice', (tester) async {
       await montar(tester, recompensas: [camiseta]);

@@ -234,6 +234,18 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
   - entrar por una función `security definer` con `set search_path = public` que valide `auth.uid()`;
   - no calcular el precio a mano: el trigger ya lo pone, y descontar del saldo el `puntos_canjeados` que devuelve el `insert ... returning`;
   - bloquear la recompensa (`select ... from recompensas where id = $1 and disponible for share`) para que un cambio de precio a la mitad no deje el saldo validado contra un valor y el canje con otro, y bloquear por usuario contra canjes dobles;
-  - traducir el `23503` del trigger (la recompensa no existe).
+  - traducir el `23503` del trigger (la recompensa no existe o fue retirada, desde SCRUM-385).
 - **El criterio 3 solo se verifica en SQL** hasta que exista el canje: no hay pantalla de "mis canjes".
+
+## SCRUM-385: eliminar recompensas
+
+**Qué quedó hecho:**
+
+- `0051_retirada_recompensas.sql`: eliminar es retirar (`recompensas.retirada_en`), no borrar, para que los canjes sigan apuntando a su recompensa. La fecha la pone la base y no se puede quitar. Quien la canjeó la sigue pudiendo leer para su historial; los demás ya no la ven. El trigger del canje rechaza las retiradas. Trae su script de verificación para el SQL Editor.
+- Botón "Eliminar" en cada tarjeta de la gestión, con confirmación explícita. El catálogo y la gestión dejan de mostrar las retiradas.
+
+**Qué falta:**
+
+- **Historial de canjes del corredor.** El criterio 3 se cumple en la base (el canje y su recompensa siguen ahí y él los puede leer), pero no hay pantalla de "mis canjes": llega con la HU de canjear.
+- **Ver lo retirado.** La gestión no muestra las recompensas eliminadas. Si el administrador necesita consultarlas, iría una pestaña "Retiradas" como la de la gestión de retos, con una consulta que no filtre `retirada_en`.
 

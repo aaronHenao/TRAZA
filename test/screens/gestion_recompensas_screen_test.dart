@@ -402,4 +402,234 @@ void main() {
       });
     }
   });
+
+  group('eliminar (SCRUM-385)', () {
+    final dialogo = find.byType(AlertDialog);
+
+    Future<void> tocarEliminar(WidgetTester tester, String id) async {
+      await tester.tap(find.byKey(GestionRecompensasScreen.claveEliminar(id)));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> confirmarEliminacion(WidgetTester tester) async {
+      await tester.tap(
+        find.byKey(GestionRecompensasScreen.claveConfirmarEliminar),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// Algún texto del diálogo que contiene [fragmento], sin importar
+    /// mayúsculas.
+    Finder enElDialogo(String fragmento) => find.descendant(
+      of: dialogo,
+      matching: find.textContaining(
+        RegExp(RegExp.escape(fragmento), caseSensitive: false),
+      ),
+    );
+
+    testWidgets('cada tarjeta tiene su botón para eliminarla, después del de '
+        'cambiar los puntos', (tester) async {
+      await abrirGestion(tester);
+
+      for (final id in ['recompensa-hidratacion', 'recompensa-camiseta']) {
+        final tarjeta = find.byKey(TarjetaRecompensa.claveDe(id));
+        final boton = find.descendant(
+          of: tarjeta,
+          matching: find.byKey(GestionRecompensasScreen.claveEliminar(id)),
+        );
+        expect(boton, findsOneWidget, reason: 'en la tarjeta $id');
+        expect(
+          find.descendant(of: boton, matching: find.text('Eliminar')),
+          findsOneWidget,
+        );
+        expect(
+          tester.widget<TarjetaRecompensa>(tarjeta).acciones.map((a) => a.key),
+          [
+            GestionRecompensasScreen.claveCambiarPuntos(id),
+            GestionRecompensasScreen.claveEliminar(id),
+          ],
+        );
+      }
+    });
+
+    testWidgets('tocar Eliminar pide una confirmación explícita que nombra la '
+        'recompensa, y todavía no elimina nada (criterio 1 de SCRUM-385)', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+
+      await tocarEliminar(tester, 'recompensa-hidratacion');
+
+      expect(dialogo, findsOneWidget);
+      expect(
+        find.descendant(
+          of: dialogo,
+          matching: find.text('Eliminar recompensa'),
+        ),
+        findsOneWidget,
+      );
+      expect(enElDialogo('Vale de hidratación'), findsWidgets);
+      expect(
+        find.descendant(of: dialogo, matching: find.text('Cancelar')),
+        findsOneWidget,
+      );
+      final confirmar = find.descendant(
+        of: dialogo,
+        matching: find.byKey(GestionRecompensasScreen.claveConfirmarEliminar),
+      );
+      expect(confirmar, findsOneWidget);
+      expect(
+        find.descendant(of: confirmar, matching: find.text('Eliminar')),
+        findsOneWidget,
+      );
+      // Abrir la confirmación no elimina nada.
+      expect(repositorio.recompensaRetirada, isNull);
+      expect(repositorio.retiradas, isEmpty);
+    });
+
+    testWidgets('la confirmación advierte que no se puede deshacer y que los '
+        'canjes ya hechos se conservan (criterios 1 y 3 de SCRUM-385)', (
+      tester,
+    ) async {
+      await abrirGestion(tester);
+
+      await tocarEliminar(tester, 'recompensa-hidratacion');
+
+      expect(enElDialogo('no se puede deshacer'), findsWidgets);
+      expect(enElDialogo('canjes'), findsWidgets);
+    });
+
+    testWidgets('la confirmación de cada tarjeta nombra su propia '
+        'recompensa', (tester) async {
+      await abrirGestion(tester);
+
+      await tocarEliminar(tester, 'recompensa-camiseta');
+
+      expect(enElDialogo('Camiseta edición limitada'), findsWidgets);
+      expect(enElDialogo('Vale de hidratación'), findsNothing);
+    });
+
+    testWidgets('cancelar no elimina: la tarjeta sigue en la gestión '
+        '(criterio 1 de SCRUM-385)', (tester) async {
+      await abrirGestion(tester);
+      await tocarEliminar(tester, 'recompensa-hidratacion');
+
+      await tester.tap(
+        find.descendant(of: dialogo, matching: find.text('Cancelar')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(dialogo, findsNothing);
+      expect(repositorio.recompensaRetirada, isNull);
+      expect(find.text('Recompensa eliminada'), findsNothing);
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-hidratacion')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('cerrar la confirmación sin elegir tampoco elimina (criterio '
+        '1 de SCRUM-385)', (tester) async {
+      await abrirGestion(tester);
+      await tocarEliminar(tester, 'recompensa-hidratacion');
+
+      // Un toque fuera del diálogo, sobre la barrera.
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(repositorio.recompensaRetirada, isNull);
+      expect(find.text('Recompensa eliminada'), findsNothing);
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-hidratacion')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al confirmar la elimina: lo avisa y la tarjeta desaparece de '
+        'la gestión, la otra sigue (criterio 2 de SCRUM-385)', (tester) async {
+      await abrirGestion(tester);
+      await tocarEliminar(tester, 'recompensa-hidratacion');
+
+      await confirmarEliminacion(tester);
+
+      expect(dialogo, findsNothing);
+      expect(find.text('Recompensa eliminada'), findsOneWidget);
+      expect(repositorio.recompensaRetirada?.id, 'recompensa-hidratacion');
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-hidratacion')),
+        findsNothing,
+      );
+      expect(find.text('Vale de hidratación'), findsNothing);
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-camiseta')),
+        findsOneWidget,
+      );
+      expect(find.byType(TarjetaRecompensa), findsOneWidget);
+    });
+
+    testWidgets('una recompensa No disponible también se puede eliminar '
+        '(criterio 2 de SCRUM-385)', (tester) async {
+      await abrirGestion(tester);
+      expect(
+        enLaTarjeta('recompensa-camiseta', 'No disponible'),
+        findsOneWidget,
+      );
+      await tocarEliminar(tester, 'recompensa-camiseta');
+
+      await confirmarEliminacion(tester);
+
+      expect(find.text('Recompensa eliminada'), findsOneWidget);
+      expect(repositorio.recompensaRetirada?.id, 'recompensa-camiseta');
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-camiseta')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(TarjetaRecompensa.claveDe('recompensa-hidratacion')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al eliminar la última, la gestión queda vacía y lo dice '
+        '(criterio 2 de SCRUM-385)', (tester) async {
+      await abrirGestion(tester, recompensas: [hidratacion]);
+      await tocarEliminar(tester, 'recompensa-hidratacion');
+
+      await confirmarEliminacion(tester);
+
+      expect(find.byType(TarjetaRecompensa), findsNothing);
+      expect(find.text('Todavía no hay recompensas'), findsOneWidget);
+    });
+
+    for (final (error, mensaje) in [
+      (Exception('sin red'), RetiradaRecompensa.noSePudo),
+      (
+        const SoloAdministradorException(),
+        RetiradaRecompensa.soloAdministrador,
+      ),
+      (
+        const SesionRequeridaParaRecompensasException(),
+        RetiradaRecompensa.sinSesion,
+      ),
+    ]) {
+      testWidgets('si eliminar falla ($error) lo dice y la tarjeta sigue', (
+        tester,
+      ) async {
+        await abrirGestion(tester);
+        await tocarEliminar(tester, 'recompensa-hidratacion');
+        repositorio.error = error;
+
+        await confirmarEliminacion(tester);
+
+        expect(find.text(mensaje), findsOneWidget);
+        expect(find.text('Recompensa eliminada'), findsNothing);
+        expect(
+          find.byKey(TarjetaRecompensa.claveDe('recompensa-hidratacion')),
+          findsOneWidget,
+        );
+        expect(find.byType(TarjetaRecompensa), findsNWidgets(2));
+      });
+    }
+  });
 }

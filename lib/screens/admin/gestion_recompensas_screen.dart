@@ -12,9 +12,10 @@ import '../../widgets/tarjeta_recompensa.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
-/// Las recompensas que administra el administrador (SCRUM-374): todas,
-/// disponibles o no, el botón para crear una nueva y, en cada tarjeta, el de
-/// cambiar sus puntos (SCRUM-380).
+/// Las recompensas que administra el administrador (SCRUM-374): las que no se
+/// han retirado, disponibles o no, el botón para crear una nueva y, en cada
+/// tarjeta, los de
+/// cambiar sus puntos (SCRUM-380) y eliminarla (SCRUM-385).
 class GestionRecompensasScreen extends ConsumerWidget {
   const GestionRecompensasScreen({super.key});
 
@@ -27,6 +28,10 @@ class GestionRecompensasScreen extends ConsumerWidget {
   static Key claveCambiarPuntos(String id) => Key('cambiar-puntos-$id');
   static const claveCampoPuntos = Key('cambiar-puntos-campo');
   static const claveGuardarPuntos = Key('cambiar-puntos-guardar');
+
+  // Eliminar (SCRUM-385).
+  static Key claveEliminar(String id) => Key('eliminar-recompensa-$id');
+  static const claveConfirmarEliminar = Key('eliminar-recompensa-confirmar');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -131,9 +136,81 @@ class _Lista extends ConsumerWidget {
               icon: const Icon(Icons.edit_outlined, size: 16),
               label: const Text('Cambiar puntos'),
             ),
+            TextButton.icon(
+              key: GestionRecompensasScreen.claveEliminar(recompensa.id),
+              onPressed: () => _eliminar(context, ref, recompensa),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: const Text('Eliminar'),
+            ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Pregunta y, si el administrador confirma, elimina la recompensa
+/// (SCRUM-385).
+///
+/// La confirmación es explícita (criterio 1): eliminar no se deshace desde
+/// la app. Cerrarla sin elegir cuenta como no.
+Future<void> _eliminar(
+  BuildContext context,
+  WidgetRef ref,
+  Recompensa recompensa,
+) async {
+  final confirmado = await showDialog<bool>(
+    context: context,
+    builder: (_) => _ConfirmarEliminar(recompensa: recompensa),
+  );
+  if (confirmado != true || !context.mounted) return;
+
+  final resultado = await ref
+      .read(retiradaRecompensaProvider)
+      .retirar(recompensa);
+  if (!context.mounted) return;
+
+  mostrarToast(context, switch (resultado) {
+    // La lista se rehace sola: `retirar` invalida la gestión.
+    RecompensaRetirada() => 'Recompensa eliminada',
+    RecompensaNoRetirada(:final mensaje) => mensaje,
+  });
+}
+
+/// Qué pasa al eliminar: sale del catálogo, no vuelve, y los canjes ya
+/// hechos se conservan (criterios 1 y 3).
+class _ConfirmarEliminar extends StatelessWidget {
+  const _ConfirmarEliminar({required this.recompensa});
+
+  final Recompensa recompensa;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Eliminar recompensa'),
+      content: Text(
+        '"${recompensa.nombre}" dejará de verse en el catálogo y ya no se '
+        'podrá canjear. Esto no se puede deshacer. Los canjes ya hechos se '
+        'conservan en el historial de cada corredor.',
+        style: const TextStyle(
+          fontSize: 13.5,
+          color: AppColors.ink2,
+          height: 1.4,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          key: GestionRecompensasScreen.claveConfirmarEliminar,
+          onPressed: () => Navigator.of(context).pop(true),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+          child: const Text('Eliminar'),
+        ),
+      ],
     );
   }
 }

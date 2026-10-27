@@ -576,6 +576,9 @@ class _DialogoRechazoState extends State<_DialogoRechazo> {
             decoration: InputDecoration(
               hintText: 'Ej.: Spam, lenguaje ofensivo…',
               errorText: _error,
+              // Sin esto el error se pinta en una sola línea y en el ancho de
+              // un diálogo se corta a media frase.
+              errorMaxLines: 2,
             ),
           ),
         ],

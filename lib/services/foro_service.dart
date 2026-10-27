@@ -206,6 +206,9 @@ abstract interface class ForoRepository {
   /// Los últimos [SupabaseForoRepository.limiteModeracion] reportes, del más
   /// reciente al más antiguo, para la bandeja del administrador (SCRUM-369).
   /// A un corredor la policy le devuelve solo los suyos.
+  ///
+  /// Solo los de lo que sigue publicado: el reporte de una publicación ya
+  /// retirada está resuelto y sale de la bandeja (SCRUM-242).
   Future<List<ReporteForo>> reportes();
 }
 
@@ -227,9 +230,16 @@ class SupabaseForoRepository implements ForoRepository {
 
   /// Sin `reportante_id`: la bandeja no dice quién reportó (criterio 2 de
   /// SCRUM-369).
+  ///
+  /// El `!inner` hace que la publicación embebida filtre el reporte en vez de
+  /// venir vacía: es lo que deja fuera los reportes de lo ya retirado
+  /// (SCRUM-242).
   static const _columnasReporte =
       'id, publicacion_id, motivo, detalle, fecha, '
-      'publicaciones_foro(titulo, autor_nombre)';
+      'publicaciones_foro!inner(titulo, autor_nombre)';
+
+  /// El estado de la publicación reportada, para filtrarla sin traerlo.
+  static const _estadoDeLaReportada = 'publicaciones_foro.estado';
 
   /// Las columnas de la publicación más cuántos comentarios tiene, contados
   /// por PostgREST sin traerlos. Se cuentan solo los publicados
@@ -575,6 +585,14 @@ class SupabaseForoRepository implements ForoRepository {
     final filas = await _cliente
         .from(_tablaReportes)
         .select(_columnasReporte)
+        // Lo retirado ya está resuelto: su reporte sale de la bandeja
+        // (SCRUM-242). La fila del reporte se queda, para que el historial
+        // siga diciendo qué se reportó.
+        //
+        // Solo lo retirado: lo que rechazó la moderación antes de publicarse
+        // sigue en la bandeja como lo dejó SCRUM-369. Si también tuviera que
+        // salir, es decisión de esa historia, no de esta.
+        .neq(_estadoDeLaReportada, EstadoPublicacion.eliminada.valorDb)
         .order('fecha', ascending: false)
         .limit(limiteModeracion);
 

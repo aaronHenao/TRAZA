@@ -82,6 +82,13 @@ class DetallePublicacionScreen extends ConsumerWidget {
   static String publicacionRechazada(String? motivo) =>
       'Tu publicación fue rechazada por la moderación'
       '${motivo == null ? '' : ': $motivo'}.';
+
+  /// Retirada por el administrador después de estar publicada (criterio 2 de
+  /// SCRUM-242). No es un rechazo: estuvo en el foro y los demás la leyeron,
+  /// así que el aviso no puede decir que no se aprobó.
+  static String publicacionRetirada(String? motivo) =>
+      'Retiramos tu publicación del foro'
+      '${motivo == null ? '' : ': $motivo'}.';
   static const edicionComentarioEnRevision = 'Edición en revisión';
 
   @override
@@ -347,8 +354,12 @@ class _Conversacion extends ConsumerWidget {
         : switch (publicacion.estado) {
             EstadoPublicacion.enRevision || EstadoPublicacion.pendiente =>
               DetallePublicacionScreen.publicacionEnRevision,
-            EstadoPublicacion.rechazada || EstadoPublicacion.eliminada =>
+            EstadoPublicacion.rechazada =>
               DetallePublicacionScreen.publicacionRechazada(
+                publicacion.motivoModeracion,
+              ),
+            EstadoPublicacion.eliminada =>
+              DetallePublicacionScreen.publicacionRetirada(
                 publicacion.motivoModeracion,
               ),
             EstadoPublicacion.publicada =>

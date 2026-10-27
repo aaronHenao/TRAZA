@@ -505,9 +505,6 @@ class ForoRepositorioFalso implements ForoRepository {
   /// Error que lanza solo `retirar`, para simular un fallo de red.
   Object? errorAlRetirar;
 
-  /// Hasta dónde admite el motivo `bitacora_moderacion_foro_motivo_valido`.
-  static const maxMotivoRetiro = 300;
-
   @override
   Future<PublicacionForo> retirar(String publicacionId, String motivo) async {
     final error = errorAlRetirar ?? this.error;
@@ -521,7 +518,7 @@ class ForoRepositorioFalso implements ForoRepository {
     if (limpio.isEmpty) {
       throw const MotivoDeRetiroInvalidoException('Retirar exige un motivo');
     }
-    if (limpio.length > maxMotivoRetiro) {
+    if (limpio.length > maxCaracteresMotivoRetiro) {
       throw const MotivoDeRetiroInvalidoException('El motivo es muy largo');
     }
 

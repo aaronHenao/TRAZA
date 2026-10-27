@@ -37,6 +37,11 @@ enum EstadoPublicacion {
   }
 }
 
+/// Lo que admite el motivo del retiro en
+/// `bitacora_moderacion_foro_motivo_valido` (`0052`, SCRUM-242). Si cambia
+/// uno, cambia en los dos lados.
+const maxCaracteresMotivoRetiro = 300;
+
 /// Una publicación del foro, tal como vive en `publicaciones_foro`
 /// (SCRUM-323).
 ///

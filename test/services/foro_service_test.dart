@@ -665,11 +665,18 @@ void main() {
         expect(
           consulta.queryParameters['select'],
           'id,publicacion_id,motivo,detalle,fecha,'
-          'publicaciones_foro(titulo,autor_nombre)',
+          'publicaciones_foro!inner(titulo,autor_nombre)',
         );
         expect(
           consulta.queryParameters['select'],
           isNot(contains('reportante')),
+        );
+        // SCRUM-242: los de lo retirado salen de la bandeja. El `!inner` es
+        // lo que hace que el filtro descarte el reporte en vez de devolverlo
+        // con la publicación vacía.
+        expect(
+          consulta.queryParameters['publicaciones_foro.estado'],
+          'neq.${EstadoPublicacion.eliminada.valorDb}',
         );
         expect(consulta.queryParameters.keys, isNot(contains('reportante_id')));
         expect(consulta.queryParameters['order'], startsWith('fecha.desc'));

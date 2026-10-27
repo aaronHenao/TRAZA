@@ -189,6 +189,72 @@ void main() {
       expect(repositorio.marcadas, 0);
     });
   });
+
+  group('abrir un aviso (SCRUM-242)', () {
+    testWidgets('el del retiro lleva a la publicación, que ya no sale en '
+        'ninguna lista del foro (criterio 2)', (tester) async {
+      await _abrir(
+        tester,
+        notificaciones: [
+          notificacionDePrueba(
+            id: 'aviso-retiro',
+            tipo: TipoNotificacion.publicacionRetirada,
+            titulo: 'Retiramos tu publicación',
+            mensaje: '«Gana dinero fácil» ya no se ve. Motivo: Spam',
+            entidadId: 'pub-7',
+          ),
+        ],
+      );
+
+      await tester.tap(
+        find.byKey(NotificacionesScreen.claveFila('aviso-retiro')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Publicación pub-7'), findsOneWidget);
+    });
+
+    testWidgets(
+      'los avisos de rutas todavía no abren nada, y no lo aparentan',
+      (tester) async {
+        await _abrir(
+          tester,
+          notificaciones: [
+            notificacionDePrueba(id: 'aviso-ruta', entidadId: 'ruta-1'),
+          ],
+        );
+
+        // Sin flecha y sin nada que tocar: abrir una ruta desde la bandeja es
+        // de SCRUM-363 y está anotado como pendiente.
+        expect(
+          find.byKey(NotificacionesScreen.claveFila('aviso-ruta')),
+          findsNothing,
+        );
+        expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+      },
+    );
+
+    testWidgets('un aviso de retiro sin a qué apuntar no se puede abrir', (
+      tester,
+    ) async {
+      await _abrir(
+        tester,
+        notificaciones: [
+          notificacionDePrueba(
+            id: 'aviso-suelto',
+            tipo: TipoNotificacion.publicacionRetirada,
+            entidadId: null,
+          ),
+        ],
+      );
+
+      expect(
+        find.byKey(NotificacionesScreen.claveFila('aviso-suelto')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
 
 late FuenteCambiosNotificacionesFalsa cambiosAvisos;
@@ -219,6 +285,13 @@ Future<({NotificacionesFalso repositorio, GoRouter router})> _abrir(
       GoRoute(
         path: NotificacionesScreen.ruta,
         builder: (_, _) => const NotificacionesScreen(),
+      ),
+      // A donde lleva el aviso de una publicación retirada (SCRUM-242).
+      GoRoute(
+        path: '/foro/:publicacionId',
+        builder: (_, estado) => Scaffold(
+          body: Text('Publicación ${estado.pathParameters['publicacionId']}'),
+        ),
       ),
     ],
   );

@@ -484,7 +484,55 @@ class ForoRepositorioFalso implements ForoRepository {
     consultasReportes++;
     final error = errorAlLeerReportes ?? this.error;
     if (error != null) throw error;
-    return [...reportesGuardados];
+    // Como el filtro de la consulta: los de lo retirado salen de la bandeja
+    // (SCRUM-242). Lo rechazado por la moderación sigue, como en SCRUM-369.
+    // Si la prueba no puso la publicación, el reporte pasa: lo que simula es
+    // la bandeja, no la tabla.
+    return reportesGuardados.where((r) {
+      final p = publicaciones.where((p) => p.id == r.publicacionId).firstOrNull;
+      return p == null || p.estado != EstadoPublicacion.eliminada;
+    }).toList();
+  }
+
+  /// Lo que se retiró, en orden: (publicación, motivo) (SCRUM-242). Es lo
+  /// que en la base queda en `bitacora_moderacion_foro`.
+  final List<(String, String)> retiros = [];
+
+  /// A quién se avisó de cada retiro y con qué motivo, como hace
+  /// `crear_notificacion` dentro de `retirar_publicacion_foro`.
+  final List<(String, String)> avisosDeRetiro = [];
+
+  /// Error que lanza solo `retirar`, para simular un fallo de red.
+  Object? errorAlRetirar;
+
+  @override
+  Future<PublicacionForo> retirar(String publicacionId, String motivo) async {
+    final error = errorAlRetirar ?? this.error;
+    if (error != null) throw error;
+
+    // Como `retirar_publicacion_foro`, en su mismo orden: primero el
+    // permiso, después el motivo y al final el estado de la publicación.
+    if (!comoAdmin) throw const RetiroReservadoAlAdminException();
+
+    final limpio = motivo.trim();
+    if (limpio.isEmpty) {
+      throw const MotivoDeRetiroInvalidoException('Retirar exige un motivo');
+    }
+    if (limpio.length > maxCaracteresMotivoRetiro) {
+      throw const MotivoDeRetiroInvalidoException('El motivo es muy largo');
+    }
+
+    final p = publicaciones.where((p) => p.id == publicacionId).firstOrNull;
+    if (p == null) throw const PublicacionNoDisponibleException();
+    if (p.estado == EstadoPublicacion.eliminada) {
+      throw const PublicacionYaRetiradaException();
+    }
+
+    _cambiarEstado(publicacionId, EstadoPublicacion.eliminada, limpio);
+    retiros.add((publicacionId, limpio));
+    avisosDeRetiro.add((p.autorId, limpio));
+
+    return publicaciones.firstWhere((p) => p.id == publicacionId);
   }
 
   /// Simula que la moderación rechazó la publicación [id] (SCRUM-322).

@@ -101,7 +101,7 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 **Qué falta:**
 
 - **Eliminar la propia publicación.** No hay botón ni policy de delete en `publicaciones_foro`. Decidir antes de hacerlo:
-  - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
+  - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado; la salida está en `retirar_publicacion_foro` (0052, SCRUM-242): una función `security definer` que anuncia `traza.moderando` para que el trigger la deje pasar. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
   - la confirmación: es destructiva de verdad, así que el diálogo debe decir que también se van los comentarios.
 - Cuando se haga, el botón va junto al de editar en `DetallePublicacionScreen` y se ofrece con la misma regla (`PublicacionForo.editablePor`).
 
@@ -151,7 +151,7 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 **Qué falta:**
 
-- **Actuar sobre lo reportado** es de SCRUM-242 (eliminar publicaciones). Hoy el administrador ve la bandeja y abre el detalle, pero no puede retirar la publicación ni descartar los reportes. Cuando exista la eliminación, conviene que la tarjeta de `_TarjetaReportada` (`lib/screens/admin/moderacion_foro_screen.dart`) ofrezca la misma acción, y que lo retirado deje de contar en "Reportadas" (filtrar por `publicaciones_foro.estado` en `reportes()` o en `PublicacionReportada.agrupar`).
+- **Descartar un reporte sin retirar la publicación.** Si el administrador la revisa y decide que no incumple nada, no tiene cómo quitarla de la bandeja: solo sale de ahí cuando se retira (SCRUM-242). Haría falta marcar el reporte como revisado, con una columna nueva en `reportes_foro` y un filtro en `reportes()`.
 - **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
 - **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
 
@@ -248,4 +248,26 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 
 - **Historial de canjes del corredor.** El criterio 3 se cumple en la base (el canje y su recompensa siguen ahí y él los puede leer), pero no hay pantalla de "mis canjes": llega con la HU de canjear.
 - **Ver lo retirado.** La gestión no muestra las recompensas eliminadas. Si el administrador necesita consultarlas, iría una pestaña "Retiradas" como la de la gestión de retos, con una consulta que no filtre `retirada_en`.
+
+## SCRUM-242: eliminar publicaciones del foro
+
+**Qué quedó hecho:**
+
+- `0052_foro_retirar_publicacion.sql`: eliminar es retirar (`estado = 'eliminada'`, que ya existía desde 0035), no borrar, para que la bitácora y los reportes que la señalaron sigan teniendo a qué apuntar. `retirar_publicacion_foro` hace las tres cosas en una transacción —retira, asienta y avisa— y es lo único que puede cambiar el estado: `publicaciones_foro` no tiene policy de update, así que la función corre como su dueño y anuncia `traza.moderando` para que el trigger `proteger_publicacion_foro` la deje pasar, igual que `resolver_moderacion` (0035). Trae su script de verificación para el SQL Editor, con la cabecera para hacerse pasar por un usuario.
+- Bitácora `bitacora_moderacion_foro` (criterio 3): publicación, administrador, su nombre copiado en ese momento, motivo y fecha que pone la base. Solo el administrador la lee, y nadie la escribe desde la app. `moderaciones_foro` no servía para esto: es la cola de lo que espera veredicto antes de publicarse, no el registro de lo que se retiró después.
+- Botón "Eliminar" en las dos pestañas del panel —*Publicadas* y *Reportadas*—, con un diálogo que confirma y pide el motivo en el mismo paso; sin motivo no se llega a tocar la base. Lo retirado sale del foro, de *Publicadas* y de la bandeja de *Reportadas*.
+- El autor recibe el aviso `publicacion_retirada` con el motivo (criterio 2), y tocarlo en la bandeja abre su publicación, donde lee por qué la retiramos. Es el único aviso que abre algo: los de rutas siguen sin llevar a ningún lado (ver SCRUM-363).
+
+**Qué falta:**
+
+- **Leer la bitácora desde la app.** Hoy solo se consulta por SQL, y se acordó así: el criterio pide registrar, no mostrar, y el administrador son los cuatro del equipo, con acceso al dashboard. Si se quiere en pantalla, **no hace falta migración**: la tabla y su policy de lectura ya están, y bastaría un `select` en el repositorio y una pestaña, con `administrador_nombre` que ya viene copiado. La consulta para auditar a mano:
+  ```sql
+  select b.fecha, b.administrador_nombre, b.motivo, p.titulo, p.autor_nombre
+  from bitacora_moderacion_foro b
+  join publicaciones_foro p on p.id = b.publicacion_id
+  order by b.fecha desc;
+  ```
+- **Un asiento no sobrevive a un borrado a mano.** `publicacion_id` tiene `on delete cascade`, así que si alguien borrara la fila de la publicación por SQL, su asiento se iría con ella. Está así a propósito para no dejar asientos huérfanos, y desde la app es imposible: no hay policy de delete en `publicaciones_foro`, y retirar es precisamente lo contrario a borrar.
+- **Restituir.** No hay forma de deshacer un retiro desde la app; se hace por SQL, con las dos sentencias de `traza.moderando` en la misma ejecución (está al pie de 0052). La bitácora tampoco registraría la restitución: hoy solo asienta retiros, y una acción nueva pediría su columna `accion`.
+- **Comentarios.** La HU habla de publicaciones, así que un comentario ofensivo no se puede retirar por separado (los de una publicación retirada desaparecen con ella, por la policy de 0035). `comentarios_foro` ya admite `estado = 'eliminada'` desde 0035, así que sería el mismo patrón: una función hermana y su asiento.
 

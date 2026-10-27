@@ -665,11 +665,18 @@ void main() {
         expect(
           consulta.queryParameters['select'],
           'id,publicacion_id,motivo,detalle,fecha,'
-          'publicaciones_foro(titulo,autor_nombre)',
+          'publicaciones_foro!inner(titulo,autor_nombre)',
         );
         expect(
           consulta.queryParameters['select'],
           isNot(contains('reportante')),
+        );
+        // SCRUM-242: los de lo retirado salen de la bandeja. El `!inner` es
+        // lo que hace que el filtro descarte el reporte en vez de devolverlo
+        // con la publicación vacía.
+        expect(
+          consulta.queryParameters['publicaciones_foro.estado'],
+          'neq.${EstadoPublicacion.eliminada.valorDb}',
         );
         expect(consulta.queryParameters.keys, isNot(contains('reportante_id')));
         expect(consulta.queryParameters['order'], startsWith('fecha.desc'));
@@ -680,7 +687,100 @@ void main() {
       },
     );
   });
+
+  group('retirar una publicación (SCRUM-242)', () {
+    test('llama a la función con la publicación y el motivo, y devuelve '
+        'cómo quedó (criterio 1)', () async {
+      final supabase = _SupabaseFalso(
+        respuestaRpc: {
+          ..._filaPublicacion,
+          'estado': 'eliminada',
+          'motivo_moderacion': 'Lenguaje ofensivo',
+        },
+      );
+      addTearDown(supabase.cerrar);
+
+      final retirada = await supabase.repositorio.retirar(
+        'pub-1',
+        'Lenguaje ofensivo',
+      );
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.url.path, '/rest/v1/rpc/retirar_publicacion_foro');
+      expect(jsonDecode(peticion.body), {
+        'p_publicacion_id': 'pub-1',
+        'p_motivo': 'Lenguaje ofensivo',
+      });
+      expect(retirada.estado, EstadoPublicacion.eliminada);
+      expect(retirada.motivoModeracion, 'Lenguaje ofensivo');
+    });
+
+    test('si quien lo intenta no es administrador, lo dice (42501)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<RetiroReservadoAlAdminException>()),
+      );
+    });
+
+    test('si el motivo no le sirve a la base, lo dice (23514)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '23514');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', ' '),
+        throwsA(isA<MotivoDeRetiroInvalidoException>()),
+      );
+    });
+
+    test('si otro administrador se adelantó, lo dice (TZ409)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: 'TZ409');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<PublicacionYaRetiradaException>()),
+      );
+    });
+
+    test('si la publicación ya no existe, lo dice (TZ404)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: 'TZ404');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<PublicacionNoDisponibleException>()),
+      );
+    });
+
+    test('sin sesión no sale ninguna petición', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<SesionRequeridaParaForoException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
 }
+
+/// Una fila de `publicaciones_foro`, como la devuelve
+/// `retirar_publicacion_foro`.
+const _filaPublicacion = <String, Object?>{
+  'id': 'pub-1',
+  'autor_id': 'usuario-2',
+  'autor_nombre': 'Carlos',
+  'titulo': 'Tenis para asfalto',
+  'contenido': '¿Cuáles recomiendan?',
+  'estado': 'publicada',
+  'fecha_creacion': '2026-10-16T09:00:00+00:00',
+  'motivo_moderacion': null,
+  'fecha_edicion': null,
+};
 
 /// Una fila de `moderaciones_foro`: una publicación que la IA rechazó por
 /// spam.

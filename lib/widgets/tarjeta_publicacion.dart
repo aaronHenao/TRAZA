@@ -14,12 +14,17 @@ import 'traza_card.dart';
 /// lo que aparece está publicado, y decirlo en cada tarjeta sería ruido. Lo
 /// único que el autor ve marcado es lo suyo que está en revisión
 /// (SCRUM-322).
+///
+/// El botón de retirar ([onEliminar]) aparece solo si se le pasa, que es lo
+/// que hace el panel del administrador (SCRUM-242): el foro del corredor no
+/// lo pasa y por eso no lo tiene.
 class TarjetaPublicacion extends StatelessWidget {
   const TarjetaPublicacion({
     required this.publicacion,
     required this.ahora,
     this.conEstado = false,
     this.onTap,
+    this.onEliminar,
     super.key,
   });
 
@@ -32,7 +37,11 @@ class TarjetaPublicacion extends StatelessWidget {
   final bool conEstado;
   final VoidCallback? onTap;
 
+  /// Retirar la publicación del foro (SCRUM-242). Null: no se ofrece.
+  final VoidCallback? onEliminar;
+
   static Key claveDe(String id) => Key('publicacion-$id');
+  static Key claveEliminarDe(String id) => Key('publicacion-eliminar-$id');
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +135,23 @@ class TarjetaPublicacion extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          _NumeroComentarios(cuantos: publicacion.numeroComentarios),
+          Row(
+            children: [
+              _NumeroComentarios(cuantos: publicacion.numeroComentarios),
+              if (onEliminar != null) ...[
+                const Spacer(),
+                TextButton.icon(
+                  key: claveEliminarDe(publicacion.id),
+                  onPressed: onEliminar,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                  ),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text('Eliminar'),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

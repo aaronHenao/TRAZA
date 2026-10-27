@@ -872,3 +872,101 @@ class ReportePublicacion {
     }
   }
 }
+
+/// Cómo terminó un intento de retirar una publicación (SCRUM-242).
+sealed class ResultadoRetiro {
+  const ResultadoRetiro();
+}
+
+/// Salió del foro, quedó asentada en la bitácora y su autor ya fue avisado.
+class PublicacionRetirada extends ResultadoRetiro {
+  const PublicacionRetirada(this.publicacion);
+
+  final PublicacionForo publicacion;
+}
+
+/// Sin motivo no se llega a tocar la base: es lo que leerá el autor y lo que
+/// queda en la bitácora.
+class RetiroSinMotivo extends ResultadoRetiro {
+  const RetiroSinMotivo();
+}
+
+/// Otro administrador se adelantó. No es un fallo: ya está retirada.
+class PublicacionYaEstabaRetirada extends ResultadoRetiro {
+  const PublicacionYaEstabaRetirada();
+}
+
+/// Quien lo intentó no es administrador.
+class RetiroNoPermitido extends ResultadoRetiro {
+  const RetiroNoPermitido();
+}
+
+/// La publicación ya no existe.
+class RetiroSinPublicacion extends ResultadoRetiro {
+  const RetiroSinPublicacion();
+}
+
+/// No se pudo retirar.
+class RetiroNoGuardado extends ResultadoRetiro {
+  const RetiroNoGuardado(this.mensaje);
+
+  final String mensaje;
+}
+
+final retiroPublicacionProvider = Provider<RetiroPublicacion>(
+  RetiroPublicacion.new,
+);
+
+/// El administrador retira una publicación del foro con su motivo
+/// (criterio 1 de SCRUM-242).
+class RetiroPublicacion {
+  const RetiroPublicacion(this._ref);
+
+  final Ref _ref;
+
+  static const retirada = 'Publicación retirada: avisamos a su autor';
+  static const sinMotivo = 'Escribe el motivo: es lo que leerá el autor.';
+  static const yaRetirada = 'Esta publicación ya fue retirada.';
+  static const noPermitido = 'Solo el administrador retira publicaciones.';
+  static const noExiste = 'Esta publicación ya no existe.';
+  static const noSePudo =
+      'No se pudo retirar la publicación. Inténtalo de nuevo.';
+  static const sinSesion = 'Inicia sesión para moderar el foro.';
+
+  Future<ResultadoRetiro> retirar(String publicacionId, String? motivo) async {
+    final limpio = motivo?.trim();
+    if (limpio == null || limpio.isEmpty) return const RetiroSinMotivo();
+
+    try {
+      final retirada = await _ref
+          .read(foroRepositoryProvider)
+          .retirar(publicacionId, limpio);
+      return PublicacionRetirada(retirada);
+    } on PublicacionYaRetiradaException {
+      return const PublicacionYaEstabaRetirada();
+    } on RetiroReservadoAlAdminException {
+      return const RetiroNoPermitido();
+    } on PublicacionNoDisponibleException {
+      return const RetiroSinPublicacion();
+    } on MotivoDeRetiroInvalidoException {
+      // La pantalla valida lo mismo antes: si llega aquí, el diálogo y la
+      // base se desalinearon.
+      return const RetiroSinMotivo();
+    } on SesionRequeridaParaForoException {
+      return const RetiroNoGuardado(sinSesion);
+    } catch (error) {
+      debugPrint('No se pudo retirar la publicación: $error');
+      return const RetiroNoGuardado(noSePudo);
+    } finally {
+      // Sale del foro, de la pestaña de publicadas y de la bandeja de
+      // reportadas, y su detalle pasa a decir que la retiramos. Va en el
+      // `finally` porque, si otro se adelantó, la lista también está vieja.
+      _ref
+        ..invalidate(moderacionForoProvider)
+        ..invalidate(publicacionesForoProvider)
+        ..invalidate(reportesForoProvider)
+        ..invalidate(publicacionForoProvider(publicacionId))
+        ..invalidate(comentariosForoProvider(publicacionId));
+    }
+  }
+}

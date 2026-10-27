@@ -140,6 +140,39 @@ void main() {
       expect(find.text('2 oct'), findsOneWidget);
     });
 
+    testWidgets('al corredor no se le ofrece eliminar nada (SCRUM-242)', (
+      tester,
+    ) async {
+      await abrirForo(tester, publicaciones: [publicacionDePrueba(id: 'a')]);
+
+      // La tarjeta está, con su contenido; lo que no está es el botón. La
+      // comparte con el panel del administrador, que sí lo ofrece.
+      expect(find.byKey(TarjetaPublicacion.claveDe('a')), findsOneWidget);
+      expect(find.byKey(TarjetaPublicacion.claveEliminarDe('a')), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Eliminar'), findsNothing);
+    });
+
+    testWidgets('una publicación retirada no sale en el foro, ni para su '
+        'autor (criterio 1 de SCRUM-242)', (tester) async {
+      await abrirForo(
+        tester,
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'a',
+            autorId: ForoRepositorioFalso.usuario,
+            titulo: 'Gana dinero fácil',
+            estado: EstadoPublicacion.eliminada,
+            motivo: 'Spam',
+          ),
+          publicacionDePrueba(id: 'b', titulo: 'Rodaje del sábado'),
+        ],
+      );
+
+      expect(find.text('Gana dinero fácil'), findsNothing);
+      expect(find.text('Spam'), findsNothing);
+      expect(find.text('Rodaje del sábado'), findsOneWidget);
+    });
+
     testWidgets('una publicación editada lo dice junto a la fecha', (
       tester,
     ) async {

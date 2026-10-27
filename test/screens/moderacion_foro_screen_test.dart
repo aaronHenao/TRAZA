@@ -635,4 +635,193 @@ void main() {
       expect(find.text('Tenis para asfalto'), findsOneWidget);
     });
   });
+
+  group('eliminar una publicación (SCRUM-242)', () {
+    /// Lo retirado sale de las listas, así que el resultado se comprueba en
+    /// el repositorio.
+    PublicacionForo laPublicacion(String id) =>
+        repositorio.publicaciones.firstWhere((p) => p.id == id);
+
+    Future<void> abrirComoAdmin(
+      WidgetTester tester, {
+      List<ReporteForo> reportes = const [],
+    }) => abrir(
+      tester,
+      publicaciones,
+      reportes: reportes,
+      preparar: (r) async => r.comoAdmin = true,
+    );
+
+    Future<void> pedirRetiro(WidgetTester tester, Key boton) async {
+      await tester.tap(find.byKey(boton));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> escribirMotivo(WidgetTester tester, String motivo) async {
+      await tester.enterText(
+        find.byKey(ModeracionForoScreen.claveMotivoRetiro),
+        motivo,
+      );
+      await tester.pump();
+    }
+
+    Future<void> confirmar(WidgetTester tester) async {
+      await tester.tap(find.byKey(ModeracionForoScreen.claveConfirmarRetiro));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('se ofrece en publicadas y en reportadas (criterio 1)', (
+      tester,
+    ) async {
+      await abrirComoAdmin(
+        tester,
+        reportes: [reporteDePrueba(publicacionId: 'a')],
+      );
+
+      expect(
+        find.byKey(TarjetaPublicacion.claveEliminarDe('a')),
+        findsOneWidget,
+      );
+
+      await irA(tester, VistaModeracionForo.reportadas);
+      expect(
+        find.byKey(ModeracionForoScreen.claveEliminarReportada('a')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('pide confirmación diciendo que avisará al autor y que '
+        'quedará registrado', (tester) async {
+      await abrirComoAdmin(tester);
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+
+      expect(find.text('Eliminar publicación'), findsOneWidget);
+      expect(find.textContaining('Tenis para asfalto'), findsWidgets);
+      expect(find.textContaining('Avisaremos a su autor'), findsOneWidget);
+      expect(find.textContaining('bitácora de moderación'), findsOneWidget);
+    });
+
+    testWidgets('cancelar no retira nada', (tester) async {
+      await abrirComoAdmin(tester);
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(laPublicacion('a').estado, EstadoPublicacion.publicada);
+      expect(repositorio.retiros, isEmpty);
+      expect(find.byKey(TarjetaPublicacion.claveDe('a')), findsOneWidget);
+    });
+
+    testWidgets('sin motivo no deja confirmar y lo dice en el campo', (
+      tester,
+    ) async {
+      await abrirComoAdmin(tester);
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await confirmar(tester);
+
+      // El diálogo sigue abierto y no se tocó la base.
+      expect(find.text('Eliminar publicación'), findsOneWidget);
+      expect(find.text(RetiroPublicacion.sinMotivo), findsOneWidget);
+      expect(repositorio.retiros, isEmpty);
+      expect(laPublicacion('a').estado, EstadoPublicacion.publicada);
+    });
+
+    testWidgets('el error del motivo se quita al escribirlo', (tester) async {
+      await abrirComoAdmin(tester);
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await confirmar(tester);
+      expect(find.text(RetiroPublicacion.sinMotivo), findsOneWidget);
+
+      await escribirMotivo(tester, 'Lenguaje ofensivo');
+
+      expect(find.text(RetiroPublicacion.sinMotivo), findsNothing);
+    });
+
+    testWidgets('al confirmar con motivo la retira, lo dice y la saca de la '
+        'lista (criterio 1)', (tester) async {
+      await abrirComoAdmin(tester);
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await escribirMotivo(tester, 'Lenguaje ofensivo');
+      await confirmar(tester);
+
+      expect(laPublicacion('a').estado, EstadoPublicacion.eliminada);
+      expect(laPublicacion('a').motivoModeracion, 'Lenguaje ofensivo');
+      expect(find.text(RetiroPublicacion.retirada), findsOneWidget);
+      // La lista se rehace sola: no hace falta refrescar.
+      expect(find.byKey(TarjetaPublicacion.claveDe('a')), findsNothing);
+      expect(find.text('Publicadas (0)'), findsOneWidget);
+    });
+
+    testWidgets('retirada desde reportadas, su reporte sale de la bandeja', (
+      tester,
+    ) async {
+      await abrirComoAdmin(
+        tester,
+        reportes: [reporteDePrueba(publicacionId: 'a')],
+      );
+      await irA(tester, VistaModeracionForo.reportadas);
+      expect(find.text('Reportadas (1)'), findsOneWidget);
+
+      await pedirRetiro(
+        tester,
+        ModeracionForoScreen.claveEliminarReportada('a'),
+      );
+      await escribirMotivo(tester, 'Spam');
+      await confirmar(tester);
+
+      expect(laPublicacion('a').estado, EstadoPublicacion.eliminada);
+      expect(
+        find.byKey(ModeracionForoScreen.claveReportada('a')),
+        findsNothing,
+      );
+      expect(find.text('Reportadas (0)'), findsOneWidget);
+    });
+
+    testWidgets('deja el asiento y avisa al autor (criterios 2 y 3)', (
+      tester,
+    ) async {
+      await abrirComoAdmin(tester);
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await escribirMotivo(tester, 'Lenguaje ofensivo');
+      await confirmar(tester);
+
+      expect(repositorio.retiros, [('a', 'Lenguaje ofensivo')]);
+      expect(repositorio.avisosDeRetiro, [('autor-a', 'Lenguaje ofensivo')]);
+    });
+
+    testWidgets('si otro administrador se adelantó, lo dice', (tester) async {
+      await abrirComoAdmin(tester);
+      // Otro la retira mientras esta lista está en pantalla: la tarjeta
+      // sigue ahí porque nada la invalidó.
+      await repositorio.retirar('a', 'Spam');
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await escribirMotivo(tester, 'Otra vez');
+      await confirmar(tester);
+
+      expect(find.text(RetiroPublicacion.yaRetirada), findsOneWidget);
+      expect(repositorio.retiros, hasLength(1));
+    });
+
+    testWidgets('un fallo de red lo avisa y no saca la publicación', (
+      tester,
+    ) async {
+      await abrirComoAdmin(tester);
+      repositorio.errorAlRetirar = Exception('sin red');
+
+      await pedirRetiro(tester, TarjetaPublicacion.claveEliminarDe('a'));
+      await escribirMotivo(tester, 'Spam');
+      await confirmar(tester);
+
+      expect(find.text(RetiroPublicacion.noSePudo), findsOneWidget);
+      expect(laPublicacion('a').estado, EstadoPublicacion.publicada);
+      expect(find.byKey(TarjetaPublicacion.claveDe('a')), findsOneWidget);
+    });
+  });
 }

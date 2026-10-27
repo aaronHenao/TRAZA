@@ -13,6 +13,7 @@ import '../../utils/fecha_relativa.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/traza_top_bar.dart';
+import '../foro/detalle_publicacion_screen.dart';
 
 /// Los avisos del usuario (SCRUM-241, SCRUM-242).
 ///
@@ -26,6 +27,27 @@ class NotificacionesScreen extends ConsumerStatefulWidget {
 
   static const claveLista = Key('notificaciones-lista');
   static const claveReintentar = Key('notificaciones-reintentar');
+  static Key claveFila(String id) => Key('notificacion-$id');
+
+  /// A dónde lleva un aviso, o null si no lleva a ningún lado.
+  ///
+  /// Solo el retiro de una publicación (criterio 2 de SCRUM-242): el autor
+  /// llega a su publicación, que ya no sale en ninguna lista del foro, y ahí
+  /// lee por qué la retiramos. Los avisos de rutas no abren nada todavía;
+  /// está anotado como pendiente de SCRUM-363 en `docs/deudas.md`.
+  static String? rutaDe(Notificacion notificacion) {
+    final entidad = notificacion.entidadId;
+    if (entidad == null) return null;
+
+    return switch (notificacion.tipo) {
+      TipoNotificacion.publicacionRetirada => DetallePublicacionScreen.rutaDe(
+        entidad,
+      ),
+      TipoNotificacion.rutaPublicada ||
+      TipoNotificacion.rutaRechazada ||
+      TipoNotificacion.rutaClasificada => null,
+    };
+  }
 
   @override
   ConsumerState<NotificacionesScreen> createState() =>
@@ -94,8 +116,16 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
                       itemCount: value.length,
                       separatorBuilder: (_, _) =>
                           const Divider(height: 1, color: AppColors.line),
-                      itemBuilder: (_, i) =>
-                          _Fila(notificacion: value[i], ahora: ahora),
+                      itemBuilder: (context, i) {
+                        final notificacion = value[i];
+                        final ruta = NotificacionesScreen.rutaDe(notificacion);
+
+                        return _Fila(
+                          notificacion: notificacion,
+                          ahora: ahora,
+                          onTap: ruta == null ? null : () => context.push(ruta),
+                        );
+                      },
                     ),
                   ),
                   AsyncError() => EstadoVacio(
@@ -121,14 +151,30 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
 }
 
 /// Un aviso: de qué es, qué dice y cuándo llegó.
+///
+/// Se puede tocar solo si lleva a algún sitio ([onTap]): un aviso que no abre
+/// nada no debe parecer que sí.
 class _Fila extends StatelessWidget {
-  const _Fila({required this.notificacion, required this.ahora});
+  const _Fila({required this.notificacion, required this.ahora, this.onTap});
 
   final Notificacion notificacion;
   final DateTime ahora;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final fila = _contenido();
+
+    return onTap == null
+        ? fila
+        : InkWell(
+            key: NotificacionesScreen.claveFila(notificacion.id),
+            onTap: onTap,
+            child: fila,
+          );
+  }
+
+  Widget _contenido() {
     final sinLeer = !notificacion.leida;
 
     return Padding(
@@ -190,6 +236,14 @@ class _Fila extends StatelessWidget {
               ],
             ),
           ),
+          // La flecha es lo que dice que este aviso se puede abrir; los que
+          // no llevan a nada no la tienen.
+          if (onTap != null)
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.ink3,
+            ),
         ],
       ),
     );

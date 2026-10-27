@@ -274,6 +274,38 @@ void main() {
       );
     });
 
+    testWidgets('si se la retiraron lee que la retiramos, con el motivo, y no '
+        'que se la rechazaron (criterio 2 de SCRUM-242)', (tester) async {
+      await abrir(
+        tester,
+        usuario: 'autor-pub-1',
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            estado: EstadoPublicacion.eliminada,
+            motivo: 'Lenguaje ofensivo',
+          ),
+        ],
+      );
+
+      expect(
+        find.text(
+          DetallePublicacionScreen.publicacionRetirada('Lenguaje ofensivo'),
+        ),
+        findsOneWidget,
+      );
+      // Estuvo publicada y los demás la leyeron: no es un rechazo.
+      expect(
+        find.text(
+          DetallePublicacionScreen.publicacionRechazada('Lenguaje ofensivo'),
+        ),
+        findsNothing,
+      );
+      // Ni se comenta ni se edita lo retirado.
+      expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
+    });
+
     testWidgets('a los demás lo que está en revisión no les existe', (
       tester,
     ) async {

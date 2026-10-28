@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/recorrido.dart';
 import '../models/resumen_entrenamiento.dart';
 import 'actividad_provider.dart';
+import 'almacen_recorrido.dart';
 import 'entrenamiento_actual_provider.dart';
 import 'entrenamiento_service.dart';
 import 'insignias_provider.dart';
@@ -148,6 +149,15 @@ class DescarteEntrenamiento {
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
 
     if (entrenamientoId == null) return;
+
+    // Descartar es descartar: lo que quedara en disco de este recorrido no
+    // tiene que subir nunca (SCRUM-292).
+    try {
+      await _ref.read(almacenRecorridoProvider).olvidar(entrenamientoId);
+    } catch (error) {
+      debugPrint('No se pudo borrar el recorrido descartado: $error');
+    }
+
     await _cerrar((
       entrenamientoId: entrenamientoId,
       fechaFin: _ref.read(relojProvider)(),
@@ -253,6 +263,11 @@ class CierreEntrenamiento {
         debugPrint('No se pudo cerrar el entrenamiento: $error');
         return 'No se pudo guardar el entrenamiento. Inténtalo de nuevo.';
       }
+
+      // El recorrido ya está entero en la base: lo guardado en disco deja
+      // de hacer falta (SCRUM-292). Si no se pudiera borrar, el reenvío del
+      // próximo arranque lo mandaría otra vez y la base lo descartaría.
+      unawaited(_olvidarRecorrido(entrenamientoId));
     }
 
     _ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
@@ -277,5 +292,13 @@ class CierreEntrenamiento {
       _ref.invalidate(misRetosProvider);
     }
     return null;
+  }
+
+  Future<void> _olvidarRecorrido(String entrenamientoId) async {
+    try {
+      await _ref.read(almacenRecorridoProvider).olvidar(entrenamientoId);
+    } catch (error) {
+      debugPrint('No se pudo borrar el recorrido guardado: $error');
+    }
   }
 }

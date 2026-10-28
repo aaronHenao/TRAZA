@@ -17,6 +17,7 @@ import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/screens/home/actividad_screen.dart';
 import 'package:traza/screens/tracking/tracking_con_actividad_elegida.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
+import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/entrenamiento_provider.dart';
@@ -31,6 +32,7 @@ import 'package:traza/widgets/controles_entrenamiento.dart';
 import 'package:traza/widgets/cronometro_entrenamiento.dart';
 import 'package:traza/widgets/requiere_permiso_ubicacion.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
@@ -83,6 +85,7 @@ void main() {
           const _CatalogoFalso(),
         ),
         fuenteUbicacionProvider.overrideWithValue(gps),
+        almacenRecorridoProvider.overrideWithValue(AlmacenRecorridoFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(puntosGps),
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
         relojProvider.overrideWithValue(reloj.call),
@@ -188,7 +191,11 @@ void main() {
     await avanzar(tester, latitud: 6.2314, longitud: -75.6108);
     expect(tiempo(tester), '00:00:10');
     expect(container.read(recorridoProvider).puntos.length, 2);
-    expect(puntosGps.lotes, isEmpty, reason: 'nada se sube durante la ruta');
+    expect(
+      puntosGps.lotes,
+      isEmpty,
+      reason: 'con dos puntos todavía no toca lote (SCRUM-292)',
+    );
 
     // Finaliza: los puntos se suben con el id del entrenamiento creado, la
     // fila se cierra y se pasa al resumen.

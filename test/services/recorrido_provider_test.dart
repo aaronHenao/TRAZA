@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/recorrido.dart';
+import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
@@ -12,6 +14,7 @@ import '../utiles/repositorio_puntos_gps_falso.dart';
 void main() {
   late FuenteUbicacionFalsa fuente;
   late RepositorioPuntosGpsFalso repositorio;
+  late AlmacenRecorridoFalso almacen;
   late ProviderContainer container;
 
   const entrenamientoId = 'e-123';
@@ -21,6 +24,7 @@ void main() {
       overrides: [
         relojProvider.overrideWithValue(RelojFalso().call),
         fuenteUbicacionProvider.overrideWithValue(fuente),
+        almacenRecorridoProvider.overrideWithValue(almacen),
         repositorioPuntosGpsProvider.overrideWithValue(repositorio),
         entrenamientoActualProvider.overrideWithValue(entrenamiento),
       ],
@@ -52,8 +56,17 @@ void main() {
   setUp(() {
     fuente = FuenteUbicacionFalsa();
     repositorio = RepositorioPuntosGpsFalso();
+    almacen = AlmacenRecorridoFalso();
     addTearDown(() => fuente.cerrar());
   });
+
+  /// Emite [cuantos] puntos separados lo bastante para que todos cuenten
+  /// como avance.
+  Future<void> correr(int cuantos, {double desde = 6.2311}) async {
+    for (var i = 0; i < cuantos; i++) {
+      await emitir(desde + i * 0.0005, -75.6105);
+    }
+  }
 
   group('registro en local', () {
     test('empieza vacío y pendiente de sincronizar', () async {
@@ -237,5 +250,153 @@ void main() {
         expect(recorrido().sincronizacion, EstadoSincronizacion.completada);
       },
     );
+  });
+
+  group('offline first (SCRUM-292)', () {
+    test(
+      'cada punto se guarda en disco según se captura, no al final',
+      () async {
+        await montar();
+
+        await correr(3);
+
+        // Sin haber finalizado nada, los tres están a salvo.
+        expect(almacen.guardados[entrenamientoId], hasLength(3));
+        expect(repositorio.lotes, isEmpty, reason: 'todavía no toca lote');
+      },
+    );
+
+    test('lo guardado lleva su orden y su tramo', () async {
+      await montar();
+
+      await correr(2);
+      container.read(cronometroProvider.notifier).alternarPausa();
+      container.read(cronometroProvider.notifier).alternarPausa();
+      await correr(2, desde: 6.2400);
+
+      final guardados = almacen.guardados[entrenamientoId]!;
+      expect(guardados.map((p) => p.orden), [0, 1, 2, 3]);
+      // La primera lectura tras reanudar abre tramo (BUG-005).
+      expect(guardados.map((p) => p.tramo), [0, 0, 1, 1]);
+    });
+
+    test('envía un lote al llegar a la cuenta, sin esperar al final', () async {
+      await montar();
+
+      await correr(RecorridoNotifier.puntosPorLote);
+
+      expect(repositorio.lotes, hasLength(1));
+      expect(
+        repositorio.puntosDe(entrenamientoId),
+        hasLength(RecorridoNotifier.puntosPorLote),
+      );
+    });
+
+    test('lo ya enviado no se vuelve a mandar en el lote siguiente', () async {
+      await montar();
+
+      await correr(RecorridoNotifier.puntosPorLote * 2);
+
+      expect(repositorio.lotes, hasLength(2));
+      expect(repositorio.lotes[0].ordenes.first, 0);
+      // El segundo lote empieza donde acabó el primero.
+      expect(
+        repositorio.lotes[1].ordenes.first,
+        RecorridoNotifier.puntosPorLote,
+      );
+    });
+
+    test('sin red los puntos siguen en disco y no se pierde ninguno', () async {
+      await montar();
+      repositorio.fallar = true;
+
+      await correr(RecorridoNotifier.puntosPorLote + 5);
+
+      expect(recorrido().sincronizacion, EstadoSincronizacion.fallida);
+      expect(repositorio.puntosDe(entrenamientoId), isEmpty);
+      // Lo que importa: no se perdió nada.
+      expect(
+        await almacen.pendientes(entrenamientoId),
+        hasLength(RecorridoNotifier.puntosPorLote + 5),
+      );
+    });
+
+    test(
+      'tras un fallo no se reintenta en cada punto, sino al lote siguiente',
+      () async {
+        await montar();
+        repositorio.fallar = true;
+
+        // Tres lotes de puntos con la red caída.
+        await correr(RecorridoNotifier.puntosPorLote * 3);
+
+        // Sin esto, el primer fallo dejaba el contador pasado y cada punto
+        // nuevo lanzaba otra petición: se veía en el emulador como una cada
+        // dos segundos, y aquí serían 41 intentos en vez de 3.
+        expect(repositorio.intentos, 3);
+      },
+    );
+
+    test(
+      'cuando vuelve la red, el siguiente lote sube todo lo atrasado',
+      () async {
+        await montar();
+        repositorio.fallar = true;
+        await correr(RecorridoNotifier.puntosPorLote);
+        expect(repositorio.puntosDe(entrenamientoId), isEmpty);
+
+        repositorio.fallar = false;
+        await correr(RecorridoNotifier.puntosPorLote);
+
+        expect(
+          repositorio.puntosDe(entrenamientoId),
+          hasLength(RecorridoNotifier.puntosPorLote * 2),
+        );
+        expect(await almacen.pendientes(entrenamientoId), isEmpty);
+      },
+    );
+
+    test('al finalizar manda lo que quede pendiente', () async {
+      await montar();
+
+      await correr(5);
+      expect(repositorio.lotes, isEmpty);
+
+      expect(await sincronizar(), isTrue);
+
+      expect(repositorio.puntosDe(entrenamientoId), hasLength(5));
+      expect(await almacen.pendientes(entrenamientoId), isEmpty);
+    });
+
+    test('reenviar un lote que ya entró no duplica nada', () async {
+      await montar();
+      await correr(5);
+      await sincronizar();
+
+      // Como si la respuesta se hubiera perdido y se reintentara: la base
+      // descarta lo que ya tiene (índice único de 0053).
+      await repositorio.guardarLote(
+        entrenamientoId: entrenamientoId,
+        puntos: almacen.guardados[entrenamientoId]!,
+      );
+
+      expect(repositorio.puntosDe(entrenamientoId), hasLength(5));
+      expect(repositorio.puntosDe(entrenamientoId).map((p) => p.orden), [
+        0,
+        1,
+        2,
+        3,
+        4,
+      ]);
+    });
+
+    test('sin entrenamiento creado no se guarda nada en disco', () async {
+      await montar(entrenamiento: null);
+
+      await correr(3);
+
+      expect(recorrido().puntos, hasLength(3), reason: 'el trazo sí se ve');
+      expect(almacen.guardados, isEmpty);
+    });
   });
 }

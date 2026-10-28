@@ -24,6 +24,7 @@ import '../../widgets/traza_card.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 import 'revisar_clasificacion_screen.dart';
+import 'revision_rutas_screen.dart' show decidirRevisionRuta;
 
 /// El detalle de una ruta de la comunidad (SCRUM-240).
 ///
@@ -80,6 +81,9 @@ class DetalleRutaScreen extends ConsumerWidget {
   static Key claveOpcionDificultad(Dificultad dificultad) =>
       Key('detalle-ruta-dificultad-${dificultad.valorDb}');
   static const claveAsignar = Key('detalle-ruta-asignar');
+
+  // El experto también rechaza, con motivo (SCRUM-321).
+  static const claveRechazar = Key('detalle-ruta-rechazar');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -517,7 +521,9 @@ class _ClasificarSiEsExperto extends ConsumerWidget {
 }
 
 /// La dificultad que asigna el Runner Experto (criterio 1 de SCRUM-363).
-/// Mira el mapa y la distancia de arriba, elige y asigna.
+/// Mira el mapa y la distancia de arriba, elige y asigna. Asignarla es su
+/// aprobación; si la ruta no sirve, la rechaza con un motivo (criterio 5 de
+/// SCRUM-321).
 class _Clasificar extends ConsumerStatefulWidget {
   const _Clasificar({required this.ruta});
 
@@ -554,6 +560,20 @@ class _ClasificarState extends ConsumerState<_Clasificar> {
     }
   }
 
+  /// Pide el motivo, rechaza y, si quedó guardado, vuelve a la bandeja, que
+  /// ya no la trae. `_asignando` cubre las dos decisiones: mientras se guarda
+  /// una, no se puede tomar la otra.
+  Future<void> _rechazar() async {
+    if (_asignando) return;
+    setState(() => _asignando = true);
+    try {
+      final hecho = await decidirRevisionRuta(context, ref, widget.ruta, false);
+      if (hecho && mounted) context.pop();
+    } finally {
+      if (mounted) setState(() => _asignando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final elegida = _elegida;
@@ -574,7 +594,7 @@ class _ClasificarState extends ConsumerState<_Clasificar> {
           const SizedBox(height: 4),
           const Text(
             'Mira el recorrido y su distancia. El autor la publica cuando '
-            'la tenga.',
+            'la tenga. Si no sirve, recházala con un motivo.',
             style: TextStyle(fontSize: 13, color: AppColors.ink2, height: 1.4),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -597,6 +617,12 @@ class _ClasificarState extends ConsumerState<_Clasificar> {
                 ? null
                 : () => _asignar(elegida),
             child: const Text('Asignar dificultad'),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          OutlinedButton(
+            key: DetalleRutaScreen.claveRechazar,
+            onPressed: _asignando ? null : _rechazar,
+            child: const Text('Rechazar'),
           ),
         ],
       ),

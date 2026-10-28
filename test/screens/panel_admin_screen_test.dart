@@ -59,6 +59,13 @@ void main() {
     expect(find.byType(PanelAdminScreen), findsOneWidget);
   });
 
+  testWidgets('ofrece la revisión de rutas (SCRUM-327)', (tester) async {
+    await _montar(tester);
+
+    expect(find.byKey(PanelAdminScreen.claveRutas), findsOneWidget);
+    expect(find.text('Revisión de rutas'), findsOneWidget);
+  });
+
   testWidgets('la salida de la sesión está en el panel', (tester) async {
     await _montar(tester);
 

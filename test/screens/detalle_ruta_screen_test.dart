@@ -14,15 +14,18 @@ import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/foro_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/revision_rutas_service.dart';
 import 'package:traza/services/roles_service.dart';
 import 'package:traza/services/rutas_provider.dart';
 import 'package:traza/services/rutas_service.dart';
+import 'package:traza/widgets/dialogo_motivo_rechazo.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/tarjeta_ruta.dart';
 
 import '../utiles/foro_repository_falso.dart';
 import '../utiles/fuente_cambios_foro_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
+import '../utiles/revision_rutas_falso.dart';
 import '../utiles/roles_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
@@ -730,6 +733,58 @@ void main() {
         expect(find.text('Pantalla anterior'), findsNothing);
       });
 
+      testWidgets('el experto la rechaza con motivo y vuelve a la bandeja '
+          '(criterio 5 de SCRUM-321)', (tester) async {
+        final revision = RevisionRutasFalso(rutas: [revisionExperto]);
+        await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: revisionExperto,
+          revision: revision,
+        );
+
+        await _tocar(tester, find.byKey(DetalleRutaScreen.claveRechazar));
+        await tester.enterText(
+          find.byKey(DialogoMotivoRechazo.claveMotivo),
+          'Pasa por una zona sin andén',
+        );
+        await _tocar(tester, find.byKey(DialogoMotivoRechazo.claveConfirmar));
+
+        expect(revision.decisiones.single, (
+          revisionExperto.id,
+          false,
+          'Pasa por una zona sin andén',
+        ));
+        expect(
+          find.text('Rechazada. Le avisamos al autor el motivo.'),
+          findsOneWidget,
+        );
+        expect(find.text('Pantalla anterior'), findsOneWidget);
+      });
+
+      testWidgets('sin motivo el rechazo del experto no se completa '
+          '(criterio 6 de SCRUM-321)', (tester) async {
+        final revision = RevisionRutasFalso(rutas: [revisionExperto]);
+        await _abrirComo(
+          tester,
+          usuario: 'experto-1',
+          experto: true,
+          ruta: revisionExperto,
+          revision: revision,
+        );
+
+        await _tocar(tester, find.byKey(DetalleRutaScreen.claveRechazar));
+        await tester.enterText(
+          find.byKey(DialogoMotivoRechazo.claveMotivo),
+          '   ',
+        );
+        await _tocar(tester, find.byKey(DialogoMotivoRechazo.claveConfirmar));
+
+        expect(find.text('El motivo es obligatorio.'), findsOneWidget);
+        expect(revision.decisiones, isEmpty);
+      });
+
       testWidgets('un experto no clasifica su propia ruta: la ve como autor', (
         tester,
       ) async {
@@ -846,6 +901,7 @@ Future<RutasRepositorioFalso> _abrirComo(
   required String? usuario,
   bool experto = false,
   Object? errorRoles,
+  RevisionRutasFalso? revision,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 900 * 3);
   tester.view.devicePixelRatio = 3;
@@ -880,6 +936,10 @@ Future<RutasRepositorioFalso> _abrirComo(
         rolesRepositoryProvider.overrideWithValue(roles),
         relojProvider.overrideWithValue(() => DateTime(2026, 10, 17, 12)),
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        // El rechazo del experto (SCRUM-321).
+        revisionRutasRepositoryProvider.overrideWithValue(
+          revision ?? RevisionRutasFalso(rutas: [ruta]),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

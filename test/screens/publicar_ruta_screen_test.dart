@@ -61,8 +61,11 @@ void main() {
         find.text('5.23 km · la distancia que llevará tu ruta'),
         findsOneWidget,
       );
+      // SCRUM-321: dos revisiones, primero el administrador.
       expect(
-        find.textContaining('Un Runner Experto revisa tu ruta'),
+        find.textContaining(
+          'El administrador y después un Runner Experto revisan tu ruta',
+        ),
         findsOneWidget,
       );
     });
@@ -241,6 +244,25 @@ void main() {
       expect(find.byKey(PublicarRutaScreen.claveYaPublicada), findsOneWidget);
       expect(find.text('Esta ruta está en revisión'), findsOneWidget);
       expect(find.byKey(PublicarRutaScreen.claveNombre), findsNothing);
+    });
+
+    testWidgets('aprobada por el administrador sigue en revision '
+        '(SCRUM-321)', (tester) async {
+      await _abrir(
+        tester,
+        resumen: resumen(),
+        existente: rutaDePrueba(
+          nombre: 'Vuelta al estadio',
+          estado: EstadoRuta.revisionExperto,
+        ),
+      );
+
+      expect(find.text('Esta ruta está en revisión'), findsOneWidget);
+      expect(find.text('Ya publicaste esta ruta'), findsNothing);
+      expect(
+        find.textContaining('Pendiente de revisión del Runner Experto'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('aguanta el nombre mas largo que admite la tabla', (

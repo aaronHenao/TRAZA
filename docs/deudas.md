@@ -179,10 +179,21 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 
 - **Pendiente y desnivel.** La HU los nombra, pero la app no guarda altitud (`0001`: "puntos_gps SIN altitud, a petición explícita"). Acordado con el equipo: el experto clasifica con la distancia y el mapa. Para usarlos haría falta guardar la altitud al entrenar o pedírsela a un servicio de elevación al guardar la ruta; con ellos, `preparar_ruta` podría exigirlos para "datos suficientes" y el detalle mostrarlos.
 - **Completar los datos.** Una ruta en `datos_incompletos` se queda así: no hay de dónde sacar la distancia que le falta, y el índice de `0031` no deja volver a publicar ese entrenamiento (solo las rechazadas se pueden mandar de nuevo). Si se resuelve la distancia, haría falta una función que la recalcule y la pase a `en_revision`.
-- **La migración de SCRUM-321 en el repo.** `revisiones_ruta`, `decidir_revision_ruta`, `avisar_ruta_rechazada` y la policy `"el runner experto ve las rutas pendientes de su revision"` están en la base, pero en ninguna migración. `0048` depende de ellas: quien hizo la 321 tiene que subir su `.sql` con un número anterior al de `0048`, o un proyecto nuevo armado desde el repo falla al correr `0048`.
-- **Las pantallas del administrador y del rechazo (SCRUM-321).** Tampoco están en el repo. Mientras no lleguen, una ruta recién publicada se queda en `en_revision` hasta que el administrador la apruebe desde el SQL Editor (`update rutas set estado = 'revision_experto' where id = '...'`), y el experto no tiene botón para rechazar: solo asigna la dificultad. Las pruebas de la app simulan la aprobación con `RutasRepositorioFalso.aprobarComoAdministrador`.
 - **Los scripts de verificación de 0045 y 0047** describen el flujo de antes (el experto clasifica desde `en_revision`): después de `0048` fallan a propósito. El que vale es el de `0048`.
 - **Tocar el aviso.** La bandeja de notificaciones no abre la ruta. El autor llega a confirmarla por "Ver mi ruta" en la pantalla de publicar de ese entrenamiento.
+
+## SCRUM-321: validar la publicación de rutas (administrador y Runner Experto)
+
+**Qué quedó hecho:**
+
+- `0043_revision_de_rutas.sql` y `0044_aviso_de_ruta_rechazada.sql`: lo que `0048` daba por hecho en la base (`revisiones_ruta`, `decidir_revision_ruta`, `avisar_ruta_rechazada` y la policy del experto sobre `revision_experto`). Se escribieron como 0036 y 0037 y se aplicaron a mano en la base compartida antes de llegar al repo; llevan esos números porque `0048` depende de ellas y para entonces 0036 y 0037 ya estaban usados. **En la base compartida no hay que volver a correrlas.**
+- App: bandeja del administrador (`/admin/rutas`, desde su panel) con su detalle y el trazado, para aprobar o rechazar con motivo. Lo que aprueba pasa a "Rutas por clasificar" (SCRUM-363). El Runner Experto rechaza con motivo desde el detalle de la ruta, junto a "Asignar dificultad", que es su aprobación. El diálogo del motivo es `pedirMotivoRechazo`.
+
+**Qué falta:**
+
+- **Las bandejas no son en tiempo real**: la del administrador se actualiza al entrar, al deslizar y al decidir. `rutas` no está en la publicación de Realtime.
+- **Unificar el diálogo de rechazo** (`pedirMotivoRechazo`) con el `_DialogoRechazo` privado de la moderación del foro, que hace lo mismo con otro texto.
+- **El administrador no puede corregir una decisión**: una ruta rechazada no vuelve a revisión. El autor puede volver a publicar el mismo entrenamiento (el índice de 0031 deja fuera las rechazadas).
 
 ## SCRUM-259 (HU-35): revisar la clasificación del Runner Experto
 

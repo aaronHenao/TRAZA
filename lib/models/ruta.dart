@@ -168,7 +168,8 @@ class Ruta {
   /// Si un Runner Experto ya revisó su dificultad.
   bool get dificultadRevisada => dificultadRevisadaEn != null;
 
-  /// Por qué el experto no la aprobó. Null mientras no la rechace.
+  /// Por qué el administrador o el experto no la aprobó (SCRUM-321). Null
+  /// mientras no la rechacen.
   final String? motivoRechazo;
 
   /// Cuándo quedó publicada, para mostrarlo junto al autor (criterio 4).

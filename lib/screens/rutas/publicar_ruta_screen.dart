@@ -466,8 +466,10 @@ class _AvisoRevision extends StatelessWidget {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Un Runner Experto revisa tu ruta antes de que la vea la '
-              'comunidad. Te avisamos cuando se publique.',
+              // SCRUM-321: primero el administrador, después el experto.
+              'El administrador y después un Runner Experto revisan tu ruta '
+              'antes de que la vea la comunidad. Te avisamos cuando se '
+              'publique.',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.ink2,

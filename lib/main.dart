@@ -25,6 +25,7 @@ import 'widgets/navegacion_principal.dart';
 import 'screens/notificaciones/notificaciones_screen.dart';
 import 'screens/onboarding/perfil_screen.dart';
 import 'screens/rutas/rutas_por_clasificar_screen.dart';
+import 'screens/rutas/rutas_revision.dart';
 import 'screens/rutas/seccion_rutas.dart';
 import 'screens/onboarding/permisos_screen.dart';
 import 'screens/recompensas/catalogo_recompensas_screen.dart';
@@ -326,6 +327,9 @@ final _navegacion = GoRouter(
         ),
       ],
     ),
+    // La bandeja de revisión de rutas del administrador (SCRUM-321): la
+    // primera revisión, antes de "Rutas por clasificar".
+    rutasRevision,
     // Entrenamiento en curso (SCRUM-102, de Aaron) con la actividad que el
     // usuario eligió en los chips del inicio (SCRUM-93).
     GoRoute(

@@ -5,7 +5,12 @@ import assert from "node:assert/strict";
 
 import { decidir, MOTIVO_SIN_RESPUESTA, type ResultadoPasada } from "./decision.ts";
 import { buscarGroserias } from "./groserias.ts";
-import { MOTIVO_GENERICO, MOTIVO_GROSERIA, MOTIVO_SPAM } from "./politica_traza.ts";
+import {
+  MOTIVO_FUERA_DE_TEMA,
+  MOTIVO_GENERICO,
+  MOTIVO_GROSERIA,
+  MOTIVO_SPAM,
+} from "./politica_traza.ts";
 import type { SenalesSpam } from "./spam.ts";
 
 const seguro: ResultadoPasada = {
@@ -109,6 +114,35 @@ describe("decidir", () => {
     }
   });
 
+  describe("lo fuera de tema va al administrador, nunca se rechaza solo", () => {
+    it("si la política solo marca fuera de tema, queda pendiente con ese motivo", () => {
+      assert.deepEqual(decidir(seguro, inseguro("Off-topic"), sinSpam), {
+        estado: "pendiente",
+        motivo:
+          "Posible fuera de tema (no trata de running, ejercicio, salud o bienestar)",
+        categorias: [MOTIVO_FUERA_DE_TEMA],
+      });
+    });
+
+    it("no cuenta como el voto de la política para rechazar lo que marca la taxonomía", () => {
+      const decision = decidir(inseguro("Violence"), inseguro("Off-topic"), sinSpam);
+      assert.equal(decision.estado, "pendiente");
+      assert.deepEqual(decision.categorias, ["Contenido violento"]);
+    });
+
+    it("ni sumado a las señales de spam", () => {
+      const decision = decidir(seguro, inseguro("Off-topic"), conSpam);
+      assert.equal(decision.estado, "pendiente");
+      assert.deepEqual(decision.categorias, [MOTIVO_SPAM]);
+    });
+
+    it("lo que además es spam según la política se rechaza por spam, sin nombrar el tema", () => {
+      const decision = decidir(seguro, inseguro("Off-topic", "Spam"), conSpam);
+      assert.equal(decision.estado, "rechazada");
+      assert.deepEqual(decision.categorias, [MOTIVO_SPAM]);
+    });
+  });
+
   describe("las groserías de la lista", () => {
     it("una inequívoca rechaza aunque la IA la apruebe (el malparido que pasó)", () => {
       assert.deepEqual(
@@ -149,6 +183,18 @@ describe("decidir", () => {
       );
       assert.equal(decision.estado, "rechazada");
       assert.deepEqual(decision.categorias, ["Acoso o insultos"]);
+    });
+
+    it("una ambigua fuera de tema lo dice todo en el motivo", () => {
+      const decision = decidir(
+        seguro,
+        inseguro("Off-topic"),
+        sinSpam,
+        buscarGroserias("mierda de partido"),
+      );
+      assert.equal(decision.estado, "pendiente");
+      assert.deepEqual(decision.categorias, [MOTIVO_FUERA_DE_TEMA, MOTIVO_GROSERIA]);
+      assert.match(decision.motivo ?? "", /^Posible fuera de tema .*; posible lenguaje/);
     });
 
     it("sin groserías decide la IA como siempre", () => {

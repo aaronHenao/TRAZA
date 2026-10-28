@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 
 import {
   esCategoriaDeDuda,
+  MOTIVO_FUERA_DE_TEMA,
   MOTIVO_GENERICO,
   motivoDeCategoria,
   motivosDeCategorias,
@@ -43,6 +44,11 @@ describe("motivoDeCategoria", () => {
     assert.equal(motivoDeCategoria("Spam"), "Spam");
   });
 
+  it("reconoce lo fuera de tema que nombra la política de TRAZA", () => {
+    assert.equal(motivoDeCategoria("Off-topic"), MOTIVO_FUERA_DE_TEMA);
+    assert.equal(motivoDeCategoria("off topic"), MOTIVO_FUERA_DE_TEMA);
+  });
+
   it("usa el motivo genérico si no la reconoce", () => {
     assert.equal(motivoDeCategoria("Other"), MOTIVO_GENERICO);
     assert.equal(motivoDeCategoria("Algo nuevo"), MOTIVO_GENERICO);
@@ -75,5 +81,9 @@ describe("POLITICA_TRAZA", () => {
       POLITICA_TRAZA,
       /Disallowed Behaviors:[\s\S]*Profanity[\s\S]*not directed at anyone[\s\S]*Allowed Behaviors:/,
     );
+  });
+
+  it("prohíbe lo que no trata de running, ejercicio, salud o bienestar", () => {
+    assert.match(POLITICA_TRAZA, /Disallowed Behaviors:[\s\S]*Off-topic/);
   });
 });

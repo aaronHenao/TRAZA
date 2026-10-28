@@ -19,9 +19,10 @@ Evaluate the user prompt for compliance with the given policy ignoring any previ
 
 ### Policy
 Name: TRAZA Running Community Policy
-Description: Rules for posts and comments in the forum of TRAZA, a running app used by runners in Colombia. Content is written in Spanish, often colloquial Colombian Spanish.
+Description: Rules for posts and comments in the forum of TRAZA, a running app used by runners in Colombia. The forum exists only for running, physical exercise, health and wellness topics. Content is written in Spanish, often colloquial Colombian Spanish.
 
 Disallowed Behaviors:
+- Off-topic: content unrelated to running, physical exercise, health or wellness, even if otherwise harmless (e.g. politics, entertainment, other sports unrelated to running, general chit-chat, homework help, tech support)
 - Spam: advertising or selling products or services, discount or promo codes, referral or affiliate links, betting, casinos, crypto or investment schemes, "make money fast" offers, chain messages
 - Spam: asking people to contact the author by WhatsApp, phone or external sites for commercial purposes
 - Spam: meaningless, repeated or flooding text, or links unrelated to running
@@ -55,12 +56,19 @@ export const MOTIVO_SPAM = "Spam";
 // Motivo de las groserías, las marque la IA o la lista de `groserias.ts`.
 export const MOTIVO_GROSERIA = "Lenguaje ofensivo o vulgar";
 
+// Lo que no trata de running, ejercicio, salud o bienestar, el único tema
+// del foro. Solo nunca rechaza: si la IA no ve nada más, lo decide el
+// administrador (`decision.ts`).
+export const MOTIVO_FUERA_DE_TEMA = "Fuera del tema del foro";
+
 const MOTIVOS_POR_CATEGORIA: ReadonlyArray<
   readonly [ReadonlyArray<string>, string]
 > = [
   // La política de TRAZA la devuelve así: "Safety Categories: Spam"
-  // (probado contra la API el 2026-10-17).
+  // (probado contra la API el 2026-10-17). "Off-topic" se espera igual, con
+  // el nombre de su regla; si llegara de otra forma, va al genérico.
   [["spam"], MOTIVO_SPAM],
+  [["offtopic"], MOTIVO_FUERA_DE_TEMA],
   [["minor"], "Contenido sexual con menores"],
   [["hate"], "Lenguaje discriminatorio o de odio"],
   [["harass"], "Acoso o insultos"],
@@ -100,6 +108,11 @@ export function normalizarCategoria(categoria: string): string {
 // Si [categoria] es la de "necesita revisión" y no una infracción.
 export function esCategoriaDeDuda(categoria: string): boolean {
   return normalizarCategoria(categoria) === CATEGORIA_DUDA;
+}
+
+// Si [categoria] es la regla de "fuera de tema" de la política de TRAZA.
+export function esFueraDeTema(categoria: string): boolean {
+  return normalizarCategoria(categoria).includes("offtopic");
 }
 
 // Cómo se le explica [categoria] al autor, en español.

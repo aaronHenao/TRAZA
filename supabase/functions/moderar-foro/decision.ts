@@ -17,11 +17,17 @@
 // conoce la jerga colombiana:
 //   · una inequívoca rechaza siempre, aunque la IA apruebe o falle;
 //   · una ambigua deja pendiente lo que la IA iba a aprobar.
+//
+// Lo "fuera de tema" de la política de TRAZA no es una falta: no cuenta
+// como su voto para rechazar, y si la IA no ve nada más, deja pendiente
+// para el administrador lo que iba a aprobar.
 
 import { type Groserias, SIN_GROSERIAS } from "./groserias.ts";
 import type { Veredicto } from "./nemotron.ts";
 import {
   esCategoriaDeDuda,
+  esFueraDeTema,
+  MOTIVO_FUERA_DE_TEMA,
   MOTIVO_GENERICO,
   MOTIVO_GROSERIA,
   MOTIVO_SPAM,
@@ -68,15 +74,47 @@ export function decidir(
     return { estado: "rechazada", motivo: categorias.join(", "), categorias };
   }
 
-  const decision = decidirConIA(a, b, spam);
-  if (decision.estado === "aprobada" && groserias.ambiguas.length > 0) {
-    return {
-      estado: "pendiente",
-      motivo: `Posible lenguaje ofensivo o vulgar (${groserias.ambiguas.join(", ")})`,
-      categorias: [MOTIVO_GROSERIA],
-    };
+  const { pasada: politica, fueraDeTema } = sinFueraDeTema(b);
+  const decision = decidirConIA(a, politica, spam);
+  if (decision.estado !== "aprobada") return decision;
+
+  // La IA lo aprobaría: lo que quede por mirar lo decide el administrador.
+  const dudas: string[] = [];
+  const categorias: string[] = [];
+  if (fueraDeTema) {
+    dudas.push("posible fuera de tema (no trata de running, ejercicio, salud o bienestar)");
+    categorias.push(MOTIVO_FUERA_DE_TEMA);
   }
-  return decision;
+  if (groserias.ambiguas.length > 0) {
+    dudas.push(`posible lenguaje ofensivo o vulgar (${groserias.ambiguas.join(", ")})`);
+    categorias.push(MOTIVO_GROSERIA);
+  }
+  if (dudas.length === 0) return decision;
+
+  const motivo = dudas.join("; ");
+  return {
+    estado: "pendiente",
+    motivo: motivo[0].toUpperCase() + motivo.slice(1),
+    categorias,
+  };
+}
+
+// [b] sin la regla de "fuera de tema", y si la marcaba. Si era lo único que
+// marcaba, para lo demás la política da el texto por bueno.
+function sinFueraDeTema(
+  b: ResultadoPasada,
+): { pasada: ResultadoPasada; fueraDeTema: boolean } {
+  if (!b.ok || b.veredicto.seguro || !b.veredicto.categorias.some(esFueraDeTema)) {
+    return { pasada: b, fueraDeTema: false };
+  }
+  const resto = b.veredicto.categorias.filter((c) => !esFueraDeTema(c));
+  return {
+    pasada: {
+      ok: true,
+      veredicto: { ...b.veredicto, seguro: resto.length === 0, categorias: resto },
+    },
+    fueraDeTema: true,
+  };
 }
 
 function decidirConIA(

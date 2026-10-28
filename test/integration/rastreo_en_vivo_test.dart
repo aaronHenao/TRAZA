@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/recorrido.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
+import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/pantalla_encendida_provider.dart';
@@ -21,6 +22,7 @@ import 'package:traza/widgets/cronometro_entrenamiento.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
 import 'package:traza/widgets/mapa_recorrido.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
@@ -45,6 +47,7 @@ void main() {
         relojProvider.overrideWithValue(reloj.call),
         fuenteUbicacionProvider.overrideWithValue(gps),
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        almacenRecorridoProvider.overrideWithValue(AlmacenRecorridoFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(supabase),
         entrenamientoActualProvider.overrideWithValue(entrenamientoId),
         pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),
@@ -153,7 +156,11 @@ void main() {
         LatLng(6.2317, -75.6112),
       ]);
       expect(tiempo(tester), '00:00:15');
-      expect(supabase.lotes, isEmpty, reason: 'nada se sube durante la ruta');
+      expect(
+        supabase.lotes,
+        isEmpty,
+        reason: 'con tres puntos todavía no toca lote (SCRUM-292)',
+      );
 
       // Pausa: el tiempo se congela, la posición se sigue viendo pero no
       // se registra.
@@ -359,6 +366,7 @@ void main() {
         relojProvider.overrideWithValue(reloj.call),
         fuenteUbicacionProvider.overrideWithValue(gps),
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        almacenRecorridoProvider.overrideWithValue(AlmacenRecorridoFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(supabase),
         entrenamientoActualProvider.overrideWithValue(null),
         pantallaEncendidaProvider.overrideWithValue(PantallaEncendidaFalsa()),

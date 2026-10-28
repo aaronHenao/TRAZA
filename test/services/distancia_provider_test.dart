@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/distancia_en_vivo.dart';
+import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/calculadora_distancia.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/distancia_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
@@ -24,6 +26,7 @@ void main() {
       overrides: [
         relojProvider.overrideWithValue(reloj.call),
         fuenteUbicacionProvider.overrideWithValue(fuente),
+        almacenRecorridoProvider.overrideWithValue(AlmacenRecorridoFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(
           RepositorioPuntosGpsFalso(),
         ),

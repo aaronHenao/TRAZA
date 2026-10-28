@@ -7,6 +7,7 @@ import '../../services/inicio_provider.dart';
 import '../../services/notificaciones_provider.dart';
 import '../../services/permisos_provider.dart';
 import '../../services/progresion_provider.dart';
+import '../../services/reenvio_recorridos.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -35,6 +36,12 @@ class InicioScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // SCRUM-292: si un recorrido anterior se quedó sin subir (la red no
+    // volvió antes de cerrar la app), este es el momento. Se mira una sola
+    // vez por arranque y en segundo plano: la portada no espera por ello ni
+    // enseña nada si falla, porque los puntos siguen en disco.
+    ref.watch(reenvioRecorridosProvider);
+
     return NavegacionPrincipal(
       seccion: SeccionPrincipal.inicio,
       // El "+" del prototipo lleva a elegir la actividad y arrancar.

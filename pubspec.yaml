@@ -47,6 +47,10 @@ dependencies:
   # Para preguntar por zonas a Nominatim (SCRUM-255). Ya venía con
   # supabase_flutter; aquí se declara porque la app la usa directamente.
   http: ^1.6.0
+  # Para saber dónde puede escribir la app en cada plataforma (SCRUM-292):
+  # los puntos del recorrido se guardan en disco según se capturan, para
+  # que una caída de red no se los lleve.
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

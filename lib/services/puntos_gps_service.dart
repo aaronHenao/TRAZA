@@ -1,21 +1,25 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../models/punto_gps.dart';
-import '../models/tramos.dart';
+import '../models/punto_pendiente.dart';
 
 /// Persistencia de los puntos GPS de un entrenamiento (SCRUM-110).
 ///
-/// Durante la actividad los puntos se acumulan en local; al finalizar se
-/// sincronizan todos de una vez. La app escribe en Supabase; las pruebas
-/// inyectan un repositorio falso.
+/// Los puntos se guardan en disco según se capturan y se envían por lotes
+/// durante la actividad (SCRUM-292). Antes se acumulaban en memoria y se
+/// subían todos al finalizar: una caída de red en ese momento se llevaba el
+/// recorrido entero.
+///
+/// La app escribe en Supabase; las pruebas inyectan un repositorio falso.
 abstract class RepositorioPuntosGps {
   /// Guarda [puntos] como filas de `puntos_gps`, en una sola operación.
-  /// `orden_secuencia` es la posición de cada punto en la lista y `tramo`,
-  /// el tramo al que pertenece según [cortes] (ver `Recorrido.cortes`).
-  Future<void> guardarTodos({
+  ///
+  /// Vienen ya numerados: cada uno trae su `orden_secuencia` y su `tramo`,
+  /// decididos al capturarlo. Los que la base ya tenga se descartan sin
+  /// error, así que reenviar un lote que llegó a entrar no duplica nada ni
+  /// falla (índice único de `0053`).
+  Future<void> guardarLote({
     required String entrenamientoId,
-    required List<PuntoGps> puntos,
-    List<int> cortes = const [],
+    required List<PuntoPendiente> puntos,
   });
 }
 
@@ -31,57 +35,49 @@ class RepositorioPuntosGpsSupabase implements RepositorioPuntosGps {
 
   static const String tabla = 'puntos_gps';
 
+  /// Lo que identifica un punto: su entrenamiento y su posición en él.
+  static const String conflicto = 'entrenamiento_id,orden_secuencia';
+
   @override
-  Future<void> guardarTodos({
+  Future<void> guardarLote({
     required String entrenamientoId,
-    required List<PuntoGps> puntos,
-    List<int> cortes = const [],
+    required List<PuntoPendiente> puntos,
   }) {
+    if (puntos.isEmpty) return Future.value();
+
     return _cliente
         .from(tabla)
-        .insert(
-          filasPara(
-            entrenamientoId: entrenamientoId,
-            puntos: puntos,
-            cortes: cortes,
-          ),
+        .upsert(
+          filasPara(entrenamientoId: entrenamientoId, puntos: puntos),
+          onConflict: conflicto,
+          // `do nothing`: lo que ya está guardado se queda como está. Un
+          // reenvío no reescribe ni falla.
+          ignoreDuplicates: true,
         );
   }
 
-  /// Una fila por punto, con `orden_secuencia` = índice en la lista y
-  /// `tramo` según [cortes].
+  /// Una fila por punto, con el orden y el tramo que ya traen.
   static List<Map<String, Object>> filasPara({
     required String entrenamientoId,
-    required List<PuntoGps> puntos,
-    List<int> cortes = const [],
-  }) {
-    final tramos = tramosDesdeCortes(puntos.length, cortes);
-    return [
-      for (var i = 0; i < puntos.length; i++)
-        filaPara(
-          entrenamientoId: entrenamientoId,
-          punto: puntos[i],
-          ordenSecuencia: i,
-          tramo: tramos[i],
-        ),
-    ];
-  }
+    required List<PuntoPendiente> puntos,
+  }) => [
+    for (final punto in puntos)
+      filaPara(entrenamientoId: entrenamientoId, punto: punto),
+  ];
 
   /// Fila con las columnas de `puntos_gps` (sin altitud, a propósito).
   static Map<String, Object> filaPara({
     required String entrenamientoId,
-    required PuntoGps punto,
-    required int ordenSecuencia,
-    int tramo = 0,
+    required PuntoPendiente punto,
   }) {
     return {
       'entrenamiento_id': entrenamientoId,
       'latitud': punto.latitud,
       'longitud': punto.longitud,
       'capturado_en': punto.capturadoEn.toUtc().toIso8601String(),
-      'orden_secuencia': ordenSecuencia,
+      'orden_secuencia': punto.orden,
       // Requiere la migración 0007 (BUG-005).
-      'tramo': tramo,
+      'tramo': punto.tramo,
     };
   }
 }

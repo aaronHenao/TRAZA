@@ -205,28 +205,33 @@ abstract interface class RutasRepository {
   Future<Ruta> confirmarPublicacion(Ruta ruta);
 
   /// Si quien tiene la sesión abierta puede revisar la clasificación de la
-  /// ruta [rutaId] (SCRUM-261): es Runner Experto y no es su autor. Lo
-  /// decide la base, con `puede_revisar_clasificacion` (0042).
+  /// ruta [rutaId] (SCRUM-261): es el Runner Experto que la clasificó, y la
+  /// ruta está publicada, con dificultad y sin revisar. Lo decide la base,
+  /// con `puede_revisar_clasificacion` (0042 y 0054).
   Future<bool> puedeRevisarClasificacion(String rutaId);
 
   /// Confirma la dificultad propuesta de la ruta [rutaId] y la deja marcada
   /// como revisada por quien tiene la sesión abierta (SCRUM-262, criterio 3
   /// de HU-35).
   ///
-  /// Lo hace la base, con `confirmar_clasificacion`. Esa función todavía no
-  /// existe: depende de que SCRUM-363 cree la dificultad, y lo que tiene que
-  /// hacer está escrito en `docs/deudas.md`. Lanza
-  /// [SinPermisoParaRevisarException] si la base no lo deja.
+  /// Lo hace la base, con `confirmar_clasificacion` (0054). Lanza
+  /// [SinPermisoParaRevisarException] si la base no lo deja, también si ya
+  /// se revisó.
   Future<void> confirmarClasificacion(String rutaId);
 
   /// Reemplaza la dificultad de la ruta [rutaId] por [dificultad] y la deja
   /// marcada como revisada por quien tiene la sesión abierta: queda como su
   /// clasificación definitiva (SCRUM-263, criterio 4 de HU-35).
   ///
-  /// Lo hace la base, con `corregir_clasificacion`, que todavía no existe por
-  /// lo mismo que `confirmar_clasificacion` (`docs/deudas.md`). Lanza
-  /// [SinPermisoParaRevisarException] si la base no lo deja.
+  /// Lo hace la base, con `corregir_clasificacion` (0054). Lanza
+  /// [SinPermisoParaRevisarException] si la base no lo deja, también si ya
+  /// se revisó.
   Future<void> corregirClasificacion(String rutaId, Dificultad dificultad);
+
+  /// Cuándo se revisó la clasificación de la ruta [rutaId], o null si nadie
+  /// la ha revisado (SCRUM-264, criterio 5 de HU-35). Lo dice la base, con
+  /// `clasificacion_revisada_en` (0054); quién la revisó no sale de ella.
+  Future<DateTime?> clasificacionRevisadaEn(String rutaId);
 }
 
 /// Lee y escribe en `rutas`.
@@ -535,5 +540,26 @@ class SupabaseRutasRepository implements RutasRepository {
       if (e.code == _rlsRechazo) throw const SinPermisoParaRevisarException();
       rethrow;
     }
+  }
+
+  @override
+  Future<DateTime?> clasificacionRevisadaEn(String rutaId) async {
+    _usuarioId();
+
+    // Como en `puedeRevisarClasificacion`: un solo valor, sin filas. Una
+    // fecha llega como texto, y nula si nadie la ha revisado.
+    final fecha = await _cliente.rpc<dynamic>(
+      'clasificacion_revisada_en',
+      params: {'p_ruta_id': rutaId},
+    );
+    if (fecha == null) return null;
+    final leida = fecha is String ? DateTime.tryParse(fecha) : null;
+    if (leida == null) {
+      throw FormatException(
+        'clasificacion_revisada_en devolvió algo inesperado',
+        fecha,
+      );
+    }
+    return leida.toLocal();
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,19 +17,18 @@ import '../utiles/rutas_repository_falso.dart';
 
 /// Pruebas de la dificultad en el detalle de una ruta, y de si la revisó un
 /// Runner Experto (SCRUM-264, criterio 5 de HU-35).
+///
+/// Cuándo se revisó se pregunta aparte de la ruta (0054): el repositorio
+/// falso lo contesta con `revisadasEn`.
 void main() {
   final ahora = DateTime(2026, 10, 24, 12);
   final ayer = DateTime(2026, 10, 23, 18);
 
-  Ruta ruta({
-    Dificultad? dificultad = Dificultad.moderada,
-    DateTime? revisadaEn,
-  }) => rutaDePrueba(
+  Ruta ruta({Dificultad? dificultad = Dificultad.moderada}) => rutaDePrueba(
     id: 'ruta-1',
     nombre: 'Subida al Volador',
     estado: EstadoRuta.publicada,
     dificultad: dificultad,
-    dificultadRevisadaEn: revisadaEn,
     trazado: const [
       PuntoRuta(latitud: 6.2650, longitud: -75.5800),
       PuntoRuta(latitud: 6.2680, longitud: -75.5760),
@@ -35,9 +36,16 @@ void main() {
     fechaPublicacion: DateTime(2026, 10, 20, 9),
   );
 
-  Future<void> abrir(
+  /// Abre el detalle de [ruta]. Con [revisadaEn], la base dice que la
+  /// revisaron ese día; con [revisionPendiente], todavía no contesta; con
+  /// [errorRevision], no pudo contestar. Devuelve el repositorio, para ver
+  /// qué se le preguntó.
+  Future<RutasRepositorioFalso> abrir(
     WidgetTester tester,
     Ruta ruta, {
+    DateTime? revisadaEn,
+    Completer<void>? revisionPendiente,
+    Object? errorRevision,
     Size tamano = const Size(390, 844),
     double escalaTexto = 1,
   }) async {
@@ -45,6 +53,11 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repositorio = RutasRepositorioFalso(rutas: [ruta])
+      ..revisadaEnPendiente = revisionPendiente
+      ..errorRevisadaEn = errorRevision;
+    if (revisadaEn != null) repositorio.revisadasEn[ruta.id] = revisadaEn;
 
     final router = GoRouter(
       initialLocation: DetalleRutaScreen.rutaDe('ruta-1'),
@@ -61,9 +74,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          rutasRepositoryProvider.overrideWithValue(
-            RutasRepositorioFalso(rutas: [ruta]),
-          ),
+          rutasRepositoryProvider.overrideWithValue(repositorio),
           relojProvider.overrideWithValue(() => ahora),
           // El mapa no descarga tiles reales.
           proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
@@ -75,6 +86,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    return repositorio;
   }
 
   Finder enLaTarjeta(Finder finder) => find.descendant(
@@ -84,7 +96,7 @@ void main() {
 
   testWidgets('una ruta revisada dice su dificultad, que la revisó un Runner '
       'Experto y cuándo', (tester) async {
-    await abrir(tester, ruta(revisadaEn: ayer));
+    await abrir(tester, ruta(), revisadaEn: ayer);
 
     expect(enLaTarjeta(find.text('Moderada')), findsOneWidget);
     expect(
@@ -105,6 +117,49 @@ void main() {
     expect(enLaTarjeta(find.byIcon(Icons.verified_rounded)), findsNothing);
   });
 
+  testWidgets('mientras pregunta si la revisaron, no dice ni que sí ni que '
+      'no', (tester) async {
+    final pendiente = Completer<void>();
+    await abrir(tester, ruta(), revisionPendiente: pendiente);
+
+    expect(enLaTarjeta(find.text('Moderada')), findsOneWidget);
+    expect(
+      enLaTarjeta(find.text('Asignada por un Runner Experto')),
+      findsOneWidget,
+    );
+    expect(enLaTarjeta(find.text(DetalleRutaScreen.sinRevisar)), findsNothing);
+    expect(
+      enLaTarjeta(find.textContaining('Revisada por un Runner Experto')),
+      findsNothing,
+    );
+
+    pendiente.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      enLaTarjeta(find.text(DetalleRutaScreen.sinRevisar)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('si no se pudo saber si la revisaron, solo dice la dificultad', (
+    tester,
+  ) async {
+    await abrir(tester, ruta(), errorRevision: StateError('sin red'));
+
+    expect(enLaTarjeta(find.text('Moderada')), findsOneWidget);
+    expect(
+      enLaTarjeta(find.text('Asignada por un Runner Experto')),
+      findsOneWidget,
+    );
+    expect(enLaTarjeta(find.text(DetalleRutaScreen.sinRevisar)), findsNothing);
+    expect(
+      enLaTarjeta(find.textContaining('Revisada por un Runner Experto')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('sin dificultad va "Sin clasificar", como en su tarjeta', (
     tester,
   ) async {
@@ -120,9 +175,13 @@ void main() {
     );
   });
 
-  testWidgets('sin dificultad, una fecha de revisión suelta no dice que la '
+  testWidgets('sin dificultad no pregunta si la revisaron, ni dice que la '
       'revisaron', (tester) async {
-    await abrir(tester, ruta(dificultad: null, revisadaEn: ayer));
+    final repositorio = await abrir(
+      tester,
+      ruta(dificultad: null),
+      revisadaEn: ayer,
+    );
 
     expect(
       enLaTarjeta(find.textContaining('Revisada por un Runner Experto')),
@@ -132,10 +191,11 @@ void main() {
       enLaTarjeta(find.text(DetalleRutaScreen.sinDificultadAsignada)),
       findsOneWidget,
     );
+    expect(repositorio.consultasDeRevisadaEn, 0);
   });
 
   testWidgets('va justo debajo de la distancia', (tester) async {
-    await abrir(tester, ruta(revisadaEn: ayer));
+    await abrir(tester, ruta(), revisadaEn: ayer);
 
     expect(
       tester.getTopLeft(find.byKey(DetalleRutaScreen.claveDificultad)).dy,
@@ -148,7 +208,7 @@ void main() {
   testWidgets('un lector de pantalla lee la dificultad junto con quién la '
       'revisó', (tester) async {
     final semantica = tester.ensureSemantics();
-    await abrir(tester, ruta(revisadaEn: ayer));
+    await abrir(tester, ruta(), revisadaEn: ayer);
 
     final etiqueta = tester
         .getSemantics(find.byKey(DetalleRutaScreen.claveDificultad))
@@ -163,7 +223,8 @@ void main() {
   ) async {
     await abrir(
       tester,
-      ruta(revisadaEn: ayer),
+      ruta(),
+      revisadaEn: ayer,
       tamano: const Size(320, 568),
       escalaTexto: 1.6,
     );

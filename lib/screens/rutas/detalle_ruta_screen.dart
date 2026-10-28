@@ -403,21 +403,26 @@ class _EstadoDelAutorState extends ConsumerState<_EstadoDelAutor> {
 }
 
 /// La dificultad de la ruta: que la asignó un Runner Experto (criterio 2 de
-/// SCRUM-363) y si otro la revisó (SCRUM-264, criterio 5 de HU-35).
+/// SCRUM-363) y si la revisó (SCRUM-264, criterio 5 de HU-35).
 ///
 /// De quién la revisó solo se dice que fue un Runner Experto, y cuándo: eso
 /// es lo que le da confianza a quien la va a correr, y el nombre no le
-/// agrega nada. Se lee de una vez con el lector de pantalla.
-class _Dificultad extends StatelessWidget {
+/// agrega nada. La revisión se pregunta aparte de la ruta (0054): mientras
+/// llega, o si no se pudo saber, no se dice ni que sí ni que no. Se lee de
+/// una vez con el lector de pantalla.
+class _Dificultad extends ConsumerWidget {
   const _Dificultad({required this.ruta, required this.ahora});
 
   final Ruta ruta;
   final DateTime ahora;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final dificultad = ruta.dificultad;
-    final revisadaEn = ruta.dificultadRevisadaEn;
+    // Sin dificultad no hay revisión que preguntar.
+    final revision = dificultad == null
+        ? null
+        : ref.watch(clasificacionRevisadaEnProvider(ruta.id));
     const detalle = TextStyle(fontSize: 12.5, color: AppColors.ink2);
 
     return MergeSemantics(
@@ -459,7 +464,12 @@ class _Dificultad extends StatelessWidget {
                       'Asignada por un Runner Experto',
                       style: detalle,
                     ),
-                  if (dificultad != null && revisadaEn != null)
+                  if (dificultad == null)
+                    const Text(
+                      DetalleRutaScreen.sinDificultadAsignada,
+                      style: detalle,
+                    )
+                  else if (revision?.valueOrNull case final revisadaEn?)
                     Row(
                       children: [
                         const Icon(
@@ -479,13 +489,8 @@ class _Dificultad extends StatelessWidget {
                         ),
                       ],
                     )
-                  else
-                    Text(
-                      dificultad == null
-                          ? DetalleRutaScreen.sinDificultadAsignada
-                          : DetalleRutaScreen.sinRevisar,
-                      style: detalle,
-                    ),
+                  else if (revision?.hasValue ?? false)
+                    const Text(DetalleRutaScreen.sinRevisar, style: detalle),
                 ],
               ),
             ),

@@ -392,11 +392,12 @@ void main() {
     });
 
     testWidgets('confirmar se lo pide a la base, avisa y vuelve al detalle, '
-        'que vuelve a pedir la ruta', (tester) async {
+        'que vuelve a pedir la ruta y cuándo se revisó', (tester) async {
       await montar(tester, ubicacion: DetalleRutaScreen.rutaDe('ruta-1'));
       await tester.tap(find.byKey(RevisarClasificacionScreen.claveAbrir));
       await tester.pumpAndSettle();
       final consultas = repositorio.consultasDeRuta;
+      final preguntasDeRevision = repositorio.consultasDeRevisadaEn;
 
       await confirmar(tester);
       await tester.pumpAndSettle();
@@ -412,6 +413,10 @@ void main() {
         findsNothing,
       );
       expect(repositorio.consultasDeRuta, greaterThan(consultas));
+      expect(
+        repositorio.consultasDeRevisadaEn,
+        greaterThan(preguntasDeRevision),
+      );
     });
 
     testWidgets('mientras guarda no se puede volver a tocar, y se ve que '
@@ -569,11 +574,14 @@ void main() {
     });
 
     testWidgets('guardar se lo pide a la base con la elegida, avisa y vuelve '
-        'al detalle, que vuelve a pedir la ruta', (tester) async {
+        'al detalle, que vuelve a pedir la ruta y cuándo se revisó', (
+      tester,
+    ) async {
       await montar(tester, ubicacion: DetalleRutaScreen.rutaDe('ruta-1'));
       await tester.tap(find.byKey(RevisarClasificacionScreen.claveAbrir));
       await tester.pumpAndSettle();
       final consultas = repositorio.consultasDeRuta;
+      final preguntasDeRevision = repositorio.consultasDeRevisadaEn;
 
       await elegirYGuardar(tester, Dificultad.facil);
       await tester.pumpAndSettle();
@@ -586,6 +594,10 @@ void main() {
       );
       expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
       expect(repositorio.consultasDeRuta, greaterThan(consultas));
+      expect(
+        repositorio.consultasDeRevisadaEn,
+        greaterThan(preguntasDeRevision),
+      );
     });
 
     testWidgets('cerrar la hoja sin guardar no cambia nada', (tester) async {

@@ -362,6 +362,29 @@ class RutasRepositorioFalso implements RutasRepository {
     await correccionPendiente?.future;
   }
 
+  /// Cuándo se revisó la clasificación de cada ruta (SCRUM-264). Sin
+  /// entrada, que nadie la ha revisado.
+  final revisadasEn = <String, DateTime>{};
+
+  /// Lo que lanza `clasificacionRevisadaEn`, si algo.
+  Object? errorRevisadaEn;
+
+  /// Si está, `clasificacionRevisadaEn` no termina hasta que la prueba lo
+  /// complete.
+  Completer<void>? revisadaEnPendiente;
+
+  /// Cuántas veces se preguntó cuándo se revisó una clasificación.
+  int consultasDeRevisadaEn = 0;
+
+  @override
+  Future<DateTime?> clasificacionRevisadaEn(String rutaId) async {
+    consultasDeRevisadaEn++;
+    final error = errorRevisadaEn;
+    if (error != null) throw error;
+    await revisadaEnPendiente?.future;
+    return revisadasEn[rutaId];
+  }
+
   /// Cuántas veces se pidió una ruta con su trazado.
   int consultasDeRuta = 0;
 
@@ -407,7 +430,6 @@ Ruta rutaDePrueba({
   EstadoRuta estado = EstadoRuta.enRevision,
   double? distanciaKm = 5.23,
   Dificultad? dificultad,
-  DateTime? dificultadRevisadaEn,
   List<PuntoRuta> trazado = const [],
   List<PuntoRuta> miniatura = const [],
   DateTime? fechaCreacion,
@@ -422,7 +444,6 @@ Ruta rutaDePrueba({
   estado: estado,
   distanciaKm: distanciaKm,
   dificultad: dificultad,
-  dificultadRevisadaEn: dificultadRevisadaEn,
   trazado: trazado,
   miniatura: miniatura,
   fechaCreacion: fechaCreacion ?? DateTime(2026, 10, 17, 9),

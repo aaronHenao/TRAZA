@@ -60,45 +60,4 @@ void main() {
       expect(Ruta.desdeSupabase(fila()).dificultad, isNull);
     });
   });
-
-  group('cuándo la revisó un Runner Experto (SCRUM-264)', () {
-    Map<String, Object?> fila({Object? revisadaEn}) => {
-      'id': 'ruta-1',
-      'autor_id': 'autor-1',
-      'autor_nombre': 'Ana',
-      'nombre': 'Subida al Nutibara',
-      'estado': 'publicada',
-      'fecha_creacion': '2026-10-18T14:00:00Z',
-      'dificultad': 'moderada',
-      'dificultad_revisada_en': ?revisadaEn,
-    };
-
-    test('la ruta trae cuándo se revisó, en la hora local', () {
-      final ruta = Ruta.desdeSupabase(fila(revisadaEn: '2026-10-20T15:30:00Z'));
-
-      expect(
-        ruta.dificultadRevisadaEn,
-        DateTime.utc(2026, 10, 20, 15, 30).toLocal(),
-      );
-      expect(ruta.dificultadRevisada, isTrue);
-    });
-
-    test('las consultas de hoy no lo traen: no está revisada', () {
-      final ruta = Ruta.desdeSupabase(fila());
-
-      expect(ruta.dificultadRevisadaEn, isNull);
-      expect(ruta.dificultadRevisada, isFalse);
-    });
-
-    test('una fecha que no se entiende se toma como que no está', () {
-      expect(
-        Ruta.desdeSupabase(fila(revisadaEn: 'ayer')).dificultadRevisada,
-        isFalse,
-      );
-      expect(
-        Ruta.desdeSupabase(fila(revisadaEn: 42)).dificultadRevisada,
-        isFalse,
-      );
-    });
-  });
 }

@@ -7,18 +7,15 @@
 // teléfono: Supabase contesta desde un cliente HTTP falso, como contestaría
 // PostgREST, y la ubicación y los permisos salen de fuentes falsas.
 //
-// La base falsa cumple el contrato de `docs/deudas.md`: decide quién puede
-// revisar con la regla de 0042 (Runner Experto y no autor), y
-// `confirmar_clasificacion` y `corregir_clasificacion` cambian la ruta y
-// anotan quién la revisó y cuándo.
+// La base falsa hace lo que 0054: la revisa el mismo Runner Experto que la
+// clasificó, en una ruta publicada, con dificultad y sin revisar; confirmar
+// y corregir anotan la revisión aparte de la ruta, una por ruta, y
+// `clasificacion_revisada_en` dice cuándo. Como PostgREST, devuelve solo las
+// columnas que pide la app, y pedir una que no existe es un error.
 //
-// Lo que estas pruebas NO prueban:
-// - La base de verdad. La regla de 0042 se probó contra un Postgres con las
-//   migraciones reales; las funciones de confirmar y corregir todavía no
-//   existen (las espera SCRUM-363).
-// - Las columnas. La base falsa devuelve `dificultad` y
-//   `dificultad_revisada_en` aunque la consulta de hoy no las pida: así será
-//   cuando existan y se sumen a `_columnasConTrazado`.
+// Lo que estas pruebas NO prueban: la base de verdad. 0054 se probó contra
+// un Postgres con todas las migraciones reales, con el script de
+// verificación que trae al final.
 
 import 'dart:convert';
 
@@ -50,8 +47,10 @@ import '../utiles/proveedor_tiles_falso.dart';
 void main() {
   final ahora = DateTime(2026, 10, 24, 12);
 
-  // Ana publicó la ruta. Ana y Luis son Runner Experto; Marta no.
+  // Ana publicó la ruta y Pedro la clasificó. Ana, Pedro y Luis son Runner
+  // Experto; Marta no.
   const ana = 'usuario-ana';
+  const pedro = 'usuario-pedro';
   const luis = 'usuario-luis';
   const marta = 'usuario-marta';
 
@@ -61,12 +60,13 @@ void main() {
 
   setUp(() {
     base = _BaseFalsa(ahora: ahora.toUtc())
-      ..expertos.addAll({ana, luis})
+      ..expertos.addAll({ana, pedro, luis})
       ..rutas['ruta-1'] = _fila(
         'ruta-1',
         'Subida al Volador',
         autorId: ana,
         dificultad: Dificultad.moderada,
+        clasificadaPor: pedro,
       );
 
     permisos = _MockPermisosService();
@@ -154,11 +154,11 @@ void main() {
   }
 
   group('solo el rol correspondiente puede revisar (criterio 1)', () {
-    testWidgets('un Runner Experto que no es el autor ve la entrada y la '
+    testWidgets('el Runner Experto que la clasificó ve la entrada y la '
         'revisión', (tester) async {
       await abrir(
         tester,
-        usuario: luis,
+        usuario: pedro,
         ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
       );
 
@@ -173,7 +173,29 @@ void main() {
         find.byKey(RevisarClasificacionScreen.claveConfirmar),
         findsOneWidget,
       );
+      expect(base.preguntas, contains((pedro, 'ruta-1')));
+    });
+
+    testWidgets('otro Runner Experto, que no la clasificó, no la revisa', (
+      tester,
+    ) async {
+      final router = await abrir(
+        tester,
+        usuario: luis,
+        ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
+      );
+
+      expect(find.byKey(DetalleRutaScreen.claveDistancia), findsOneWidget);
+      expect(botonRevisar(), findsNothing);
       expect(base.preguntas, contains((luis, 'ruta-1')));
+
+      router.push(RevisarClasificacionScreen.rutaDe('ruta-1'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(RevisarClasificacionScreen.claveSinPermiso),
+        findsOneWidget,
+      );
     });
 
     testWidgets('quien no es Runner Experto no ve la entrada, y si llega por '
@@ -219,22 +241,43 @@ void main() {
       );
     });
 
+    testWidgets('sin dificultad no hay nada que revisar: ni quien la '
+        'clasificó ve la entrada', (tester) async {
+      base.rutas['ruta-1']!['dificultad'] = null;
+      final router = await abrir(
+        tester,
+        usuario: pedro,
+        ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
+      );
+
+      expect(botonRevisar(), findsNothing);
+
+      router.push(RevisarClasificacionScreen.rutaDe('ruta-1'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(RevisarClasificacionScreen.claveSinPermiso),
+        findsOneWidget,
+      );
+      expect(base.revisiones, isEmpty);
+    });
+
     testWidgets('si la base deja de permitirlo antes de guardar, lo dice y la '
         'ruta queda como estaba', (tester) async {
       await abrir(
         tester,
-        usuario: luis,
+        usuario: pedro,
         ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
       );
       await entrarARevisar(tester);
 
-      // Mientras miraba los datos, Luis dejó de poder revisar.
-      base.expertos.remove(luis);
+      // Mientras miraba los datos, Pedro dejó de poder revisar.
+      base.expertos.remove(pedro);
       await tester.tap(find.byKey(RevisarClasificacionScreen.claveConfirmar));
       await tester.pumpAndSettle();
 
       expect(find.text(RevisarClasificacionScreen.yaNoPuedes), findsOneWidget);
-      expect(base.rutas['ruta-1']!['dificultad_revisada_en'], isNull);
+      expect(base.revisadaEn, isEmpty);
       expect(base.revisiones, isEmpty);
     });
   });
@@ -245,7 +288,7 @@ void main() {
         'confirmó, y el detalle lo dice', (tester) async {
       await abrir(
         tester,
-        usuario: luis,
+        usuario: pedro,
         ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
       );
       await entrarARevisar(tester);
@@ -253,10 +296,9 @@ void main() {
       await tester.tap(find.byKey(RevisarClasificacionScreen.claveConfirmar));
       await tester.pumpAndSettle();
 
-      final fila = base.rutas['ruta-1']!;
-      expect(fila['dificultad'], 'moderada');
-      expect(fila['dificultad_revisada_en'], isNotNull);
-      expect(base.revisiones, [('ruta-1', luis, 'confirmar', 'moderada')]);
+      expect(base.rutas['ruta-1']!['dificultad'], 'moderada');
+      expect(base.revisadaEn['ruta-1'], isNotNull);
+      expect(base.revisiones, [('ruta-1', pedro, 'confirmar', 'moderada')]);
 
       // De vuelta en el detalle, ya al día.
       expect(enLaDificultadDelDetalle('Moderada'), findsOneWidget);
@@ -270,7 +312,7 @@ void main() {
         'corrigió, y el detalle la muestra', (tester) async {
       await abrir(
         tester,
-        usuario: luis,
+        usuario: pedro,
         ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
       );
       await entrarARevisar(tester);
@@ -284,10 +326,9 @@ void main() {
       await tester.tap(find.byKey(RevisarClasificacionScreen.claveGuardar));
       await tester.pumpAndSettle();
 
-      final fila = base.rutas['ruta-1']!;
-      expect(fila['dificultad'], 'dificil');
-      expect(fila['dificultad_revisada_en'], isNotNull);
-      expect(base.revisiones, [('ruta-1', luis, 'corregir', 'dificil')]);
+      expect(base.rutas['ruta-1']!['dificultad'], 'dificil');
+      expect(base.revisadaEn['ruta-1'], isNotNull);
+      expect(base.revisiones, [('ruta-1', pedro, 'corregir', 'dificil')]);
 
       expect(enLaDificultadDelDetalle('Difícil'), findsOneWidget);
       expect(enLaDificultadDelDetalle('Moderada'), findsNothing);
@@ -297,16 +338,21 @@ void main() {
       );
     });
 
-    testWidgets('después, otro usuario ve en el detalle que la revisó un '
-        'Runner Experto, sin poder revisarla él', (tester) async {
+    testWidgets('revisada, es definitiva: ni quien la clasificó la vuelve a '
+        'revisar, y los demás ven que la revisó un Runner Experto', (
+      tester,
+    ) async {
       await abrir(
         tester,
-        usuario: luis,
+        usuario: pedro,
         ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
       );
       await entrarARevisar(tester);
       await tester.tap(find.byKey(RevisarClasificacionScreen.claveConfirmar));
       await tester.pumpAndSettle();
+
+      // De vuelta en el detalle, Pedro ya no tiene a qué entrar.
+      expect(botonRevisar(), findsNothing);
 
       // Marta abre la ruta desde Explorar rutas.
       base.usuario = marta;
@@ -323,43 +369,43 @@ void main() {
       expect(botonRevisar(), findsNothing);
     });
 
-    testWidgets('sin dificultad propuesta no hay nada que confirmar ni '
-        'corregir', (tester) async {
-      base.rutas['ruta-1']!['dificultad'] = null;
+    testWidgets('si ya la revisó desde otro lado, lo dice y no la pisa', (
+      tester,
+    ) async {
       await abrir(
         tester,
-        usuario: luis,
+        usuario: pedro,
         ubicacion: DetalleRutaScreen.rutaDe('ruta-1'),
       );
       await entrarARevisar(tester);
 
-      expect(
-        find.descendant(
-          of: find.byKey(RevisarClasificacionScreen.claveDificultad),
-          matching: find.text(TarjetaRutaExplorar.sinDificultad),
-        ),
-        findsOneWidget,
+      // Mientras miraba los datos, Pedro la corrigió desde otro teléfono.
+      base.rutas['ruta-1']!['dificultad'] = 'dificil';
+      base.revisadaEn['ruta-1'] = ahora.toUtc().toIso8601String();
+      await tester.tap(find.byKey(RevisarClasificacionScreen.claveElegirOtra));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(RevisarClasificacionScreen.claveOpcion(Dificultad.facil)),
       );
-      expect(
-        find.byKey(RevisarClasificacionScreen.claveConfirmar),
-        findsNothing,
-      );
-      expect(
-        find.byKey(RevisarClasificacionScreen.claveElegirOtra),
-        findsNothing,
-      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(RevisarClasificacionScreen.claveGuardar));
+      await tester.pumpAndSettle();
+
+      expect(find.text(RevisarClasificacionScreen.yaNoPuedes), findsOneWidget);
+      expect(base.rutas['ruta-1']!['dificultad'], 'dificil');
       expect(base.revisiones, isEmpty);
     });
   });
 }
 
-/// Una fila de `rutas` como la va a devolver la base cuando exista la
-/// dificultad (SCRUM-363), con su trazado.
+/// Una fila de `rutas` con su trazado, como queda en el flujo de 0048:
+/// publicada, con la dificultad que le asignó [clasificadaPor].
 Map<String, Object?> _fila(
   String id,
   String nombre, {
   required String autorId,
   Dificultad? dificultad,
+  String? clasificadaPor,
 }) => {
   'id': id,
   'autor_id': autorId,
@@ -381,7 +427,7 @@ Map<String, Object?> _fila(
     {'lat': 6.2680, 'lng': -75.5760},
   ],
   'dificultad': dificultad?.valorDb,
-  'dificultad_revisada_en': null,
+  'clasificada_por': clasificadaPor,
 };
 
 class _MockPermisosService extends Mock implements PermisosService {}
@@ -392,8 +438,7 @@ class _PermisosGuardadosFalso implements PermisosUsuarioRepository {
   Future<void> guardar(TipoPermiso tipo, {required bool concedido}) async {}
 }
 
-/// La base como la ve la app a través de PostgREST, con el contrato de la
-/// revisión (`docs/deudas.md`).
+/// La base como la ve la app a través de PostgREST, con la revisión de 0054.
 class _BaseFalsa {
   _BaseFalsa({required this.ahora}) {
     cliente = SupabaseClient(
@@ -418,6 +463,9 @@ class _BaseFalsa {
   /// Las filas de `rutas`, por id.
   final rutas = <String, Map<String, Object?>>{};
 
+  /// `revisiones_clasificacion`: cuándo se revisó cada ruta, una por ruta.
+  final revisadaEn = <String, String>{};
+
   /// Quién preguntó si podía revisar qué ruta.
   final preguntas = <(String?, String)>[];
 
@@ -427,12 +475,17 @@ class _BaseFalsa {
   /// Lo que no debería haberse pedido.
   final inesperadas = <String>[];
 
-  /// La regla de 0042: Runner Experto y no autor.
+  /// La regla de 0054: el Runner Experto que la clasificó, en una ruta
+  /// publicada, con dificultad y sin revisar.
   bool _puedeRevisar(String rutaId) {
     final fila = rutas[rutaId];
     return fila != null &&
         expertos.contains(usuario) &&
-        fila['autor_id'] != usuario;
+        fila['autor_id'] != usuario &&
+        fila['clasificada_por'] == usuario &&
+        fila['estado'] == 'publicada' &&
+        fila['dificultad'] != null &&
+        !revisadaEn.containsKey(rutaId);
   }
 
   Future<http.Response> _responder(http.Request peticion) async {
@@ -471,9 +524,8 @@ class _BaseFalsa {
           Dificultad.values.every((d) => d.valorDb != dificultad)) {
         return _error('22023', 'no hay una dificultad válida', 400, peticion);
       }
-      fila
-        ..['dificultad'] = dificultad
-        ..['dificultad_revisada_en'] = ahora.toIso8601String();
+      fila['dificultad'] = dificultad;
+      revisadaEn[rutaId] = ahora.toIso8601String();
       revisiones.add((
         rutaId,
         usuario!,
@@ -483,10 +535,27 @@ class _BaseFalsa {
       return http.Response('', 204, request: peticion);
     }
 
+    if (post && url.path == '/rest/v1/rpc/clasificacion_revisada_en') {
+      return _json(revisadaEn[rutaId], peticion);
+    }
+
     if (peticion.method == 'GET' && url.path == '/rest/v1/rutas') {
       final id = url.queryParameters['id']?.replaceFirst('eq.', '');
+      final fila = rutas[id];
+      // Como PostgREST: solo lo que se pide, y pedir una columna que no
+      // existe es un error.
+      final columnas = url.queryParameters['select']!.split(',');
+      final desconocida = columnas
+          .where((columna) => fila != null && !fila.containsKey(columna))
+          .firstOrNull;
+      if (desconocida != null) {
+        return _error('42703', 'no existe $desconocida', 400, peticion);
+      }
       // `maybeSingle` en un GET espera una lista: vacía si no hay fila.
-      return _json([?rutas[id]], peticion);
+      return _json([
+        if (fila != null)
+          {for (final columna in columnas) columna: fila[columna]},
+      ], peticion);
     }
 
     inesperadas.add('${peticion.method} $url');

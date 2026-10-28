@@ -7,12 +7,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/models/dificultad.dart';
 import 'package:traza/services/rutas_service.dart';
 
-/// Pruebas de la pregunta "¿puedo revisar la clasificación de esta ruta?"
-/// del repositorio real (SCRUM-261).
+/// Pruebas de la revisión de la clasificación en el repositorio real
+/// (SCRUM-261 a SCRUM-264): la pregunta "¿puedo revisar?", confirmar,
+/// corregir y cuándo se revisó.
 ///
 /// No hay base de datos: un cliente HTTP falso intercepta lo que el
-/// repositorio le manda a PostgREST. La regla en sí la prueba la migración
-/// 0042 contra un Postgres.
+/// repositorio le manda a PostgREST. La regla en sí la prueban las
+/// migraciones 0042 y 0054 contra un Postgres.
 void main() {
   test('se lo pregunta a puede_revisar_clasificacion, con la ruta', () async {
     final supabase = _SupabaseFalso(respuesta: true);
@@ -93,8 +94,8 @@ void main() {
       );
     });
 
-    test('cualquier otro error llega tal cual, como el de hoy, que la '
-        'función todavía no existe', () async {
+    test('cualquier otro error llega tal cual, como el de una base que '
+        'todavía no tiene la 0054', () async {
       // PostgREST contesta PGRST202 cuando no encuentra la función.
       final supabase = _SupabaseFalso(codigoPostgres: 'PGRST202');
       addTearDown(supabase.cerrar);
@@ -167,6 +168,57 @@ void main() {
 
       await expectLater(
         supabase.repositorio.corregirClasificacion('ruta-1', Dificultad.facil),
+        throwsA(isA<SesionRequeridaParaRutasException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
+
+  group('cuándo se revisó (SCRUM-264)', () {
+    test('se lo pregunta a clasificacion_revisada_en, con la ruta, y lo da '
+        'en la hora local', () async {
+      final supabase = _SupabaseFalso(respuesta: '2026-10-20T15:30:00+00:00');
+      addTearDown(supabase.cerrar);
+
+      final fecha = await supabase.repositorio.clasificacionRevisadaEn(
+        'ruta-1',
+      );
+
+      expect(fecha, DateTime.utc(2026, 10, 20, 15, 30).toLocal());
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/clasificacion_revisada_en');
+      expect(jsonDecode(peticion.body), {'p_ruta_id': 'ruta-1'});
+    });
+
+    test('si nadie la ha revisado, no hay fecha', () async {
+      final supabase = _SupabaseFalso(respuesta: null);
+      addTearDown(supabase.cerrar);
+
+      expect(
+        await supabase.repositorio.clasificacionRevisadaEn('ruta-1'),
+        isNull,
+      );
+    });
+
+    test('una respuesta que no es una fecha no se toma por una', () async {
+      for (final respuesta in ['ayer', 42]) {
+        final supabase = _SupabaseFalso(respuesta: respuesta);
+        addTearDown(supabase.cerrar);
+
+        await expectLater(
+          supabase.repositorio.clasificacionRevisadaEn('ruta-1'),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+
+    test('sin sesión no sale ninguna petición', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.clasificacionRevisadaEn('ruta-1'),
         throwsA(isA<SesionRequeridaParaRutasException>()),
       );
       expect(supabase.peticiones, isEmpty);

@@ -139,7 +139,7 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 - **Rotar la key de NVIDIA**: la primera se compartió en un chat. Generar otra en build.nvidia.com, guardarla con `secrets set` y revocar la anterior.
 - **Reintentos del aviso**: pg_net manda el aviso una sola vez. Si la función no responde (caída o arranque en frío de más de 5 s), la fila se queda en revisión hasta que el administrador la decida. Si pasa seguido, agregar en una migración nueva un reintento periódico (pg_cron) de lo que lleve más de un minuto en revisión.
-- **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
+- **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos. Ya pasó una vez: Nemotron aprobó "malparido" (no conoce la jerga y la política solo prohibía los insultos dirigidos). Desde el 2026-10-28 la política prohíbe las groserías y hay una lista sin IA (`groserias.ts`, en español, inglés y portugués): las inequívocas se rechazan solas y las ambiguas van al administrador. Ampliarla con lo que aparezca en el foro.
 - **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.
 
 ## SCRUM-369: reportes de publicaciones del foro

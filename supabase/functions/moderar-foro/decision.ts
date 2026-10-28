@@ -12,11 +12,18 @@
 // Rechazar exige que las dos pasadas coincidan, o que la política y las
 // señales de spam coincidan. Cuando no hay acuerdo, la IA "tiene dudas" y
 // decide el administrador.
+//
+// Antes que todo eso, las groserías de `groserias.ts`, porque Nemotron no
+// conoce la jerga colombiana:
+//   · una inequívoca rechaza siempre, aunque la IA apruebe o falle;
+//   · una ambigua deja pendiente lo que la IA iba a aprobar.
 
+import { type Groserias, SIN_GROSERIAS } from "./groserias.ts";
 import type { Veredicto } from "./nemotron.ts";
 import {
   esCategoriaDeDuda,
   MOTIVO_GENERICO,
+  MOTIVO_GROSERIA,
   MOTIVO_SPAM,
   motivosDeCategorias,
 } from "./politica_traza.ts";
@@ -51,6 +58,28 @@ function unir(...listas: ReadonlyArray<readonly string[]>): string[] {
 }
 
 export function decidir(
+  a: ResultadoPasada,
+  b: ResultadoPasada,
+  spam: SenalesSpam,
+  groserias: Groserias = SIN_GROSERIAS,
+): Decision {
+  if (groserias.inequivocas.length > 0) {
+    const categorias = unir([MOTIVO_GROSERIA], spam.esSpam ? [MOTIVO_SPAM] : []);
+    return { estado: "rechazada", motivo: categorias.join(", "), categorias };
+  }
+
+  const decision = decidirConIA(a, b, spam);
+  if (decision.estado === "aprobada" && groserias.ambiguas.length > 0) {
+    return {
+      estado: "pendiente",
+      motivo: `Posible lenguaje ofensivo o vulgar (${groserias.ambiguas.join(", ")})`,
+      categorias: [MOTIVO_GROSERIA],
+    };
+  }
+  return decision;
+}
+
+function decidirConIA(
   a: ResultadoPasada,
   b: ResultadoPasada,
   spam: SenalesSpam,

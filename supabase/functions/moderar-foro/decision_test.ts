@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { decidir, MOTIVO_SIN_RESPUESTA, type ResultadoPasada } from "./decision.ts";
-import { MOTIVO_GENERICO, MOTIVO_SPAM } from "./politica_traza.ts";
+import { buscarGroserias } from "./groserias.ts";
+import { MOTIVO_GENERICO, MOTIVO_GROSERIA, MOTIVO_SPAM } from "./politica_traza.ts";
 import type { SenalesSpam } from "./spam.ts";
 
 const seguro: ResultadoPasada = {
@@ -106,5 +107,55 @@ describe("decidir", () => {
         categorias: [],
       });
     }
+  });
+
+  describe("las groserías de la lista", () => {
+    it("una inequívoca rechaza aunque la IA la apruebe (el malparido que pasó)", () => {
+      assert.deepEqual(
+        decidir(seguro, seguro, sinSpam, buscarGroserias("malparido")),
+        {
+          estado: "rechazada",
+          motivo: MOTIVO_GROSERIA,
+          categorias: [MOTIVO_GROSERIA],
+        },
+      );
+    });
+
+    it("una inequívoca rechaza aunque NVIDIA falle", () => {
+      const decision = decidir(fallo, fallo, sinSpam, buscarGroserias("caralho"));
+      assert.equal(decision.estado, "rechazada");
+    });
+
+    it("suma el spam si también lo es", () => {
+      const decision = decidir(seguro, seguro, conSpam, buscarGroserias("fuck"));
+      assert.deepEqual(decision.categorias, [MOTIVO_GROSERIA, MOTIVO_SPAM]);
+    });
+
+    it("una ambigua deja pendiente lo que la IA iba a aprobar, con la palabra", () => {
+      const decision = decidir(seguro, seguro, sinSpam, buscarGroserias("marica"));
+      assert.deepEqual(decision, {
+        estado: "pendiente",
+        motivo: "Posible lenguaje ofensivo o vulgar (marica)",
+        categorias: [MOTIVO_GROSERIA],
+      });
+    });
+
+    it("una ambigua no cambia lo que la IA ya rechazó", () => {
+      const decision = decidir(
+        inseguro("Harassment"),
+        inseguro(),
+        sinSpam,
+        buscarGroserias("idiota"),
+      );
+      assert.equal(decision.estado, "rechazada");
+      assert.deepEqual(decision.categorias, ["Acoso o insultos"]);
+    });
+
+    it("sin groserías decide la IA como siempre", () => {
+      assert.equal(
+        decidir(seguro, seguro, sinSpam, buscarGroserias("Buena ruta, parce")).estado,
+        "aprobada",
+      );
+    });
   });
 });

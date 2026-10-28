@@ -26,6 +26,7 @@ Disallowed Behaviors:
 - Spam: asking people to contact the author by WhatsApp, phone or external sites for commercial purposes
 - Spam: meaningless, repeated or flooding text, or links unrelated to running
 - Insulting, mocking, harassing or threatening other runners or any group of people
+- Profanity, vulgar or obscene language in Spanish, English or Portuguese, even when it is not directed at anyone (for example "malparido", "hijueputa", "gonorrea" used as an insult, "fuck", "caralho")
 - Discriminatory language based on race, ethnicity, nationality, gender, sexual orientation, religion, disability, body size, age or economic status
 - Sexual or sexually explicit content
 - Promoting doping, extreme dehydration, starvation, eating disorders, self-harm or other practices that endanger health
@@ -38,7 +39,7 @@ Allowed Behaviors:
 - Announcing races and community events, including a link to the official registration page
 - Mentioning gear brands as part of a personal experience or recommendation, without selling
 - Respectful disagreement and constructive criticism
-- Colloquial Colombian Spanish and informal words that are not directed at anyone as an insult (for example "parce", "qué chimba", "berraco")
+- Colloquial Colombian Spanish and informal words that are neither vulgar nor directed at anyone as an insult (for example "parce", "qué chimba", "berraco")
 `;
 
 // Lo que el autor y el administrador leen cuando la IA marca una categoría.
@@ -51,6 +52,9 @@ Allowed Behaviors:
 // Motivo de lo que se rechaza por spam (criterio 1 de SCRUM-322).
 export const MOTIVO_SPAM = "Spam";
 
+// Motivo de las groserías, las marque la IA o la lista de `groserias.ts`.
+export const MOTIVO_GROSERIA = "Lenguaje ofensivo o vulgar";
+
 const MOTIVOS_POR_CATEGORIA: ReadonlyArray<
   readonly [ReadonlyArray<string>, string]
 > = [
@@ -60,7 +64,7 @@ const MOTIVOS_POR_CATEGORIA: ReadonlyArray<
   [["minor"], "Contenido sexual con menores"],
   [["hate"], "Lenguaje discriminatorio o de odio"],
   [["harass"], "Acoso o insultos"],
-  [["profan"], "Lenguaje ofensivo o vulgar"],
+  [["profan"], MOTIVO_GROSERIA],
   [["threat"], "Amenazas"],
   [["sexual"], "Contenido sexual"],
   [["suicide", "selfharm"], "Contenido sobre autolesiones"],

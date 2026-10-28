@@ -69,4 +69,11 @@ describe("POLITICA_TRAZA", () => {
     assert.match(POLITICA_TRAZA, /Disallowed Behaviors:[\s\S]*Spam/);
     assert.match(POLITICA_TRAZA, /Allowed Behaviors:[\s\S]*Colloquial/);
   });
+
+  it("prohíbe las groserías aunque no vayan dirigidas a nadie", () => {
+    assert.match(
+      POLITICA_TRAZA,
+      /Disallowed Behaviors:[\s\S]*Profanity[\s\S]*not directed at anyone[\s\S]*Allowed Behaviors:/,
+    );
+  });
 });

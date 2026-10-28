@@ -17,6 +17,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 import { decidir, type ResultadoPasada } from "./decision.ts";
+import { buscarGroserias } from "./groserias.ts";
 import {
   consultarNemotron,
   MODELO_NEMOTRON,
@@ -100,14 +101,15 @@ async function moderar(moderacionId: string): Promise<void> {
     pasada("politica"),
   ]);
   const spam = senalesDeSpam(texto, (recientes ?? []).map(textoDe));
-  const decision = decidir(taxonomia, politica, spam);
+  const groserias = buscarGroserias(texto);
+  const decision = decidir(taxonomia, politica, spam, groserias);
 
   const { error: errorVeredicto } = await supabase.rpc("aplicar_veredicto_ia", {
     p_moderacion_id: fila.id,
     p_estado: decision.estado,
     p_motivo: decision.motivo,
     p_categorias: decision.categorias,
-    p_veredicto: { modelo, taxonomia, politica, spam },
+    p_veredicto: { modelo, taxonomia, politica, spam, groserias },
   });
   if (errorVeredicto) throw errorVeredicto;
 

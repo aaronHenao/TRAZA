@@ -100,8 +100,8 @@ class RevisarClasificacionScreen extends ConsumerWidget {
 
   static const sinPermisoTitulo = 'No puedes revisar esta clasificación';
   static const sinPermisoDetalle =
-      'Las clasificaciones las revisa un Runner Experto, y nunca las de sus '
-      'propias rutas.';
+      'La clasificación de una ruta publicada la revisa una sola vez el Runner '
+      'Experto que la clasificó.';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -318,10 +318,12 @@ class _AccionesState extends ConsumerState<_Acciones> {
     }
     if (!mounted) return;
 
-    // La ruta cambió: el detalle y su botón de revisar la vuelven a pedir.
+    // La ruta cambió: el detalle, su botón de revisar y la fecha de la
+    // revisión se vuelven a pedir.
     ref
       ..invalidate(rutaProvider(widget.rutaId))
-      ..invalidate(puedeRevisarClasificacionProvider(widget.rutaId));
+      ..invalidate(puedeRevisarClasificacionProvider(widget.rutaId))
+      ..invalidate(clasificacionRevisadaEnProvider(widget.rutaId));
     mostrarToast(context, exito);
     context.pop();
   }

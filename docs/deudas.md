@@ -197,27 +197,20 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 
 ## SCRUM-259 (HU-35): revisar la clasificación del Runner Experto
 
-**Qué quedó hecho:** la regla de quién puede revisar está en la base: `puede_revisar_clasificacion(ruta_id)` (0042, SCRUM-260) dice que sí a un Runner Experto que no sea el autor de la ruta. La pantalla de revisión (`lib/screens/rutas/revisar_clasificacion_screen.dart`, SCRUM-261) muestra la ruta, su dificultad propuesta y los datos en que se basa, y se abre desde el detalle de la ruta solo para quien puede revisar. Los botones de confirmar (SCRUM-262) y de elegir otra dificultad (SCRUM-263) ya están, y llaman a `confirmar_clasificacion` y a `corregir_clasificacion`; aparecen solo si la ruta tiene una dificultad propuesta, así que hoy no se ven. El detalle de la ruta muestra su dificultad y, si un Runner Experto la revisó, lo dice con la fecha (SCRUM-264); hoy todas van "Sin clasificar".
+**Qué quedó hecho:**
 
-**Qué falta, y de quién depende:**
+- `0042_permiso_revisar_clasificacion.sql` (SCRUM-260): `puede_revisar_clasificacion(ruta_id)`, la regla de quién puede revisar, en un solo lugar.
+- `0054_revisar_clasificacion.sql`: encaja HU-35 en el flujo de 0048 sin cambiarlo. El equipo acordó que la revisión la haga el mismo Runner Experto que clasificó la ruta: con la ruta ya publicada, confirma o corrige esa dificultad, y lo que deje es la clasificación definitiva, porque se revisa una sola vez.
+  - `puede_revisar_clasificacion` queda más estricta: el Runner Experto que la clasificó, en una ruta publicada, con dificultad y sin revisar.
+  - `confirmar_clasificacion(p_ruta_id)` y `corregir_clasificacion(p_ruta_id, p_dificultad)`, `security definer`. Responden `42501` a quien no puede, también si ya se revisó (aunque sea desde otro teléfono al mismo tiempo), y `22023` a una dificultad que no es `facil`, `moderada` ni `dificil`. Corregir cambia `rutas.dificultad`; lo demás de `rutas` no se toca.
+  - La revisión queda en su propia tabla, `revisiones_clasificacion`: una fila por ruta, con quién la revisó, la dificultad que tenía y cuándo. No tiene policies: la app no la lee ni la escribe directo, y pregunta la fecha con `clasificacion_revisada_en(p_ruta_id)`. Quién la revisó no sale de la base.
+  - Trae su script de verificación para el SQL Editor. Se probó contra un PostgreSQL local con todas las migraciones del repo, y el script de 0048 sigue dando OK con la 0054 encima.
+- App: la pantalla de revisión (SCRUM-261) con la ruta, su dificultad y los datos en que se basa; confirmar (SCRUM-262); elegir otra dificultad (SCRUM-263); y en el detalle, la dificultad con "Revisada por un Runner Experto · fecha" (SCRUM-264). La fecha se pregunta aparte de la ruta, así que las consultas del detalle y de publicar no cambian. Mientras llega, o si no se pudo saber, la tarjeta no dice ni que sí ni que no.
 
-- **La función `confirmar_clasificacion` en la base.** Depende de que exista `rutas.dificultad` (SCRUM-363); la puede escribir quien haga la 363, o Steven cuando la columna exista. La app la llama así y espera esto:
-  - `confirmar_clasificacion(p_ruta_id uuid)`, que no devuelve nada.
-  - Solo la usa quien pase `puede_revisar_clasificacion(p_ruta_id)`. A los demás les responde con el error `42501`, que la app muestra como "Ya no puedes revisar esta ruta".
-  - Si la ruta no tiene dificultad, no hay nada que confirmar: error `22023`.
-  - Deja la ruta marcada como revisada, con quién y cuándo, sin cambiar la dificultad. Dónde se guarda eso —columnas nuevas en `rutas` o la fila de `revisiones_ruta` de la etapa `experto` (SCRUM-321)— está por acordar con el equipo.
-  - Solo con sesión: quitársela a `public` y a `anon`, y dársela a `authenticated`.
-- **La función `corregir_clasificacion` en la base**, con la misma dependencia. La app la llama así y espera esto:
-  - `corregir_clasificacion(p_ruta_id uuid, p_dificultad text)`, que no devuelve nada. `p_dificultad` llega como `facil`, `moderada` o `dificil`; cualquier otro valor es error `22023`.
-  - Los mismos permisos que `confirmar_clasificacion`: `puede_revisar_clasificacion(p_ruta_id)`, o error `42501`.
-  - Reemplaza `rutas.dificultad` por `p_dificultad` y deja la ruta marcada como revisada, con quién y cuándo, donde se acuerde. Esa es su clasificación definitiva.
-- **Registrar la revisión (SCRUM-264).** `confirmar_clasificacion` y `corregir_clasificacion` tienen que guardar quién revisó (`auth.uid()`) y cuándo (`now()`). La app lee el cuándo como `dificultad_revisada_en` en la fila de la ruta, y le da igual de dónde salga:
-  - Puede ser una columna de `rutas`, con `dificultad_revisada_por` al lado.
-  - O un campo calculado `dificultad_revisada_en(rutas)` que lo saque de `revisiones_ruta` (SCRUM-321), como `miniatura` en 0038.
+**Qué falta:**
 
-  Cuando exista, hay que sumarlo a `_columnasConTrazado` de `SupabaseRutasRepository`, que es lo que pide el detalle. El quién no se le muestra a nadie: el criterio 5 pide decir que fue un Runner Experto, no cuál.
-- **Quién propone la dificultad.** HU-35 dice que el experto revisa una dificultad ya propuesta; SCRUM-363 dice que el experto la asigna. Está por decidir con el equipo, y define qué muestra la pantalla como "propuesta".
-- **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en la sección anterior).
+- **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en SCRUM-289 y SCRUM-247).
+- **Revisar no le avisa al autor**: HU-35 no lo pide. Si el equipo lo quiere, es un tipo de aviso nuevo y una llamada a `crear_notificacion` en `corregir_clasificacion`.
 
 ## SCRUM-374: recompensas
 

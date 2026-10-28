@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:traza/models/revision_ruta.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/screens/rutas/revision_rutas_screen.dart';
 import 'package:traza/services/foro_service.dart';
@@ -17,11 +16,11 @@ import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/revision_rutas_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
-/// Las bandejas de revisión de rutas (SCRUM-327 y SCRUM-329).
+/// La bandeja de revisión de rutas del administrador (SCRUM-327).
 ///
-/// Que solo entren el administrador y el Runner Experto lo cubren
-/// `SoloAdministrador` y `SoloExperto`, con sus propias pruebas, y las rutas
-/// del router (`revision_rutas_acceso_test`).
+/// Que solo entre el administrador lo cubren `SoloAdministrador`, con sus
+/// propias pruebas, y las rutas del router (`revision_rutas_acceso_test`).
+/// El rechazo del Runner Experto lo prueba `detalle_ruta_screen_test`.
 void main() {
   const trazado = [
     PuntoRuta(latitud: 6.2442, longitud: -75.5812),
@@ -45,7 +44,6 @@ void main() {
 
   Future<void> abrir(
     WidgetTester tester, {
-    EtapaRevision etapa = EtapaRevision.administrador,
     List<Ruta>? rutas,
     Object? error,
   }) async {
@@ -58,18 +56,16 @@ void main() {
     revision = RevisionRutasFalso(rutas: todas, error: error);
 
     final router = GoRouter(
-      initialLocation: etapa.ruta,
+      initialLocation: RevisionRutasScreen.ruta,
       routes: [
         GoRoute(
-          path: etapa.ruta,
-          builder: (_, _) => RevisionRutasScreen(etapa: etapa),
+          path: RevisionRutasScreen.ruta,
+          builder: (_, _) => const RevisionRutasScreen(),
           routes: [
             GoRoute(
               path: ':rutaId',
-              builder: (_, state) => RevisionRutaScreen(
-                rutaId: state.pathParameters['rutaId']!,
-                etapa: etapa,
-              ),
+              builder: (_, state) =>
+                  RevisionRutaScreen(rutaId: state.pathParameters['rutaId']!),
             ),
           ],
         ),
@@ -261,7 +257,7 @@ void main() {
       expect(revision.decisiones, isEmpty);
     });
 
-    testWidgets('una ruta que no espera a esta etapa no ofrece decidir', (
+    testWidgets('una ruta que ya no lo espera no ofrece decidir', (
       tester,
     ) async {
       // El administrador abre una que ya aprobó: ahora es del experto.
@@ -269,7 +265,7 @@ void main() {
       final router = GoRouter.of(
         tester.element(find.byType(RevisionRutasScreen)),
       );
-      router.push(EtapaRevision.administrador.detalleDe('aprobada'));
+      router.push(RevisionRutasScreen.detalleDe('aprobada'));
       await tester.pumpAndSettle();
 
       expect(
@@ -278,62 +274,6 @@ void main() {
       );
       expect(find.byKey(RevisionRutaScreen.claveAprobar), findsNothing);
       expect(find.byKey(RevisionRutaScreen.claveRechazar), findsNothing);
-    });
-  });
-
-  group('bandeja del Runner Experto (SCRUM-329)', () {
-    testWidgets('solo ve lo que el administrador ya aprobo', (tester) async {
-      await abrir(tester, etapa: EtapaRevision.experto);
-
-      expect(find.text('Rutas por revisar'), findsOneWidget);
-      expect(
-        find.byKey(TarjetaRevisionRuta.claveDe('aprobada')),
-        findsOneWidget,
-      );
-      expect(find.byKey(TarjetaRevisionRuta.claveDe('nueva')), findsNothing);
-    });
-
-    testWidgets('aprobar la publica (criterio 4)', (tester) async {
-      await abrir(tester, etapa: EtapaRevision.experto);
-
-      await tester.tap(
-        find.byKey(TarjetaRevisionRuta.claveAprobar('aprobada')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Aprobada. Ya la ve toda la comunidad.'),
-        findsOneWidget,
-      );
-      expect(
-        revision.rutas.firstWhere((r) => r.id == 'aprobada').publicada,
-        isTrue,
-      );
-    });
-
-    testWidgets('rechazar con motivo no la publica (criterio 5)', (
-      tester,
-    ) async {
-      await abrir(tester, etapa: EtapaRevision.experto);
-
-      await tester.tap(
-        find.byKey(TarjetaRevisionRuta.claveRechazar('aprobada')),
-      );
-      await tester.pumpAndSettle();
-      await rechazarCon(tester, 'No es apta para principiantes');
-
-      final ruta = revision.rutas.firstWhere((r) => r.id == 'aprobada');
-      expect(ruta.estado, EstadoRuta.rechazada);
-      expect(ruta.motivoRechazo, 'No es apta para principiantes');
-    });
-
-    testWidgets('sin rutas explica de donde le llegan', (tester) async {
-      await abrir(tester, etapa: EtapaRevision.experto, rutas: [recienEnviada]);
-
-      expect(
-        find.text('Cuando el administrador apruebe una ruta, aparecerá aquí.'),
-        findsOneWidget,
-      );
     });
   });
 }

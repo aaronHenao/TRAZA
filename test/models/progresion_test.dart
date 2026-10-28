@@ -166,6 +166,43 @@ void main() {
     });
   });
 
+  group('el número del nivel (SCRUM-286)', () {
+    test('cuenta los niveles de menor a mayor umbral, desde uno', () {
+      expect(con(100).numeroNivel, 1);
+      expect(con(700).numeroNivel, 2);
+      expect(con(1500).numeroNivel, 3);
+    });
+
+    test('es cero mientras no alcance ninguno', () {
+      expect(con(99).numeroNivel, 0);
+      expect(con(0).numeroNivel, 0);
+    });
+
+    test('no depende del orden en que lleguen los niveles', () {
+      expect(con(700, catalogo: const [oro, bronce, plata]).numeroNivel, 2);
+    });
+
+    test('sin niveles configurados no hay número', () {
+      expect(con(700, catalogo: const []).numeroNivel, 0);
+    });
+
+    test('es el mismo número que la parada del mapa de progresión', () {
+      // El mapa pone el punto de partida en la parada 0 (SCRUM-226), así que
+      // la tarjeta y el mapa no pueden decir niveles distintos.
+      for (final experiencia in [0, 99, 100, 700, 1500, 9000]) {
+        final progresion = con(experiencia);
+        final alcanzados = niveles
+            .where((nivel) => nivel.umbralExperiencia <= experiencia)
+            .length;
+        expect(
+          progresion.numeroNivel,
+          alcanzados,
+          reason: 'con $experiencia XP',
+        );
+      }
+    });
+  });
+
   group('datos fuera del contrato', () {
     test('una experiencia negativa deja el avance en cero, no al revés', () {
       // El contrato dice que nunca es negativa; si llegara, la progresión se

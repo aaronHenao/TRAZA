@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
-import 'package:traza/screens/history/historial_screen.dart';
 import 'package:traza/services/historial_service.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/widgets/lista_historial.dart';
 
 /// Repositorio de mentira: responde lo que la prueba le indique.
 class _RepositorioFalso implements HistorialRepository {
@@ -24,6 +24,11 @@ class _RepositorioFalso implements HistorialRepository {
 }
 
 /// Pruebas del historial de entrenamientos (SCRUM-44).
+///
+/// Era una pantalla con su sección en la barra inferior; desde SCRUM-285 es la
+/// pestaña "Actividades" del perfil, así que se monta como la monta el perfil:
+/// dentro de otra pantalla. Que la pestaña lo muestre lo prueba
+/// `perfil_screen_test.dart`.
 void main() {
   final ahora = DateTime(2026, 9, 15, 9);
 
@@ -51,20 +56,14 @@ void main() {
   }) async {
     final repositorio = _RepositorioFalso(respuesta);
     final router = GoRouter(
-      initialLocation: '/inicio',
+      initialLocation: '/perfil',
       routes: [
+        // El hueco que le da el perfil: alto fijo y nada más alrededor.
         GoRoute(
-          path: '/inicio',
-          builder: (context, state) => Scaffold(
-            body: TextButton(
-              onPressed: () => context.push('/historial'),
-              child: const Text('Pantalla Inicio'),
-            ),
+          path: '/perfil',
+          builder: (context, state) => const Scaffold(
+            body: Column(children: [Expanded(child: ListaHistorial())]),
           ),
-        ),
-        GoRoute(
-          path: '/historial',
-          builder: (context, state) => const HistorialScreen(),
         ),
         GoRoute(
           path: '/actividad',
@@ -79,6 +78,8 @@ void main() {
         ),
       ],
     );
+    addTearDown(router.dispose);
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -88,11 +89,9 @@ void main() {
         child: MaterialApp.router(routerConfig: router),
       ),
     );
-    await tester.tap(find.text('Pantalla Inicio'));
     if (esperar) {
       await tester.pumpAndSettle();
     } else {
-      await tester.pump();
       await tester.pump();
     }
     return repositorio;
@@ -104,7 +103,6 @@ void main() {
     ) async {
       await abrirHistorial(tester, respuesta: () async => entrenamientos);
 
-      expect(find.text('Historial de entrenamientos'), findsOneWidget);
       expect(find.text('Correr · hoy'), findsOneWidget);
       expect(find.text('5.10 km · 00:28:14'), findsOneWidget);
       expect(find.text('Caminar · 10 sep'), findsOneWidget);
@@ -181,18 +179,10 @@ void main() {
       final estado = GoRouterState.of(tester.element(find.text('Resumen e2')));
       expect(estado.uri.queryParameters['desde'], 'historial');
 
+      // La X del resumen devuelve a la lista: se abrió con `push`.
       GoRouter.of(tester.element(find.text('Resumen e2'))).pop();
       await tester.pumpAndSettle();
-      expect(find.text('Historial de entrenamientos'), findsOneWidget);
-    });
-
-    testWidgets('la flecha de atrás vuelve a Inicio', (tester) async {
-      await abrirHistorial(tester, respuesta: () async => entrenamientos);
-
-      await tester.tap(find.byTooltip('Volver'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Pantalla Inicio'), findsOneWidget);
+      expect(find.text('Correr · hoy'), findsOneWidget);
     });
   });
 }

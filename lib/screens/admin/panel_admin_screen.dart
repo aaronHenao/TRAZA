@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../models/revision_ruta.dart';
 import '../../theme/app_colors.dart';
-import '../rutas/revision_rutas_screen.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/boton_cerrar_sesion.dart';
 import '../../widgets/traza_card.dart';
+import '../rutas/revision_rutas_screen.dart';
 import 'gestion_niveles_screen.dart';
+import 'gestion_recompensas_screen.dart';
 import 'gestion_retos_screen.dart';
 import 'moderacion_foro_screen.dart';
 
@@ -24,6 +24,7 @@ class PanelAdminScreen extends StatelessWidget {
   static const claveNiveles = Key('panel-admin-niveles');
   static const claveForo = Key('panel-admin-foro');
   static const claveRutas = Key('panel-admin-rutas');
+  static const claveRecompensas = Key('panel-admin-recompensas');
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +77,17 @@ class PanelAdminScreen extends StatelessWidget {
                 detalle:
                     'Aprueba o rechaza las rutas que publican los corredores '
                     'antes de que pasen al Runner Experto.',
-                onTap: () => context.push(EtapaRevision.administrador.ruta),
+                onTap: () => context.push(RevisionRutasScreen.ruta),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _TarjetaAcceso(
+                clave: claveRecompensas,
+                icono: Icons.card_giftcard_outlined,
+                titulo: 'Gestionar recompensas',
+                detalle:
+                    'Crea los beneficios que los corredores obtienen con sus '
+                    'puntos.',
+                onTap: () => context.push(GestionRecompensasScreen.ruta),
               ),
             ],
           ),

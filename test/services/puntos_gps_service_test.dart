@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/punto_gps.dart';
+import 'package:traza/models/punto_pendiente.dart';
 import 'package:traza/services/puntos_gps_service.dart';
 import 'package:traza/services/ubicacion_service.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 
 void main() {
@@ -10,13 +12,16 @@ void main() {
     test('mapea el punto a las columnas de puntos_gps', () {
       final fila = RepositorioPuntosGpsSupabase.filaPara(
         entrenamientoId: 'e-123',
-        punto: PuntoGps(
-          latitud: 6.2311,
-          longitud: -75.6105,
-          capturadoEn: DateTime.utc(2026, 9, 12, 21, 30, 15),
-          precisionMetros: 8,
+        punto: PuntoPendiente.de(
+          PuntoGps(
+            latitud: 6.2311,
+            longitud: -75.6105,
+            capturadoEn: DateTime.utc(2026, 9, 12, 21, 30, 15),
+            precisionMetros: 8,
+          ),
+          orden: 7,
+          tramo: 0,
         ),
-        ordenSecuencia: 7,
       );
 
       expect(fila, {
@@ -33,40 +38,43 @@ void main() {
       final local = DateTime(2026, 9, 12, 16, 30, 15);
       final fila = RepositorioPuntosGpsSupabase.filaPara(
         entrenamientoId: 'e-123',
-        punto: puntoDePrueba(capturadoEn: local),
-        ordenSecuencia: 0,
+        punto: PuntoPendiente.de(
+          puntoDePrueba(capturadoEn: local),
+          orden: 0,
+          tramo: 0,
+        ),
       );
 
       expect(fila['capturado_en'], local.toUtc().toIso8601String());
       expect(fila['capturado_en'], endsWith('Z'));
     });
 
-    test('filasPara numera orden_secuencia por posicion en la lista', () {
+    test('filasPara respeta el orden que trae cada punto', () {
+      // El orden lo decide quien captura, no la posición en el lote: un
+      // lote puede empezar en el punto 40 del recorrido (SCRUM-292).
       final filas = RepositorioPuntosGpsSupabase.filasPara(
         entrenamientoId: 'e-123',
         puntos: [
-          puntoDePrueba(latitud: 6.2311),
-          puntoDePrueba(latitud: 6.2312),
-          puntoDePrueba(latitud: 6.2313),
+          puntoPendienteDePrueba(orden: 40),
+          puntoPendienteDePrueba(orden: 41),
+          puntoPendienteDePrueba(orden: 42),
         ],
       );
 
-      expect(filas.map((f) => f['orden_secuencia']), [0, 1, 2]);
-      expect(filas.map((f) => f['latitud']), [6.2311, 6.2312, 6.2313]);
+      expect(filas.map((f) => f['orden_secuencia']), [40, 41, 42]);
       expect(filas.every((f) => f['entrenamiento_id'] == 'e-123'), isTrue);
     });
 
-    test('filasPara numera el tramo de cada punto según los cortes', () {
+    test('filasPara conserva el tramo de cada punto', () {
       // Pausa tras el segundo punto (BUG-005).
       final filas = RepositorioPuntosGpsSupabase.filasPara(
         entrenamientoId: 'e-123',
         puntos: [
-          puntoDePrueba(latitud: 6.2311),
-          puntoDePrueba(latitud: 6.2312),
-          puntoDePrueba(latitud: 6.2400),
-          puntoDePrueba(latitud: 6.2401),
+          puntoPendienteDePrueba(orden: 0),
+          puntoPendienteDePrueba(orden: 1),
+          puntoPendienteDePrueba(orden: 2, tramo: 1),
+          puntoPendienteDePrueba(orden: 3, tramo: 1),
         ],
-        cortes: const [2],
       );
 
       expect(filas.map((f) => f['tramo']), [0, 0, 1, 1]);
@@ -85,8 +93,7 @@ void main() {
     test('no incluye altitud', () {
       final fila = RepositorioPuntosGpsSupabase.filaPara(
         entrenamientoId: 'e-123',
-        punto: puntoDePrueba(),
-        ordenSecuencia: 0,
+        punto: puntoPendienteDePrueba(orden: 0),
       );
 
       expect(fila.keys, isNot(contains('altitud')));

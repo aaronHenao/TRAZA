@@ -40,18 +40,15 @@ void main() {
       .read(decisionRevisionRutaProvider)
       .decidir(ruta(id), aprobar: aprobar, motivo: motivo);
 
-  group('bandejas', () {
-    test('cada etapa ve solo lo que le toca', () async {
-      final delAdmin = await container.read(
-        rutasPorRevisarProvider(EtapaRevision.administrador).future,
-      );
-      final delExperto = await container.read(
-        rutasPorRevisarProvider(EtapaRevision.experto).future,
-      );
+  group('bandeja del administrador', () {
+    test(
+      'trae solo lo recien enviado, no lo que ya espera al experto',
+      () async {
+        final delAdmin = await container.read(rutasPorRevisarProvider.future);
 
-      expect(delAdmin.map((r) => r.id), ['nueva']);
-      expect(delExperto.map((r) => r.id), ['aprobada']);
-    });
+        expect(delAdmin.map((r) => r.id), ['nueva']);
+      },
+    );
   });
 
   group('aprobar', () {
@@ -68,12 +65,15 @@ void main() {
       );
     });
 
-    test('el Runner Experto la publica (criterio 4)', () async {
+    test('el Runner Experto no aprueba por aqui: aprobar es asignar la '
+        'dificultad (0048)', () async {
       final resultado = await decidir('aprobada', aprobar: true);
 
-      final revisada = (resultado as RutaRevisada).ruta;
-      expect(revisada.publicada, isTrue);
-      expect(repositorio.decisiones.single, ('aprobada', true, null));
+      expect(
+        (resultado as RevisionNoGuardada).mensaje,
+        DecisionRevisionRuta.sinPermiso,
+      );
+      expect(ruta('aprobada').estado, EstadoRuta.revisionExperto);
     });
 
     test('al aprobar no se manda el motivo aunque se haya escrito', () async {
@@ -82,21 +82,13 @@ void main() {
       expect(repositorio.decisiones.single.$3, isNull);
     });
 
-    test('lo aprobado sale de la bandeja y entra en la siguiente', () async {
-      await container.read(
-        rutasPorRevisarProvider(EtapaRevision.administrador).future,
-      );
+    test('lo aprobado sale de la bandeja del administrador', () async {
+      await container.read(rutasPorRevisarProvider.future);
 
       await decidir('nueva', aprobar: true);
 
-      final delAdmin = await container.read(
-        rutasPorRevisarProvider(EtapaRevision.administrador).future,
-      );
-      final delExperto = await container.read(
-        rutasPorRevisarProvider(EtapaRevision.experto).future,
-      );
+      final delAdmin = await container.read(rutasPorRevisarProvider.future);
       expect(delAdmin, isEmpty);
-      expect(delExperto.map((r) => r.id), containsAll(['nueva', 'aprobada']));
     });
   });
 
@@ -170,7 +162,7 @@ void main() {
     test('sin el rol de la etapa no se guarda', () async {
       repositorio.errorAlDecidir = const RevisionNoPermitidaException();
 
-      final resultado = await decidir('aprobada', aprobar: true);
+      final resultado = await decidir('nueva', aprobar: true);
 
       expect(resultado, isA<RevisionNoGuardada>());
       expect(

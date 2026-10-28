@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
+import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/pantalla_encendida_provider.dart';
@@ -12,6 +13,7 @@ import 'package:traza/widgets/cronometro_entrenamiento.dart';
 import 'package:traza/widgets/estadisticas_entrenamiento.dart';
 import 'package:traza/widgets/mapa_entrenamiento.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
@@ -37,6 +39,7 @@ void main() {
         relojProvider.overrideWithValue(reloj.call),
         fuenteUbicacionProvider.overrideWithValue(fuente),
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        almacenRecorridoProvider.overrideWithValue(AlmacenRecorridoFalso()),
         repositorioPuntosGpsProvider.overrideWithValue(repositorio),
         entrenamientoActualProvider.overrideWithValue('e-123'),
         pantallaEncendidaProvider.overrideWithValue(pantalla),

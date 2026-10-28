@@ -1,30 +1,52 @@
 import 'package:flutter/foundation.dart';
 
+import 'dificultad.dart';
 import 'punto_gps.dart';
 
 /// En qué situación está una ruta de la comunidad.
 ///
 /// Los nombres coinciden con la restricción `estado in (...)` de la tabla
-/// `rutas` (`0029_rutas.sql`).
+/// `rutas` (`0029_rutas.sql`, ampliada en `0045_clasificacion_de_rutas.sql`).
 enum EstadoRuta {
-  /// Recién enviada: espera la revisión del administrador, que es la
-  /// primera (SCRUM-321). Solo la ven su autor y el administrador.
+  /// Recién publicada: espera la revisión del administrador (SCRUM-321).
+  /// Solo la ven su autor y el administrador.
   enRevision('en_revision'),
 
-  /// El administrador la aprobó y espera la revisión del Runner Experto
-  /// (SCRUM-321). La ven su autor, el experto y el administrador.
+  /// El administrador la aprobó: espera a que un Runner Experto le asigne la
+  /// dificultad (criterio 1 de SCRUM-363). Solo la ven su autor, los
+  /// expertos y el administrador.
   revisionExperto('revision_experto'),
 
-  /// Aprobada y visible para toda la comunidad.
+  /// Clasificada y confirmada por su autor: visible para toda la comunidad.
   publicada('publicada'),
 
   /// El administrador o el experto no la aprobó. La ve su autor con el
   /// motivo.
-  rechazada('rechazada');
+  rechazada('rechazada'),
+
+  /// Un Runner Experto ya le asignó la dificultad: espera a que su autor
+  /// confirme la publicación (criterio 2 de SCRUM-363).
+  clasificada('clasificada'),
+
+  /// Le faltan datos para clasificarla (la distancia): quedó registrada con
+  /// la dificultad pendiente y no llega a los expertos (criterio 3 de
+  /// SCRUM-363).
+  datosIncompletos('datos_incompletos');
 
   const EstadoRuta(this.valorDb);
 
   final String valorDb;
+
+  /// Cómo se le dice al autor en qué va su ruta (SCRUM-363). Lo usan el
+  /// detalle y la pantalla de publicar, para que digan lo mismo.
+  String get etiqueta => switch (this) {
+    enRevision => 'Pendiente de revisión del administrador',
+    revisionExperto => 'Pendiente de revisión del Runner Experto',
+    publicada => 'Publicada',
+    rechazada => 'Rechazada',
+    clasificada => 'Lista para publicar',
+    datosIncompletos => 'Dificultad pendiente',
+  };
 
   static EstadoRuta? desdeDb(String? valor) {
     for (final estado in values) {
@@ -96,7 +118,10 @@ class Ruta {
     this.entrenamientoId,
     this.descripcion,
     this.trazado = const [],
+    this.miniatura = const [],
     this.distanciaKm,
+    this.dificultad,
+    this.dificultadRevisadaEn,
     this.motivoRechazo,
     this.fechaPublicacion,
   });
@@ -121,12 +146,30 @@ class Ruta {
   /// listado no necesita el trazado de cada ruta para pintarse.
   final List<PuntoRuta> trazado;
 
+  /// Unos pocos puntos del trazado, repartidos a lo largo del recorrido y
+  /// con la partida y la llegada, para dibujar la ruta en pequeño en un
+  /// listado sin traer el trazado entero (SCRUM-247). Los calcula la base
+  /// (`miniatura`, 0038). Vacía si la consulta no la pidió.
+  final List<PuntoRuta> miniatura;
+
   /// Cuántos km mide, o null si no está registrada (criterio 4 de
   /// SCRUM-240). La calcula la base al guardar la ruta.
   final double? distanciaKm;
 
-  /// Por qué el administrador o el experto no la aprobó. Null mientras no
-  /// la rechacen.
+  /// La que le asignó un Runner Experto (SCRUM-363), o null si todavía no
+  /// tiene: "Sin clasificar".
+  final Dificultad? dificultad;
+
+  /// Cuándo un Runner Experto confirmó o corrigió su dificultad (SCRUM-264),
+  /// o null si nadie la ha revisado. Quién fue lo guarda la base; a los
+  /// demás solo se les dice que fue un Runner Experto (criterio 5 de HU-35).
+  final DateTime? dificultadRevisadaEn;
+
+  /// Si un Runner Experto ya revisó su dificultad.
+  bool get dificultadRevisada => dificultadRevisadaEn != null;
+
+  /// Por qué el administrador o el experto no la aprobó (SCRUM-321). Null
+  /// mientras no la rechacen.
   final String? motivoRechazo;
 
   /// Cuándo quedó publicada, para mostrarlo junto al autor (criterio 4).
@@ -138,6 +181,24 @@ class Ruta {
   /// Si se le puede mostrar la distancia a alguien (criterio 4 de
   /// SCRUM-240: cuando no, hay que avisar).
   bool get tieneDistancia => distanciaKm != null;
+
+  /// Si [usuarioId], con o sin el rol de Runner Experto según [esExperto],
+  /// puede asignarle la dificultad: el administrador ya la aprobó y no es
+  /// suya (SCRUM-363 + SCRUM-321).
+  ///
+  /// Lo mismo exige `clasificar_ruta` (0048); aquí solo decide si se ofrece.
+  bool clasificablePor(String? usuarioId, {required bool esExperto}) =>
+      esExperto &&
+      usuarioId != null &&
+      usuarioId != autorId &&
+      estado == EstadoRuta.revisionExperto;
+
+  /// Si [usuarioId] puede confirmar su publicación: es el autor y un experto
+  /// ya la clasificó (criterio 2 de SCRUM-363).
+  bool publicablePor(String? usuarioId) =>
+      usuarioId != null &&
+      usuarioId == autorId &&
+      estado == EstadoRuta.clasificada;
 
   factory Ruta.desdeSupabase(Map<String, dynamic> fila) {
     final id = fila['id'];
@@ -174,7 +235,10 @@ class Ruta {
       entrenamientoId: entrenamiento as String?,
       descripcion: descripcion as String?,
       trazado: trazadoDesdeJson(fila['trazado']),
+      miniatura: trazadoDesdeJson(fila['miniatura']),
       distanciaKm: _comoDouble(fila['distancia_km']),
+      dificultad: Dificultad.desdeDb(fila['dificultad']),
+      dificultadRevisadaEn: _comoFecha(fila['dificultad_revisada_en']),
       motivoRechazo: motivo as String?,
       fechaPublicacion: publicacion is String
           ? DateTime.parse(publicacion).toLocal()
@@ -189,6 +253,13 @@ class Ruta {
     if (json is! List) return const [];
     return [for (final punto in json) ?PuntoRuta.desdeJson(punto)];
   }
+
+  /// Una fecha que puede no venir: las consultas de hoy no traen
+  /// `dificultad_revisada_en`, que llega con SCRUM-363 (`docs/deudas.md`).
+  /// Una que no se entienda se toma como que no está, igual que una
+  /// dificultad que no se conoce.
+  static DateTime? _comoFecha(Object? valor) =>
+      valor is String ? DateTime.tryParse(valor)?.toLocal() : null;
 
   /// `distancia_km` es `numeric`, que según el caso llega como número o como
   /// texto (lo mismo que `distancia_total_m` en `EntrenamientoService`).

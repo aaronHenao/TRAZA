@@ -101,7 +101,7 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 **Qué falta:**
 
 - **Eliminar la propia publicación.** No hay botón ni policy de delete en `publicaciones_foro`. Decidir antes de hacerlo:
-  - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
+  - si se borra la fila (los comentarios caen con ella por el `on delete cascade` de `comentarios_foro`) o se marca `estado = 'eliminada'`, que ya existe y oculta la publicación sin perder el rastro para la moderación. Lo segundo choca con el trigger de 0024 y 0025, que no deja cambiar el estado; la salida está en `retirar_publicacion_foro` (0052, SCRUM-242): una función `security definer` que anuncia `traza.moderando` para que el trigger la deje pasar. Si se borra la fila, el historial de versiones también se va (`on delete cascade`).
   - la confirmación: es destructiva de verdad, así que el diálogo debe decir que también se van los comentarios.
 - Cuando se haga, el botón va junto al de editar en `DetallePublicacionScreen` y se ofrece con la misma regla (`PublicacionForo.editablePor`).
 
@@ -142,19 +142,143 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 - **Calibrar con uso real** la heurística de spam (`spam.ts`) y la política (`politica_traza.ts`) en español coloquial: pueden marcar de más o de menos.
 - **Coordinar con SCRUM-242 (eliminar publicaciones).** El retiro por el administrador de algo ya publicado debería anotarse en `moderaciones_foro` (una acción `retiro`) para no tener dos historiales.
 
+## SCRUM-369: reportes de publicaciones del foro
+
+**Qué quedó hecho:**
+
+- `0036_foro_reportes.sql`: tabla `reportes_foro` con un reporte por usuario y publicación (`unique`), solo sobre lo `publicada` y ajeno. El autor no tiene ninguna policy sobre la tabla y la app nunca pide `reportante_id`. Trae su script de verificación para el SQL Editor.
+- Botón "Reportar" en el detalle de una publicación ajena (motivo + detalle opcional, obligatorio con "Otro") y vista "Reportadas" en `/admin/foro`, con cuántos reportes tiene cada publicación y por qué.
+
+**Qué falta:**
+
+- **Descartar un reporte sin retirar la publicación.** Si el administrador la revisa y decide que no incumple nada, no tiene cómo quitarla de la bandeja: solo sale de ahí cuando se retira (SCRUM-242). Haría falta marcar el reporte como revisado, con una columna nueva en `reportes_foro` y un filtro en `reportes()`.
+- **Tiempo real.** `foroEnVivoProvider` no escucha `reportes_foro`: el administrador ve los reportes nuevos al deslizar para recargar o al volver a entrar. Si hace falta en vivo, agregar la tabla a la publicación de Realtime en una migración nueva (como `0028_foro_tiempo_real.sql`) y escucharla en `SupabaseCambiosForo`.
+- **Comentarios.** La HU habla de publicaciones; los comentarios ofensivos no se pueden reportar.
+
+## SCRUM-289 y SCRUM-247: las rutas de la portada y de Explorar rutas
+
+**Qué quedó hecho:** `CarruselRutasCercanas` (`lib/widgets/carrusel_rutas_cercanas.dart`) asoma las rutas de la comunidad de lado en la portada, y "Ver todas" lleva a la sección de Rutas. Tocar una abre su detalle (SCRUM-240). Desde SCRUM-247, cada ruta va en `TarjetaRutaExplorar` (`lib/widgets/tarjeta_ruta_explorar.dart`), la misma tarjeta de la lista de Explorar rutas: miniatura del recorrido, nombre, dificultad, distancia, desnivel y quién la creó.
+
+**Qué falta, y de quién depende:**
+
+- **La cercanía en el carrusel.** Explorar rutas ya ordena por cercanía (SCRUM-246, con `rutas_cercanas` de 0037), pero el carrusel todavía muestra las últimas publicadas. Lo que falta es que `rutasCercanasProvider` (`lib/services/inicio_provider.dart`) use la misma consulta y la ubicación del usuario; el widget no cambia. Mientras tanto, el rótulo "RUTAS CERCANAS" promete más de lo que hace.
+- **El desnivel.** No hay historia que lo produzca: los puntos GPS que guarda la app no llevan altitud, así que haría falta guardarla al entrenar o pedírsela a un servicio de elevación. Hasta entonces la tarjeta dice "Desnivel no disponible" (`TarjetaRutaExplorar.sinDesnivel`).
+
+## SCRUM-363: clasificación de la ruta por un Runner Experto
+
+**Qué quedó hecho:**
+
+- `0045_clasificacion_de_rutas.sql`: `rutas.dificultad` y `clasificada_por`, los estados `clasificada` y `datos_incompletos`, y `preparar_ruta`, que manda la ruta a revisión si tiene distancia o la deja con la dificultad pendiente si no (criterio 3). El experto asigna con `clasificar_ruta` y el autor publica con `confirmar_publicacion_ruta`, las dos `security definer` (nadie actualiza `rutas` directo). Aviso `ruta_clasificada` para el autor. Trae su script de verificación para el SQL Editor.
+- Bandeja "Rutas por clasificar" desde el Perfil del Runner Experto; en el detalle de la ruta, la dificultad para todos, el selector para el experto y el estado y el botón "Publicar ruta" para el autor.
+
+- `0048_flujo_unico_de_revision.sql`: une esta HU con SCRUM-321, que dejó en la base (a mano, sin migración en el repo) una revisión en dos etapas. El camino queda así: publicar → `en_revision` (espera al administrador) → `revision_experto` (espera al Runner Experto) → `clasificada` (el experto aprobó asignando la dificultad) → `publicada` (el autor confirmó). El administrador y el experto pueden rechazar con motivo (`decidir_revision_ruta`). El experto ya no aprueba por `decidir_revision_ruta`: aprobar es `clasificar_ruta`, que ahora parte de `revision_experto` y deja su fila en `revisiones_ruta`. Quita la policy de 0047 (`en_revision` ahora es del administrador). Trae su script de verificación, que recorre el flujo completo y los rechazos.
+
+Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la guarda la base, `rutas_cercanas` y `buscar_rutas` la devuelven, Explorar rutas filtra por ella y el detalle la muestra.
+
+**Qué falta:**
+
+- **Pendiente y desnivel.** La HU los nombra, pero la app no guarda altitud (`0001`: "puntos_gps SIN altitud, a petición explícita"). Acordado con el equipo: el experto clasifica con la distancia y el mapa. Para usarlos haría falta guardar la altitud al entrenar o pedírsela a un servicio de elevación al guardar la ruta; con ellos, `preparar_ruta` podría exigirlos para "datos suficientes" y el detalle mostrarlos.
+- **Completar los datos.** Una ruta en `datos_incompletos` se queda así: no hay de dónde sacar la distancia que le falta, y el índice de `0031` no deja volver a publicar ese entrenamiento (solo las rechazadas se pueden mandar de nuevo). Si se resuelve la distancia, haría falta una función que la recalcule y la pase a `en_revision`.
+- **Los scripts de verificación de 0045 y 0047** describen el flujo de antes (el experto clasifica desde `en_revision`): después de `0048` fallan a propósito. El que vale es el de `0048`.
+- **Tocar el aviso.** La bandeja de notificaciones no abre la ruta. El autor llega a confirmarla por "Ver mi ruta" en la pantalla de publicar de ese entrenamiento.
+
 ## SCRUM-321: validar la publicación de rutas (administrador y Runner Experto)
 
 **Qué quedó hecho:**
 
-- `0036_revision_de_rutas.sql`: la ruta pasa por dos revisiones. `en_revision` es ahora "pendiente del administrador" (así `preparar_ruta()` no se toca) y `revision_experto` es "pendiente del Runner Experto". El experto deja de ver lo que está `en_revision`. Las decisiones pasan solo por `decidir_revision_ruta`, que valida el rol y la etapa, exige motivo para rechazar (máximo 300 caracteres) y deja cada decisión en `revisiones_ruta`.
-- `0037_aviso_de_ruta_rechazada.sql`: al rechazarla se le avisa al autor con el motivo y con quién la rechazó. Es el gemelo de 0033.
-- App: bandeja del administrador (`/admin/rutas`, desde su panel), bandeja del experto (`/revision-rutas`, desde la pantalla de Runner Experto, solo si tiene el rol) y detalle con el trazado para decidir.
-- Se corrigió el orden de `/rutas/publicar` y `/rutas/:rutaId` en `main.dart`: "Publicar como ruta" abría el detalle con id `publicar`.
+- `0043_revision_de_rutas.sql` y `0044_aviso_de_ruta_rechazada.sql`: lo que `0048` daba por hecho en la base (`revisiones_ruta`, `decidir_revision_ruta`, `avisar_ruta_rechazada` y la policy del experto sobre `revision_experto`). Se escribieron como 0036 y 0037 y se aplicaron a mano en la base compartida antes de llegar al repo; llevan esos números porque `0048` depende de ellas y para entonces 0036 y 0037 ya estaban usados. **En la base compartida no hay que volver a correrlas.**
+- App: bandeja del administrador (`/admin/rutas`, desde su panel) con su detalle y el trazado, para aprobar o rechazar con motivo. Lo que aprueba pasa a "Rutas por clasificar" (SCRUM-363). El Runner Experto rechaza con motivo desde el detalle de la ruta, junto a "Asignar dificultad", que es su aprobación. El diálogo del motivo es `pedirMotivoRechazo`.
 
 **Qué falta:**
 
-- **Aplicar 0036 y luego 0037** en el SQL Editor y correr sus bloques de comprobación.
-- **No hay cuentas de Runner Experto de prueba.** Con la XP solo por retos (ver SCRUM-192) nadie llega a 150 000 XP. Para probar, sembrar el rol a mano: `insert into roles_usuario (usuario_id, rol) values ('<ID>', 'experto');`.
-- **Las bandejas no son en tiempo real**: se actualizan al entrar, al deslizar y al decidir. `rutas` no está en la publicación de Realtime.
+- **Las bandejas no son en tiempo real**: la del administrador se actualiza al entrar, al deslizar y al decidir. `rutas` no está en la publicación de Realtime.
 - **Unificar el diálogo de rechazo** (`pedirMotivoRechazo`) con el `_DialogoRechazo` privado de la moderación del foro, que hace lo mismo con otro texto.
 - **El administrador no puede corregir una decisión**: una ruta rechazada no vuelve a revisión. El autor puede volver a publicar el mismo entrenamiento (el índice de 0031 deja fuera las rechazadas).
+
+## SCRUM-259 (HU-35): revisar la clasificación del Runner Experto
+
+**Qué quedó hecho:** la regla de quién puede revisar está en la base: `puede_revisar_clasificacion(ruta_id)` (0042, SCRUM-260) dice que sí a un Runner Experto que no sea el autor de la ruta. La pantalla de revisión (`lib/screens/rutas/revisar_clasificacion_screen.dart`, SCRUM-261) muestra la ruta, su dificultad propuesta y los datos en que se basa, y se abre desde el detalle de la ruta solo para quien puede revisar. Los botones de confirmar (SCRUM-262) y de elegir otra dificultad (SCRUM-263) ya están, y llaman a `confirmar_clasificacion` y a `corregir_clasificacion`; aparecen solo si la ruta tiene una dificultad propuesta, así que hoy no se ven. El detalle de la ruta muestra su dificultad y, si un Runner Experto la revisó, lo dice con la fecha (SCRUM-264); hoy todas van "Sin clasificar".
+
+**Qué falta, y de quién depende:**
+
+- **La función `confirmar_clasificacion` en la base.** Depende de que exista `rutas.dificultad` (SCRUM-363); la puede escribir quien haga la 363, o Steven cuando la columna exista. La app la llama así y espera esto:
+  - `confirmar_clasificacion(p_ruta_id uuid)`, que no devuelve nada.
+  - Solo la usa quien pase `puede_revisar_clasificacion(p_ruta_id)`. A los demás les responde con el error `42501`, que la app muestra como "Ya no puedes revisar esta ruta".
+  - Si la ruta no tiene dificultad, no hay nada que confirmar: error `22023`.
+  - Deja la ruta marcada como revisada, con quién y cuándo, sin cambiar la dificultad. Dónde se guarda eso —columnas nuevas en `rutas` o la fila de `revisiones_ruta` de la etapa `experto` (SCRUM-321)— está por acordar con el equipo.
+  - Solo con sesión: quitársela a `public` y a `anon`, y dársela a `authenticated`.
+- **La función `corregir_clasificacion` en la base**, con la misma dependencia. La app la llama así y espera esto:
+  - `corregir_clasificacion(p_ruta_id uuid, p_dificultad text)`, que no devuelve nada. `p_dificultad` llega como `facil`, `moderada` o `dificil`; cualquier otro valor es error `22023`.
+  - Los mismos permisos que `confirmar_clasificacion`: `puede_revisar_clasificacion(p_ruta_id)`, o error `42501`.
+  - Reemplaza `rutas.dificultad` por `p_dificultad` y deja la ruta marcada como revisada, con quién y cuándo, donde se acuerde. Esa es su clasificación definitiva.
+- **Registrar la revisión (SCRUM-264).** `confirmar_clasificacion` y `corregir_clasificacion` tienen que guardar quién revisó (`auth.uid()`) y cuándo (`now()`). La app lee el cuándo como `dificultad_revisada_en` en la fila de la ruta, y le da igual de dónde salga:
+  - Puede ser una columna de `rutas`, con `dificultad_revisada_por` al lado.
+  - O un campo calculado `dificultad_revisada_en(rutas)` que lo saque de `revisiones_ruta` (SCRUM-321), como `miniatura` en 0038.
+
+  Cuando exista, hay que sumarlo a `_columnasConTrazado` de `SupabaseRutasRepository`, que es lo que pide el detalle. El quién no se le muestra a nadie: el criterio 5 pide decir que fue un Runner Experto, no cuál.
+- **Quién propone la dificultad.** HU-35 dice que el experto revisa una dificultad ya propuesta; SCRUM-363 dice que el experto la asigna. Está por decidir con el equipo, y define qué muestra la pantalla como "propuesta".
+- **El desnivel acumulado** que pide el criterio 2: la pantalla lo muestra como no disponible, por lo mismo que la tarjeta (ver "El desnivel" en la sección anterior).
+
+## SCRUM-374: recompensas
+
+**Qué quedó hecho:**
+
+- `0049_recompensas.sql`: tabla `recompensas` (nombre, descripción, puntos entre 1 y 1 000 000, disponible). Los corredores leen solo lo disponible; crear es solo de `es_admin()`. Trae su script de verificación para el SQL Editor.
+- Gestión del administrador (`/admin/recompensas`, desde el Panel) con su formulario, y catálogo del corredor (`/recompensas`, desde Inicio) con los puntos de cada recompensa.
+
+**Qué falta:**
+
+- **Canjear no existe, ni los puntos del corredor.** Ninguna HU de la Persona 4 dice de dónde salen los puntos (¿la XP?, ¿una moneda aparte?) ni cómo se canjea. La tabla `canjes_recompensa` ya existe (SCRUM-380, ver abajo); el flujo de canjear es de otra HU.
+- **Cambiar la disponibilidad.** Se elige al crear; ninguna HU pide cambiarla después. Si hace falta, la policy de update de `0050_canjes_recompensa.sql` ya lo permite al administrador: falta un interruptor en la tarjeta de la gestión.
+- **`_Campo` repetido.** `formulario_recompensa_screen.dart` es la quinta copia (junto a `formulario_nivel_screen.dart`, `formulario_reto_screen.dart`, `nueva_publicacion_screen.dart` y `publicar_ruta_screen.dart`). Falta un campo de formulario compartido en `lib/widgets/`.
+
+## SCRUM-380: cambiar los puntos de una recompensa
+
+**Qué quedó hecho:**
+
+- `0050_canjes_recompensa.sql`: policy de update de `recompensas` para el administrador y tabla `canjes_recompensa`. Cada canje guarda los puntos que costó: el trigger `preparar_canje_recompensa` los copia del precio vigente al insertar (lo que mande el cliente se ignora) y `proteger_canje_recompensa` los deja fijos en cualquier update. Trae su script de verificación para el SQL Editor.
+- Botón "Cambiar puntos" en cada tarjeta de la gestión, con un diálogo que no guarda una cantidad inválida.
+
+**Qué falta:**
+
+- **El flujo de canjear.** Nadie inserta en `canjes_recompensa` todavía (no hay policy de insert). La HU que lo haga debería:
+  - entrar por una función `security definer` con `set search_path = public` que valide `auth.uid()`;
+  - no calcular el precio a mano: el trigger ya lo pone, y descontar del saldo el `puntos_canjeados` que devuelve el `insert ... returning`;
+  - bloquear la recompensa (`select ... from recompensas where id = $1 and disponible for share`) para que un cambio de precio a la mitad no deje el saldo validado contra un valor y el canje con otro, y bloquear por usuario contra canjes dobles;
+  - traducir el `23503` del trigger (la recompensa no existe o fue retirada, desde SCRUM-385).
+- **El criterio 3 solo se verifica en SQL** hasta que exista el canje: no hay pantalla de "mis canjes".
+
+## SCRUM-385: eliminar recompensas
+
+**Qué quedó hecho:**
+
+- `0051_retirada_recompensas.sql`: eliminar es retirar (`recompensas.retirada_en`), no borrar, para que los canjes sigan apuntando a su recompensa. La fecha la pone la base y no se puede quitar. Quien la canjeó la sigue pudiendo leer para su historial; los demás ya no la ven. El trigger del canje rechaza las retiradas. Trae su script de verificación para el SQL Editor.
+- Botón "Eliminar" en cada tarjeta de la gestión, con confirmación explícita. El catálogo y la gestión dejan de mostrar las retiradas.
+
+**Qué falta:**
+
+- **Historial de canjes del corredor.** El criterio 3 se cumple en la base (el canje y su recompensa siguen ahí y él los puede leer), pero no hay pantalla de "mis canjes": llega con la HU de canjear.
+- **Ver lo retirado.** La gestión no muestra las recompensas eliminadas. Si el administrador necesita consultarlas, iría una pestaña "Retiradas" como la de la gestión de retos, con una consulta que no filtre `retirada_en`.
+
+## SCRUM-242: eliminar publicaciones del foro
+
+**Qué quedó hecho:**
+
+- `0052_foro_retirar_publicacion.sql`: eliminar es retirar (`estado = 'eliminada'`, que ya existía desde 0035), no borrar, para que la bitácora y los reportes que la señalaron sigan teniendo a qué apuntar. `retirar_publicacion_foro` hace las tres cosas en una transacción —retira, asienta y avisa— y es lo único que puede cambiar el estado: `publicaciones_foro` no tiene policy de update, así que la función corre como su dueño y anuncia `traza.moderando` para que el trigger `proteger_publicacion_foro` la deje pasar, igual que `resolver_moderacion` (0035). Trae su script de verificación para el SQL Editor, con la cabecera para hacerse pasar por un usuario.
+- Bitácora `bitacora_moderacion_foro` (criterio 3): publicación, administrador, su nombre copiado en ese momento, motivo y fecha que pone la base. Solo el administrador la lee, y nadie la escribe desde la app. `moderaciones_foro` no servía para esto: es la cola de lo que espera veredicto antes de publicarse, no el registro de lo que se retiró después.
+- Botón "Eliminar" en las dos pestañas del panel —*Publicadas* y *Reportadas*—, con un diálogo que confirma y pide el motivo en el mismo paso; sin motivo no se llega a tocar la base. Lo retirado sale del foro, de *Publicadas* y de la bandeja de *Reportadas*.
+- El autor recibe el aviso `publicacion_retirada` con el motivo (criterio 2), y tocarlo en la bandeja abre su publicación, donde lee por qué la retiramos. Es el único aviso que abre algo: los de rutas siguen sin llevar a ningún lado (ver SCRUM-363).
+
+**Qué falta:**
+
+- **Leer la bitácora desde la app.** Hoy solo se consulta por SQL, y se acordó así: el criterio pide registrar, no mostrar, y el administrador son los cuatro del equipo, con acceso al dashboard. Si se quiere en pantalla, **no hace falta migración**: la tabla y su policy de lectura ya están, y bastaría un `select` en el repositorio y una pestaña, con `administrador_nombre` que ya viene copiado. La consulta para auditar a mano:
+  ```sql
+  select b.fecha, b.administrador_nombre, b.motivo, p.titulo, p.autor_nombre
+  from bitacora_moderacion_foro b
+  join publicaciones_foro p on p.id = b.publicacion_id
+  order by b.fecha desc;
+  ```
+- **Un asiento no sobrevive a un borrado a mano.** `publicacion_id` tiene `on delete cascade`, así que si alguien borrara la fila de la publicación por SQL, su asiento se iría con ella. Está así a propósito para no dejar asientos huérfanos, y desde la app es imposible: no hay policy de delete en `publicaciones_foro`, y retirar es precisamente lo contrario a borrar.
+- **Restituir.** No hay forma de deshacer un retiro desde la app; se hace por SQL, con las dos sentencias de `traza.moderando` en la misma ejecución (está al pie de 0052). La bitácora tampoco registraría la restitución: hoy solo asienta retiros, y una acción nueva pediría su columna `accion`.
+- **Comentarios.** La HU habla de publicaciones, así que un comentario ofensivo no se puede retirar por separado (los de una publicación retirada desaparecen con ella, por la policy de 0035). `comentarios_foro` ya admite `estado = 'eliminada'` desde 0035, así que sería el mismo patrón: una función hermana y su asiento.
+

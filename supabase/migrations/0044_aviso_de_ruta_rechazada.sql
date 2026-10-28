@@ -18,9 +18,12 @@
 --
 -- Cabe en los 500 caracteres de `notificaciones_mensaje_valido`:
 -- el nombre de la ruta tiene hasta 120 (0029) y el motivo hasta
--- 300 (0036).
+-- 300 (0043).
 --
--- Corre esto DESPUÉS de 0036_revision_de_rutas.sql.
+-- Se escribió como 0037 y ya está aplicada en la base compartida
+-- (ver la cabecera de 0043): ahí NO hay que volver a correrla.
+--
+-- Corre esto DESPUÉS de 0043_revision_de_rutas.sql.
 -- =============================================================
 
 create function public.avisar_ruta_rechazada()

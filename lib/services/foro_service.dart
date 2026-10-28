@@ -5,6 +5,7 @@ import '../models/borrador_publicacion.dart';
 import '../models/comentario_foro.dart';
 import '../models/moderacion_foro.dart';
 import '../models/publicacion_foro.dart';
+import '../models/reporte_foro.dart';
 import '../models/version_publicacion.dart';
 
 /// Repositorio del foro que usa la app. Las pruebas lo sustituyen con
@@ -77,6 +78,60 @@ class ModeracionYaResueltaException implements Exception {
   @override
   String toString() =>
       'ModeracionYaResueltaException: la moderación ya fue resuelta';
+}
+
+/// Se lanza cuando quien retira una publicación no es el administrador
+/// (SCRUM-242). Lo impide `retirar_publicacion_foro`, que comprueba
+/// `es_admin()` antes de tocar nada.
+///
+/// En la app no debería verse: al panel solo llega el administrador. Si
+/// aparece, es que alguien llamó a la función por su cuenta o que el rol
+/// cambió con la sesión abierta.
+class RetiroReservadoAlAdminException implements Exception {
+  const RetiroReservadoAlAdminException();
+
+  @override
+  String toString() =>
+      'RetiroReservadoAlAdminException: solo el administrador retira '
+      'publicaciones';
+}
+
+/// Se lanza cuando el motivo del retiro no le sirve a la base: vacío o más
+/// largo de lo que admite (SCRUM-242).
+///
+/// El diálogo del panel valida lo mismo antes de llamar, así que esto
+/// significa que la pantalla y la base se desalinearon.
+class MotivoDeRetiroInvalidoException implements Exception {
+  const MotivoDeRetiroInvalidoException(this.detalle);
+
+  final String detalle;
+
+  @override
+  String toString() => 'MotivoDeRetiroInvalidoException: $detalle';
+}
+
+/// Se lanza al retirar una publicación que ya estaba retirada (SCRUM-242):
+/// otro administrador se adelantó, o la pantalla tenía una lista vieja.
+///
+/// No es un fallo: el retiro ya está hecho, con su asiento y su aviso. Solo
+/// hay que refrescar.
+class PublicacionYaRetiradaException implements Exception {
+  const PublicacionYaRetiradaException();
+
+  @override
+  String toString() =>
+      'PublicacionYaRetiradaException: la publicación ya fue retirada';
+}
+
+/// Se lanza cuando el usuario reporta una publicación que ya había
+/// reportado (criterio 3 de SCRUM-369). Lo impide el `unique` de
+/// `reportes_foro`: la publicación ya está en revisión.
+class PublicacionYaReportadaException implements Exception {
+  const PublicacionYaReportadaException();
+
+  @override
+  String toString() =>
+      'PublicacionYaReportadaException: el usuario ya reportó la publicación';
 }
 
 /// Acceso a las tablas del foro: `publicaciones_foro` (SCRUM-323) y
@@ -179,6 +234,39 @@ abstract interface class ForoRepository {
   /// El autor abrió "Mis rechazados": sus rechazos dejan de contarse como
   /// nuevos (criterio 5 de SCRUM-322).
   Future<void> marcarRechazosVistos();
+
+  /// El administrador retira la publicación [publicacionId] del foro con su
+  /// [motivo] (criterio 1 de SCRUM-242), y devuelve cómo quedó.
+  ///
+  /// Es una baja lógica: la fila se conserva y pasa a
+  /// [EstadoPublicacion.eliminada] con el motivo. La base, en la misma
+  /// operación, lo asienta en la bitácora (criterio 3) y avisa al autor con
+  /// el motivo (criterio 2): esto es lo único que hay que llamar.
+  ///
+  /// Lanza [RetiroReservadoAlAdminException] si quien llama no es
+  /// administrador, [MotivoDeRetiroInvalidoException] si el motivo está
+  /// vacío o es demasiado largo, [PublicacionYaRetiradaException] si ya
+  /// estaba retirada y [PublicacionNoDisponibleException] si no existe.
+  Future<PublicacionForo> retirar(String publicacionId, String motivo);
+
+  /// Reporta la publicación [publicacionId] a nombre del usuario de la
+  /// sesión, con su [motivo] (SCRUM-369).
+  ///
+  /// Lanza [PublicacionYaReportadaException] si ya la había reportado y
+  /// [PublicacionNoDisponibleException] si ya no está publicada o es suya.
+  Future<void> reportar(
+    String publicacionId,
+    MotivoReporte motivo, {
+    String? detalle,
+  });
+
+  /// Los últimos [SupabaseForoRepository.limiteModeracion] reportes, del más
+  /// reciente al más antiguo, para la bandeja del administrador (SCRUM-369).
+  /// A un corredor la policy le devuelve solo los suyos.
+  ///
+  /// Solo los de lo que sigue publicado: el reporte de una publicación ya
+  /// retirada está resuelto y sale de la bandeja (SCRUM-242).
+  Future<List<ReporteForo>> reportes();
 }
 
 class SupabaseForoRepository implements ForoRepository {
@@ -195,6 +283,20 @@ class SupabaseForoRepository implements ForoRepository {
   static const _tablaVersiones = 'versiones_publicacion_foro';
   static const _tablaVersionesComentario = 'versiones_comentario_foro';
   static const _tablaModeraciones = 'moderaciones_foro';
+  static const _tablaReportes = 'reportes_foro';
+
+  /// Sin `reportante_id`: la bandeja no dice quién reportó (criterio 2 de
+  /// SCRUM-369).
+  ///
+  /// El `!inner` hace que la publicación embebida filtre el reporte en vez de
+  /// venir vacía: es lo que deja fuera los reportes de lo ya retirado
+  /// (SCRUM-242).
+  static const _columnasReporte =
+      'id, publicacion_id, motivo, detalle, fecha, '
+      'publicaciones_foro!inner(titulo, autor_nombre)';
+
+  /// El estado de la publicación reportada, para filtrarla sin traerlo.
+  static const _estadoDeLaReportada = 'publicaciones_foro.estado';
 
   /// Las columnas de la publicación más cuántos comentarios tiene, contados
   /// por PostgREST sin traerlos. Se cuentan solo los publicados
@@ -221,9 +323,18 @@ class SupabaseForoRepository implements ForoRepository {
   /// apuntar.
   static const _sinReferencia = '23503';
 
-  /// Ya hay una edición en revisión, o la moderación ya se resolvió
-  /// (`0035_foro_moderacion_ia.sql`).
+  /// Ya hay una fila igual: el usuario ya reportó esa publicación.
+  static const _repetido = '23505';
+
+  /// Ya hay una edición en revisión, la moderación ya se resolvió
+  /// (`0035_foro_moderacion_ia.sql`) o la publicación ya estaba retirada
+  /// (`0052_foro_retirar_publicacion.sql`). En los tres casos, alguien se
+  /// adelantó.
   static const _yaEnCurso = 'TZ409';
+
+  /// La publicación que se quiso retirar no existe
+  /// (`0052_foro_retirar_publicacion.sql`).
+  static const _noExiste = 'TZ404';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -500,5 +611,84 @@ class SupabaseForoRepository implements ForoRepository {
   Future<void> marcarRechazosVistos() async {
     _usuarioId();
     await _cliente.rpc('marcar_rechazos_vistos');
+  }
+
+  @override
+  Future<PublicacionForo> retirar(String publicacionId, String motivo) async {
+    _usuarioId();
+
+    try {
+      // Retirar, asentar y avisar es una sola transacción en la base
+      // (`retirar_publicacion_foro`): aquí no hay nada que encadenar.
+      final respuesta = await _cliente.rpc(
+        'retirar_publicacion_foro',
+        params: {'p_publicacion_id': publicacionId, 'p_motivo': motivo},
+      );
+
+      if (respuesta is! Map<String, dynamic>) {
+        throw const PublicacionNoDisponibleException();
+      }
+      return PublicacionForo.desdeSupabase(respuesta);
+    } on PostgrestException catch (e) {
+      if (e.code == _rlsDenegado) {
+        throw const RetiroReservadoAlAdminException();
+      }
+      if (e.code == _restriccionIncumplida) {
+        throw MotivoDeRetiroInvalidoException(e.message);
+      }
+      if (e.code == _yaEnCurso) throw const PublicacionYaRetiradaException();
+      // Para la pantalla es lo mismo que si ya no estuviera: desapareció.
+      if (e.code == _noExiste) throw const PublicacionNoDisponibleException();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> reportar(
+    String publicacionId,
+    MotivoReporte motivo, {
+    String? detalle,
+  }) async {
+    final usuarioId = _usuarioId();
+    final limpio = detalle?.trim();
+
+    try {
+      // Sin `select`: lo que vuelve no hace falta.
+      await _cliente.from(_tablaReportes).insert({
+        'publicacion_id': publicacionId,
+        'reportante_id': usuarioId,
+        'motivo': motivo.valorDb,
+        'detalle': (limpio == null || limpio.isEmpty) ? null : limpio,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code == _repetido) throw const PublicacionYaReportadaException();
+      // La policy de insert exige que siga publicada y sea ajena; si la
+      // borraron, la clave foránea no la encuentra.
+      if (e.code == _rlsDenegado || e.code == _sinReferencia) {
+        throw const PublicacionNoDisponibleException();
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<ReporteForo>> reportes() async {
+    _usuarioId();
+
+    final filas = await _cliente
+        .from(_tablaReportes)
+        .select(_columnasReporte)
+        // Lo retirado ya está resuelto: su reporte sale de la bandeja
+        // (SCRUM-242). La fila del reporte se queda, para que el historial
+        // siga diciendo qué se reportó.
+        //
+        // Solo lo retirado: lo que rechazó la moderación antes de publicarse
+        // sigue en la bandeja como lo dejó SCRUM-369. Si también tuviera que
+        // salir, es decisión de esa historia, no de esta.
+        .neq(_estadoDeLaReportada, EstadoPublicacion.eliminada.valorDb)
+        .order('fecha', ascending: false)
+        .limit(limiteModeracion);
+
+    return filas.map(ReporteForo.desdeSupabase).toList();
   }
 }

@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/screens/admin/gestion_niveles_screen.dart';
+import 'package:traza/screens/admin/gestion_recompensas_screen.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
 import 'package:traza/screens/admin/panel_admin_screen.dart';
 import 'package:traza/services/niveles_service.dart';
+import 'package:traza/services/recompensas_service.dart';
 import 'package:traza/services/retos_service.dart';
 
 import '../utiles/niveles_falso.dart';
+import '../utiles/recompensas_repository_falso.dart';
 import '../utiles/retos_repository_falso.dart';
 
 class _RetosVacio extends RetosRepositorioFalso {}
@@ -68,9 +71,31 @@ void main() {
 
     expect(find.byTooltip('Cerrar sesión'), findsOneWidget);
   });
+
+  testWidgets('desde el panel se llega a la gestión de recompensas y se '
+      'vuelve (SCRUM-374)', (tester) async {
+    await _montar(tester);
+
+    final acceso = find.byKey(PanelAdminScreen.claveRecompensas);
+    expect(
+      find.descendant(of: acceso, matching: find.text('Gestionar recompensas')),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(acceso);
+    await tester.pumpAndSettle();
+    await tester.tap(acceso);
+    await tester.pumpAndSettle();
+    expect(find.byType(GestionRecompensasScreen), findsOneWidget);
+    expect(find.text('Administrador'), findsNothing);
+
+    await tester.tap(find.byTooltip('Volver'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PanelAdminScreen), findsOneWidget);
+  });
 }
 
-/// Abre el panel con las dos gestiones reales colgando de él.
+/// Abre el panel con las gestiones reales colgando de él.
 Future<void> _montar(WidgetTester tester) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -89,6 +114,10 @@ Future<void> _montar(WidgetTester tester) async {
         path: GestionNivelesScreen.ruta,
         builder: (_, _) => const GestionNivelesScreen(),
       ),
+      GoRoute(
+        path: GestionRecompensasScreen.ruta,
+        builder: (_, _) => const GestionRecompensasScreen(),
+      ),
     ],
   );
   addTearDown(router.dispose);
@@ -98,6 +127,9 @@ Future<void> _montar(WidgetTester tester) async {
       overrides: [
         retosRepositoryProvider.overrideWithValue(_RetosVacio()),
         nivelesRepositoryProvider.overrideWithValue(NivelesFalso()),
+        recompensasRepositoryProvider.overrideWithValue(
+          RecompensasRepositorioFalso(),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

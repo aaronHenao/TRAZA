@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/punto_gps.dart';
-import '../../models/revision_ruta.dart';
 import '../../models/ruta.dart';
 import '../../services/revision_rutas_provider.dart';
 import '../../services/rutas_provider.dart';
@@ -21,57 +20,45 @@ import '../../widgets/tarjeta_ruta.dart';
 import '../../widgets/traza_toast.dart';
 import '../../widgets/traza_top_bar.dart';
 
-/// Dónde vive la bandeja de cada etapa.
-extension RutasDeRevision on EtapaRevision {
-  /// El administrador la abre desde su panel (SCRUM-327); el Runner Experto,
-  /// desde su pantalla (SCRUM-329).
-  String get ruta => switch (this) {
-    EtapaRevision.administrador => '/admin/rutas',
-    EtapaRevision.experto => '/revision-rutas',
-  };
-
-  String detalleDe(String rutaId) => '$ruta/${Uri.encodeComponent(rutaId)}';
-
-  String get titulo => switch (this) {
-    EtapaRevision.administrador => 'Revisión de rutas',
-    EtapaRevision.experto => 'Rutas por revisar',
-  };
-}
-
-/// La bandeja de revisión de rutas de una etapa (SCRUM-327 y SCRUM-329).
+/// La bandeja de revisión de rutas del administrador (SCRUM-327).
 ///
-/// Lista lo que espera a [etapa], lo que más tiempo lleva esperando primero.
-/// Se decide desde la tarjeta o desde el detalle, que enseña el trazado.
+/// Es la primera revisión: lista lo recién enviado, lo que más tiempo lleva
+/// esperando primero. Se decide desde la tarjeta o desde el detalle, que
+/// enseña el trazado. Lo que aprueba pasa a "Rutas por clasificar", la
+/// bandeja del Runner Experto (SCRUM-363).
 ///
-/// La pantalla no comprueba el rol: la envuelven `SoloAdministrador` o
-/// `SoloExperto` en el router, y la base solo deja leer y decidir a quien
-/// tiene el rol de la etapa (SCRUM-332).
+/// La pantalla no comprueba el rol: la envuelve `SoloAdministrador` en el
+/// router, y la base solo deja leer y decidir al administrador (SCRUM-332).
 class RevisionRutasScreen extends ConsumerWidget {
-  const RevisionRutasScreen({required this.etapa, super.key});
+  const RevisionRutasScreen({super.key});
 
-  final EtapaRevision etapa;
+  /// Se abre desde el panel del administrador.
+  static const ruta = '/admin/rutas';
+
+  static String detalleDe(String rutaId) =>
+      '$ruta/${Uri.encodeComponent(rutaId)}';
 
   static const claveLista = Key('revision-rutas-lista');
   static const claveReintentar = Key('revision-rutas-reintentar');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pendientes = ref.watch(rutasPorRevisarProvider(etapa));
+    final pendientes = ref.watch(rutasPorRevisarProvider);
 
-    void recargar() => ref.invalidate(rutasPorRevisarProvider(etapa));
+    void recargar() => ref.invalidate(rutasPorRevisarProvider);
 
     return Scaffold(
       body: SafeArea(
         child: AnchoContenido(
           child: Column(
             children: [
-              TrazaTopBar(titulo: etapa.titulo, onAtras: context.pop),
+              TrazaTopBar(titulo: 'Revisión de rutas', onAtras: context.pop),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async => recargar(),
                   child: switch (pendientes) {
                     AsyncData(value: final lista) when lista.isEmpty =>
-                      _SinPendientes(etapa: etapa),
+                      const _SinPendientes(),
                     AsyncData(value: final lista) => ListView.separated(
                       key: claveLista,
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -85,7 +72,7 @@ class RevisionRutasScreen extends ConsumerWidget {
                       separatorBuilder: (_, _) =>
                           const SizedBox(height: AppSpacing.md),
                       itemBuilder: (context, i) {
-                        if (i == 0) return _Explicacion(etapa: etapa);
+                        if (i == 0) return const _Explicacion();
                         final ruta = lista[i - 1];
                         return TarjetaRevisionRuta(
                           ruta: ruta,
@@ -93,7 +80,7 @@ class RevisionRutasScreen extends ConsumerWidget {
                               decidirRevisionRuta(context, ref, ruta, true),
                           onRechazar: () =>
                               decidirRevisionRuta(context, ref, ruta, false),
-                          onTap: () => context.push(etapa.detalleDe(ruta.id)),
+                          onTap: () => context.push(detalleDe(ruta.id)),
                         );
                       },
                     ),
@@ -112,6 +99,9 @@ class RevisionRutasScreen extends ConsumerWidget {
 
 /// Aprueba o rechaza [ruta] y avisa cómo quedó. Rechazar pide antes el
 /// motivo (SCRUM-330), que es lo que leerá el autor.
+///
+/// La usan el administrador, aquí, y el Runner Experto para rechazar desde
+/// el detalle de la ruta (`DetalleRutaScreen`).
 ///
 /// Devuelve true si la decisión quedó guardada.
 Future<bool> decidirRevisionRuta(
@@ -143,52 +133,31 @@ Future<bool> decidirRevisionRuta(
   return resultado is RutaRevisada;
 }
 
-/// Qué le toca decidir a cada revisor, encima de la lista.
+/// Qué le toca decidir al administrador, encima de la lista.
 class _Explicacion extends StatelessWidget {
-  const _Explicacion({required this.etapa});
-
-  final EtapaRevision etapa;
+  const _Explicacion();
 
   @override
   Widget build(BuildContext context) {
-    final texto = switch (etapa) {
-      EtapaRevision.administrador =>
-        'Eres la primera revisión. Lo que apruebes pasa a un Runner Experto; '
-            'nada de esto lo ve todavía la comunidad.',
-      EtapaRevision.experto =>
-        'El administrador ya aprobó estas rutas. Si tú también las apruebas, '
-            'se publican para toda la comunidad.',
-    };
-
-    return Text(
-      texto,
-      style: const TextStyle(
-        fontSize: 12.5,
-        color: AppColors.ink2,
-        height: 1.45,
-      ),
+    return const Text(
+      'Eres la primera revisión. Lo que apruebes pasa a un Runner Experto, '
+      'que le asigna la dificultad; nada de esto lo ve todavía la comunidad.',
+      style: TextStyle(fontSize: 12.5, color: AppColors.ink2, height: 1.45),
     );
   }
 }
 
 class _SinPendientes extends StatelessWidget {
-  const _SinPendientes({required this.etapa});
-
-  final EtapaRevision etapa;
+  const _SinPendientes();
 
   @override
   Widget build(BuildContext context) {
     // `EstadoVacio` ya se desplaza: el RefreshIndicator funciona también
     // con la bandeja vacía.
-    return EstadoVacio(
+    return const EstadoVacio(
       icono: Icons.task_alt_rounded,
       titulo: 'No hay rutas por revisar',
-      detalle: switch (etapa) {
-        EtapaRevision.administrador =>
-          'Cuando alguien publique una ruta, aparecerá aquí.',
-        EtapaRevision.experto =>
-          'Cuando el administrador apruebe una ruta, aparecerá aquí.',
-      },
+      detalle: 'Cuando alguien publique una ruta, aparecerá aquí.',
     );
   }
 }
@@ -213,21 +182,15 @@ class _ErrorDeCarga extends StatelessWidget {
   }
 }
 
-/// Una ruta por revisar, con su trazado (SCRUM-327 y SCRUM-329).
+/// Una ruta por revisar, con su trazado (SCRUM-327).
 ///
 /// Lee la ruta con `rutaProvider` (SCRUM-240): la base deja verla al
-/// administrador siempre y al Runner Experto mientras espera su revisión.
-/// Solo ofrece decidir si la ruta sigue esperando a [etapa]; si otro revisor
-/// ya decidió, enseña en qué quedó.
+/// administrador siempre. Solo ofrece decidir si la ruta sigue esperándolo;
+/// si ya se decidió, enseña en qué quedó.
 class RevisionRutaScreen extends ConsumerWidget {
-  const RevisionRutaScreen({
-    required this.rutaId,
-    required this.etapa,
-    super.key,
-  });
+  const RevisionRutaScreen({required this.rutaId, super.key});
 
   final String rutaId;
-  final EtapaRevision etapa;
 
   static const claveAprobar = Key('revision-ruta-detalle-aprobar');
   static const claveRechazar = Key('revision-ruta-detalle-rechazar');
@@ -252,7 +215,7 @@ class RevisionRutaScreen extends ConsumerWidget {
                 child: switch (ruta) {
                   AsyncData(value: final ruta?) => _DetalleRevision(
                     ruta: ruta,
-                    pendienteDeEstaEtapa: ruta.estado == etapa.estadoPendiente,
+                    pendienteDeEstaEtapa: ruta.estado == EstadoRuta.enRevision,
                     onAprobar: () => decidir(ruta, true),
                     onRechazar: () => decidir(ruta, false),
                   ),

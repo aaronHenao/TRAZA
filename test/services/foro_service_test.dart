@@ -8,6 +8,7 @@ import 'package:traza/models/borrador_publicacion.dart';
 import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/moderacion_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/reporte_foro.dart';
 import 'package:traza/services/foro_service.dart';
 
 /// Pruebas del repositorio real del foro (SCRUM-343).
@@ -527,7 +528,259 @@ void main() {
     );
     expect(supabase.peticiones, isEmpty);
   });
+
+  group('reportes (SCRUM-369)', () {
+    test('reportar registra la publicación y el motivo a nombre del usuario '
+        'de la sesión, sin pedir la fila de vuelta (criterio 1 de '
+        'SCRUM-369)', () async {
+      final supabase = _SupabaseFalso();
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.reportar(
+        'pub-1',
+        MotivoReporte.acoso,
+        detalle: '  Insulta a otro corredor  ',
+      );
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/reportes_foro');
+      expect(jsonDecode(peticion.body), {
+        'publicacion_id': 'pub-1',
+        'reportante_id': 'usuario-1',
+        'motivo': 'acoso',
+        'detalle': 'Insulta a otro corredor',
+      });
+      // Sin `select`: lo que vuelve tendría quién reportó, y no hace falta.
+      expect(peticion.url.queryParameters.keys, isNot(contains('select')));
+    });
+
+    for (final (descripcion, detalle) in [
+      ('sin detalle', null),
+      ('con un detalle de solo espacios', '   '),
+    ]) {
+      test('$descripcion, el detalle va vacío (null)', () async {
+        final supabase = _SupabaseFalso();
+        addTearDown(supabase.cerrar);
+
+        await supabase.repositorio.reportar(
+          'pub-1',
+          MotivoReporte.spam,
+          detalle: detalle,
+        );
+
+        expect(jsonDecode(supabase.peticiones.single.body), {
+          'publicacion_id': 'pub-1',
+          'reportante_id': 'usuario-1',
+          'motivo': 'spam',
+          'detalle': null,
+        });
+      });
+    }
+
+    test('si ya la reportó, el unique de la base lo impide y lo dice '
+        '(23505, criterio 3 de SCRUM-369)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '23505');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.reportar('pub-1', MotivoReporte.spam),
+        throwsA(isA<PublicacionYaReportadaException>()),
+      );
+    });
+
+    test('si la policy lo rechaza (ya no está publicada o es propia), la '
+        'publicación no está disponible (42501)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.reportar('pub-1', MotivoReporte.spam),
+        throwsA(isA<PublicacionNoDisponibleException>()),
+      );
+    });
+
+    test('si la publicación se borró antes de reportarla, no está '
+        'disponible (23503)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '23503');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.reportar('pub-1', MotivoReporte.spam),
+        throwsA(isA<PublicacionNoDisponibleException>()),
+      );
+    });
+
+    test('sin sesión no se piden los reportes', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.reportes,
+        throwsA(isA<SesionRequeridaParaForoException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+
+    test('sin sesión no sale ningún reporte', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        () => supabase.repositorio.reportar('pub-1', MotivoReporte.spam),
+        throwsA(isA<SesionRequeridaParaForoException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+
+    test(
+      'el administrador pide los reportes con su publicación y sin quién '
+      'los envió, el más reciente primero (criterio 2 de SCRUM-369)',
+      () async {
+        final supabase = _SupabaseFalso(
+          filas: [
+            {
+              'id': 'rep-1',
+              'publicacion_id': 'pub-1',
+              'motivo': 'acoso',
+              'detalle': 'Insulta a otro corredor',
+              'fecha': '2026-10-16T14:00:00+00:00',
+              'publicaciones_foro': {
+                'titulo': 'Tenis',
+                'autor_nombre': 'Carlos',
+              },
+            },
+          ],
+        );
+        addTearDown(supabase.cerrar);
+
+        final reportes = await supabase.repositorio.reportes();
+
+        final reporte = reportes.single;
+        expect(reporte.motivo, MotivoReporte.acoso);
+        expect(reporte.tituloPublicacion, 'Tenis');
+        expect(reporte.autorPublicacion, 'Carlos');
+        final consulta = supabase.peticiones.single.url;
+        expect(consulta.path, '/rest/v1/reportes_foro');
+        expect(
+          consulta.queryParameters['select'],
+          'id,publicacion_id,motivo,detalle,fecha,'
+          'publicaciones_foro!inner(titulo,autor_nombre)',
+        );
+        expect(
+          consulta.queryParameters['select'],
+          isNot(contains('reportante')),
+        );
+        // SCRUM-242: los de lo retirado salen de la bandeja. El `!inner` es
+        // lo que hace que el filtro descarte el reporte en vez de devolverlo
+        // con la publicación vacía.
+        expect(
+          consulta.queryParameters['publicaciones_foro.estado'],
+          'neq.${EstadoPublicacion.eliminada.valorDb}',
+        );
+        expect(consulta.queryParameters.keys, isNot(contains('reportante_id')));
+        expect(consulta.queryParameters['order'], startsWith('fecha.desc'));
+        expect(
+          consulta.queryParameters['limit'],
+          '${SupabaseForoRepository.limiteModeracion}',
+        );
+      },
+    );
+  });
+
+  group('retirar una publicación (SCRUM-242)', () {
+    test('llama a la función con la publicación y el motivo, y devuelve '
+        'cómo quedó (criterio 1)', () async {
+      final supabase = _SupabaseFalso(
+        respuestaRpc: {
+          ..._filaPublicacion,
+          'estado': 'eliminada',
+          'motivo_moderacion': 'Lenguaje ofensivo',
+        },
+      );
+      addTearDown(supabase.cerrar);
+
+      final retirada = await supabase.repositorio.retirar(
+        'pub-1',
+        'Lenguaje ofensivo',
+      );
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.url.path, '/rest/v1/rpc/retirar_publicacion_foro');
+      expect(jsonDecode(peticion.body), {
+        'p_publicacion_id': 'pub-1',
+        'p_motivo': 'Lenguaje ofensivo',
+      });
+      expect(retirada.estado, EstadoPublicacion.eliminada);
+      expect(retirada.motivoModeracion, 'Lenguaje ofensivo');
+    });
+
+    test('si quien lo intenta no es administrador, lo dice (42501)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '42501');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<RetiroReservadoAlAdminException>()),
+      );
+    });
+
+    test('si el motivo no le sirve a la base, lo dice (23514)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '23514');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', ' '),
+        throwsA(isA<MotivoDeRetiroInvalidoException>()),
+      );
+    });
+
+    test('si otro administrador se adelantó, lo dice (TZ409)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: 'TZ409');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<PublicacionYaRetiradaException>()),
+      );
+    });
+
+    test('si la publicación ya no existe, lo dice (TZ404)', () {
+      final supabase = _SupabaseFalso(codigoPostgres: 'TZ404');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<PublicacionNoDisponibleException>()),
+      );
+    });
+
+    test('sin sesión no sale ninguna petición', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      expect(
+        () => supabase.repositorio.retirar('pub-1', 'Spam'),
+        throwsA(isA<SesionRequeridaParaForoException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
 }
+
+/// Una fila de `publicaciones_foro`, como la devuelve
+/// `retirar_publicacion_foro`.
+const _filaPublicacion = <String, Object?>{
+  'id': 'pub-1',
+  'autor_id': 'usuario-2',
+  'autor_nombre': 'Carlos',
+  'titulo': 'Tenis para asfalto',
+  'contenido': '¿Cuáles recomiendan?',
+  'estado': 'publicada',
+  'fecha_creacion': '2026-10-16T09:00:00+00:00',
+  'motivo_moderacion': null,
+  'fecha_edicion': null,
+};
 
 /// Una fila de `moderaciones_foro`: una publicación que la IA rechazó por
 /// spam.

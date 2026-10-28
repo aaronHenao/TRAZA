@@ -34,9 +34,20 @@
 --
 --   · No agrega policies de update a `rutas`. Las decisiones pasan
 --     por una función que valida el rol y la etapa (abajo).
---   · No notifica el rechazo: eso es 0037.
+--   · No notifica el rechazo: eso es 0044.
 --
--- Corre esto DESPUÉS de 0035_foro_moderacion_ia.sql.
+-- Numeración: se escribió como 0036 y se aplicó a mano en la base
+-- compartida antes de llegar al repo; para entonces develop ya
+-- usaba 0036 y 0037. Va como 0043 porque 0048 depende de lo que
+-- crea aquí. En la base compartida NO hay que volver a correrla.
+--
+-- 0048 cambia una cosa de `decidir_revision_ruta`: el Runner
+-- Experto ya no aprueba por ella (aprobar es asignar la
+-- dificultad, `clasificar_ruta`). Lo de abajo es la versión
+-- original; la que vale es la de 0048.
+--
+-- Corre esto DESPUÉS de 0042_permiso_revisar_clasificacion.sql y
+-- ANTES de 0045_clasificacion_de_rutas.sql.
 -- =============================================================
 
 -- -------------------------------------------------------------
@@ -48,7 +59,7 @@ alter table rutas
 alter table rutas
   add constraint rutas_estado_valido
     check (estado in ('en_revision', 'revision_experto', 'publicada', 'rechazada')),
-  -- El motivo lo lee el autor en su notificación (0037): cabe en
+  -- El motivo lo lee el autor en su notificación (0044): cabe en
   -- ella con el nombre de la ruta.
   add constraint rutas_motivo_rechazo_valido
     check (motivo_rechazo is null or length(btrim(motivo_rechazo)) between 1 and 300),

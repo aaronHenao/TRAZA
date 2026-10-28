@@ -15,7 +15,7 @@ import '../utiles/notificaciones_falso.dart';
 /// El aviso al autor cuando le rechazan una ruta (SCRUM-331, criterios 3 y 5
 /// de SCRUM-321).
 ///
-/// La notificación la crea la base (`avisar_ruta_rechazada`, 0037): aquí se
+/// La notificación la crea la base (`avisar_ruta_rechazada`, 0044): aquí se
 /// comprueba que la app la entiende y la muestra con su motivo.
 void main() {
   // Lo que escribe `avisar_ruta_rechazada` en cada etapa.
@@ -102,7 +102,7 @@ void main() {
   });
 
   test('el mensaje mas largo posible cabe en la notificacion', () {
-    // Nombre de 120 (0029) y motivo de 300 (0036) en la plantilla de 0037.
+    // Nombre de 120 (0029) y motivo de 300 (0043) en la plantilla de 0044.
     final mensaje =
         '«${'n' * 120}» fue rechazada por un Runner Experto. '
         'Motivo: ${'m' * 300}';

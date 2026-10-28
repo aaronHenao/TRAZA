@@ -1,13 +1,13 @@
-import 'package:traza/models/revision_ruta.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/services/revision_rutas_service.dart';
 
 /// Revisión de rutas en memoria para las pruebas (SCRUM-321).
 ///
-/// Mueve las rutas de etapa como lo haría `decidir_revision_ruta`: aprobar
-/// en la del administrador la manda al experto, aprobar en la del experto
-/// la publica, y rechazar en cualquiera la deja rechazada con su motivo.
-/// Guarda cada decisión para comprobar qué se mandó.
+/// Mueve las rutas de etapa como lo hace `decidir_revision_ruta` desde
+/// `0048`: aprobar en la del administrador la manda al experto, el experto
+/// no aprueba por aquí (eso es `clasificar_ruta`), y rechazar en cualquiera
+/// la deja rechazada con su motivo. Guarda cada decisión para comprobar qué
+/// se mandó.
 class RevisionRutasFalso implements RevisionRutasRepository {
   RevisionRutasFalso({List<Ruta> rutas = const [], this.error})
     : rutas = [...rutas];
@@ -27,11 +27,11 @@ class RevisionRutasFalso implements RevisionRutasRepository {
   int consultas = 0;
 
   @override
-  Future<List<Ruta>> pendientes(EtapaRevision etapa) async {
+  Future<List<Ruta>> pendientes() async {
     consultas++;
     final error = this.error;
     if (error != null) throw error;
-    return rutas.where((r) => r.estado == etapa.estadoPendiente).toList();
+    return rutas.where((r) => r.estado == EstadoRuta.enRevision).toList();
   }
 
   @override
@@ -50,7 +50,8 @@ class RevisionRutasFalso implements RevisionRutasRepository {
 
     final siguiente = switch (ruta.estado) {
       EstadoRuta.enRevision when aprobar => EstadoRuta.revisionExperto,
-      EstadoRuta.revisionExperto when aprobar => EstadoRuta.publicada,
+      EstadoRuta.revisionExperto when aprobar =>
+        throw const RevisionNoPermitidaException(),
       EstadoRuta.enRevision ||
       EstadoRuta.revisionExperto => EstadoRuta.rechazada,
       _ => throw const RutaYaRevisadaException(),

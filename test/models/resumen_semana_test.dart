@@ -98,6 +98,19 @@ void main() {
       expect(resumen.avanceTexto, '1.0 / 7.5 km');
     });
 
+    test('la caja de la portada lleva el mismo texto sin la unidad', () {
+      // La etiqueta de la caja ya dice "km" (SCRUM-287).
+      const conMeta = ResumenSemana(
+        entrenamientos: 2,
+        distanciaMetros: 9150,
+        metaKilometros: 15,
+      );
+      const sinMeta = ResumenSemana(entrenamientos: 2, distanciaMetros: 9150);
+
+      expect(conMeta.avanceSinUnidad, '9.2 / 15');
+      expect(sinMeta.avanceSinUnidad, '9.2');
+    });
+
     test('pasarse de la meta llena la barra, no la desborda', () {
       const resumen = ResumenSemana(
         entrenamientos: 4,

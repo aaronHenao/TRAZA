@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../models/revision_ruta.dart';
 import '../models/ruta.dart';
 import 'foro_service.dart' show usuarioActualProvider;
 
@@ -58,24 +57,31 @@ class RutaYaRevisadaException implements Exception {
 }
 
 /// La revisión de las rutas antes de publicarlas (SCRUM-321).
+///
+/// El administrador aprueba o rechaza las recién enviadas. El Runner Experto
+/// solo rechaza por aquí: aprobar, para él, es asignar la dificultad
+/// (`clasificar_ruta`, SCRUM-363), y `decidir_revision_ruta` se lo impide
+/// desde `0048`.
 abstract interface class RevisionRutasRepository {
-  /// Las rutas que esperan a [etapa], de la más antigua a la más reciente:
-  /// la que lleva más tiempo esperando va primero.
+  /// Las rutas que esperan al administrador, de la más antigua a la más
+  /// reciente: la que lleva más tiempo esperando va primero.
   ///
   /// Con su trazado, que es lo que el revisor tiene que mirar.
-  Future<List<Ruta>> pendientes(EtapaRevision etapa);
+  Future<List<Ruta>> pendientes();
 
   /// Aprueba o rechaza la ruta [rutaId] en la etapa en que esté, y devuelve
   /// cómo quedó.
   ///
   /// Lanza [RevisionNoPermitidaException] si quien decide no tiene el rol de
-  /// esa etapa o es el autor, [MotivoDeRechazoInvalidoException] si rechaza
-  /// sin motivo o con uno demasiado largo, y [RutaYaRevisadaException] si la
-  /// ruta ya no está pendiente.
+  /// esa etapa, es el autor o es un experto que intenta aprobar,
+  /// [MotivoDeRechazoInvalidoException] si rechaza sin motivo o con uno
+  /// demasiado largo, y [RutaYaRevisadaException] si la ruta ya no está
+  /// pendiente.
   Future<Ruta> decidir(String rutaId, {required bool aprobar, String? motivo});
 }
 
-/// Lee de `rutas` y decide con la función `decidir_revision_ruta` (`0036`).
+/// Lee de `rutas` y decide con la función `decidir_revision_ruta` (`0043`,
+/// cambiada en `0048`).
 ///
 /// `rutas` no tiene policy de update: la única forma de cambiar el estado
 /// de una ruta desde la app es esa función, que valida el rol y la etapa.
@@ -109,6 +115,10 @@ class SupabaseRevisionRutasRepository implements RevisionRutasRepository {
   /// La ruta ya no está pendiente de nadie.
   static const _yaRevisada = 'TZ409';
 
+  /// El Runner Experto quiso aprobar sin dificultad: eso es
+  /// `clasificar_ruta` (`0048`).
+  static const _expertoAprueba = '22023';
+
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
 
@@ -120,7 +130,7 @@ class SupabaseRevisionRutasRepository implements RevisionRutasRepository {
   }
 
   @override
-  Future<List<Ruta>> pendientes(EtapaRevision etapa) async {
+  Future<List<Ruta>> pendientes() async {
     _exigirSesion();
 
     // El filtro por estado va aunque RLS ya decida qué se puede leer: al
@@ -128,7 +138,7 @@ class SupabaseRevisionRutasRepository implements RevisionRutasRepository {
     final filas = await _cliente
         .from(tabla)
         .select(_columnasConTrazado)
-        .eq('estado', etapa.estadoPendiente.valorDb)
+        .eq('estado', EstadoRuta.enRevision.valorDb)
         .order('fecha_creacion', ascending: true)
         .limit(limite);
 
@@ -163,7 +173,9 @@ class SupabaseRevisionRutasRepository implements RevisionRutasRepository {
       }
       return Ruta.desdeSupabase(fila);
     } on PostgrestException catch (e) {
-      if (e.code == _sinPermiso) throw const RevisionNoPermitidaException();
+      if (e.code == _sinPermiso || e.code == _expertoAprueba) {
+        throw const RevisionNoPermitidaException();
+      }
       if (e.code == _restriccionIncumplida) {
         throw MotivoDeRechazoInvalidoException(e.message);
       }

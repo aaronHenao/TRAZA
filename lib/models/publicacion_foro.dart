@@ -37,6 +37,11 @@ enum EstadoPublicacion {
   }
 }
 
+/// Lo que admite el motivo del retiro en
+/// `bitacora_moderacion_foro_motivo_valido` (`0052`, SCRUM-242). Si cambia
+/// uno, cambia en los dos lados.
+const maxCaracteresMotivoRetiro = 300;
+
 /// Una publicación del foro, tal como vive en `publicaciones_foro`
 /// (SCRUM-323).
 ///
@@ -96,6 +101,16 @@ class PublicacionForo {
   bool editablePor(String? usuarioId) =>
       usuarioId != null &&
       usuarioId == autorId &&
+      estado == EstadoPublicacion.publicada;
+
+  /// Si [usuarioId] la puede reportar: es de otro y sigue publicada
+  /// (SCRUM-369). Lo que espera la moderación ya lo está revisando alguien.
+  ///
+  /// Lo mismo exige la policy de insert de `reportes_foro`; aquí solo decide
+  /// si se ofrece el botón.
+  bool reportablePor(String? usuarioId) =>
+      usuarioId != null &&
+      usuarioId != autorId &&
       estado == EstadoPublicacion.publicada;
 
   factory PublicacionForo.desdeSupabase(Map<String, dynamic> fila) {

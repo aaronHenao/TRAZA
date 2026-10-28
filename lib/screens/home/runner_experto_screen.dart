@@ -2,12 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../models/revision_ruta.dart';
 import '../../models/runner_experto.dart';
-import '../../services/revision_rutas_provider.dart';
-import '../../services/roles_service.dart';
 import '../../services/runner_experto_provider.dart';
-import '../rutas/revision_rutas_screen.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
@@ -28,7 +24,6 @@ class RunnerExpertoScreen extends ConsumerWidget {
   static const claveNiveles = Key('runner-experto-niveles');
   static const claveExperiencia = Key('runner-experto-experiencia');
   static const claveAntiguedad = Key('runner-experto-antiguedad');
-  static const claveRevisarRutas = Key('runner-experto-revisar-rutas');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -83,7 +78,6 @@ class _Detalle extends StatelessWidget {
       ),
       children: [
         _Cabecera(desbloqueado: estado.desbloqueado),
-        const _AccesoRevisionRutas(),
         const SizedBox(height: AppSpacing.xl),
         const _Rotulo('REQUISITOS'),
         const SizedBox(height: AppSpacing.sm),
@@ -259,89 +253,6 @@ class _Cabecera extends StatelessWidget {
           style: const TextStyle(fontSize: 13, color: AppColors.ink2),
         ),
       ],
-    );
-  }
-}
-
-/// La entrada a la bandeja de revisión de rutas (SCRUM-329).
-///
-/// Solo existe para quien ya tiene el rol: a los demás no se les muestra
-/// (criterio 7 de SCRUM-321). Se apoya en el rol ganado (`roles_usuario`),
-/// no en los requisitos de arriba: el rol lo otorga la base y no se pierde
-/// aunque un requisito deje de cumplirse.
-class _AccesoRevisionRutas extends ConsumerWidget {
-  const _AccesoRevisionRutas();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final esExperto = ref.watch(esExpertoProvider).valueOrNull ?? false;
-    if (!esExperto) return const SizedBox.shrink();
-
-    final pendientes = ref
-        .watch(rutasPorRevisarProvider(EtapaRevision.experto))
-        .valueOrNull
-        ?.length;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.lg),
-      child: TrazaCard(
-        key: RunnerExpertoScreen.claveRevisarRutas,
-        onTap: () async {
-          await context.push(EtapaRevision.experto.ruta);
-          // Lo decidido allá cambia el número de aquí.
-          ref.invalidate(rutasPorRevisarProvider(EtapaRevision.experto));
-        },
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: AppColors.accentTint,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.route_outlined,
-                size: 22,
-                color: AppColors.accentInk,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    pendientes == null
-                        ? 'Revisar rutas'
-                        : 'Revisar rutas ($pendientes)',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Aprueba o rechaza las rutas que el administrador ya '
-                    'revisó antes de que se publiquen.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.ink2,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: AppColors.ink3,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

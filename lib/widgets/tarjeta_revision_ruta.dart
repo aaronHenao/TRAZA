@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/revision_ruta.dart';
 import '../models/ruta.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';

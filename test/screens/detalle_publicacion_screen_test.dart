@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:traza/models/comentario_foro.dart';
 import 'package:traza/models/moderacion_foro.dart';
 import 'package:traza/models/publicacion_foro.dart';
+import 'package:traza/models/reporte_foro.dart';
 import 'package:traza/models/version_publicacion.dart';
 import 'package:traza/screens/foro/detalle_publicacion_screen.dart';
 import 'package:traza/screens/foro/editar_publicacion_screen.dart';
@@ -271,6 +272,38 @@ void main() {
         find.text(DetallePublicacionScreen.publicacionRechazada('Spam')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('si se la retiraron lee que la retiramos, con el motivo, y no '
+        'que se la rechazaron (criterio 2 de SCRUM-242)', (tester) async {
+      await abrir(
+        tester,
+        usuario: 'autor-pub-1',
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            estado: EstadoPublicacion.eliminada,
+            motivo: 'Lenguaje ofensivo',
+          ),
+        ],
+      );
+
+      expect(
+        find.text(
+          DetallePublicacionScreen.publicacionRetirada('Lenguaje ofensivo'),
+        ),
+        findsOneWidget,
+      );
+      // Estuvo publicada y los demás la leyeron: no es un rechazo.
+      expect(
+        find.text(
+          DetallePublicacionScreen.publicacionRechazada('Lenguaje ofensivo'),
+        ),
+        findsNothing,
+      );
+      // Ni se comenta ni se edita lo retirado.
+      expect(find.byKey(DetallePublicacionScreen.claveCaja), findsNothing);
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
     });
 
     testWidgets('a los demás lo que está en revisión no les existe', (
@@ -901,6 +934,287 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(cambios.escuchandoPublicacion, isFalse);
+    });
+  });
+
+  group('reportar (SCRUM-369)', () {
+    // `publicacionDePrueba(id: 'pub-1')` la escribió 'autor-pub-1'; quien
+    // abre el detalle por defecto es 'usuario-1', el mismo
+    // `ForoRepositorioFalso.usuario` que el doble anota como reportante.
+    const autor = 'autor-pub-1';
+
+    final dialogo = find.byType(AlertDialog);
+
+    Future<void> abrirReporte(WidgetTester tester) async {
+      await tester.tap(find.byKey(DetallePublicacionScreen.claveReportar));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> elegir(WidgetTester tester, MotivoReporte motivo) async {
+      final opcion = find.byKey(
+        DetallePublicacionScreen.claveMotivoReporte(motivo),
+      );
+      await tester.ensureVisible(opcion);
+      await tester.pumpAndSettle();
+      await tester.tap(opcion);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> escribirDetalle(WidgetTester tester, String texto) async {
+      final caja = find.byKey(DetallePublicacionScreen.claveDetalleReporte);
+      await tester.ensureVisible(caja);
+      await tester.enterText(caja, texto);
+      await tester.pump();
+    }
+
+    Future<void> enviar(WidgetTester tester) async {
+      await tester.tap(find.byKey(DetallePublicacionScreen.claveEnviarReporte));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> reportar(WidgetTester tester, MotivoReporte motivo) async {
+      await abrirReporte(tester);
+      await elegir(tester, motivo);
+      await enviar(tester);
+    }
+
+    bool enviarHabilitado(WidgetTester tester) {
+      final boton = tester.widget(
+        find.byKey(DetallePublicacionScreen.claveEnviarReporte),
+      );
+      return boton is ButtonStyleButton && boton.enabled;
+    }
+
+    /// Los reportes que el doble guardó a nombre del usuario de la sesión.
+    Iterable<ReporteForo> delUsuario() => repositorio.reportesGuardados.where(
+      (r) =>
+          r.publicacionId == 'pub-1' &&
+          repositorio.reportanteDe[r.id] == ForoRepositorioFalso.usuario,
+    );
+
+    testWidgets('el corredor ve la opción de reportar en lo publicado por '
+        'otro (criterio 1 de SCRUM-369)', (tester) async {
+      await abrir(tester);
+
+      final boton = find.byKey(DetallePublicacionScreen.claveReportar);
+      expect(boton, findsOneWidget);
+      expect(find.byTooltip('Reportar publicación'), findsOneWidget);
+      expect(
+        find.descendant(of: boton, matching: find.byIcon(Icons.flag_outlined)),
+        findsOneWidget,
+      );
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsNothing);
+    });
+
+    testWidgets('al autor no se le ofrece reportar lo suyo, sino editarlo', (
+      tester,
+    ) async {
+      await abrir(tester, usuario: autor);
+
+      expect(find.byKey(DetallePublicacionScreen.claveReportar), findsNothing);
+      expect(find.byKey(DetallePublicacionScreen.claveEditar), findsOneWidget);
+    });
+
+    testWidgets('lo propio que espera la moderación tampoco se reporta', (
+      tester,
+    ) async {
+      await abrir(
+        tester,
+        usuario: autor,
+        publicaciones: [
+          publicacionDePrueba(
+            id: 'pub-1',
+            estado: EstadoPublicacion.enRevision,
+          ),
+        ],
+      );
+
+      expect(find.byKey(DetallePublicacionScreen.claveReportar), findsNothing);
+    });
+
+    testWidgets('en la moderación no se ofrece reportar', (tester) async {
+      await abrir(tester, vistaModeracion: true, usuario: 'admin-1');
+
+      expect(find.text('Publicada'), findsOneWidget);
+      expect(find.byKey(DetallePublicacionScreen.claveReportar), findsNothing);
+    });
+
+    testWidgets('elegir el motivo y enviar registra el reporte y confirma que '
+        'se recibió, sin nombrar a nadie (criterios 1 y 2 de SCRUM-369)', (
+      tester,
+    ) async {
+      await abrir(tester);
+
+      await abrirReporte(tester);
+      expect(
+        find.descendant(
+          of: dialogo,
+          matching: find.text('Reportar publicación'),
+        ),
+        findsOneWidget,
+      );
+      for (final motivo in MotivoReporte.values) {
+        expect(
+          find.byKey(DetallePublicacionScreen.claveMotivoReporte(motivo)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: dialogo, matching: find.text(motivo.etiqueta)),
+          findsOneWidget,
+        );
+      }
+
+      await elegir(tester, MotivoReporte.acoso);
+      await escribirDetalle(tester, 'Insulta en los comentarios');
+      await enviar(tester);
+
+      final reporte = delUsuario().single;
+      expect(reporte.motivo, MotivoReporte.acoso);
+      expect(reporte.detalle, 'Insulta en los comentarios');
+      expect(dialogo, findsNothing);
+      expect(find.text(ReportePublicacion.recibido), findsOneWidget);
+      // Nada en pantalla dice quién reportó.
+      expect(find.textContaining(ForoRepositorioFalso.usuario), findsNothing);
+      expect(find.textContaining('Ana Runner'), findsNothing);
+    });
+
+    testWidgets('Enviar no se activa hasta elegir un motivo', (tester) async {
+      await abrir(tester);
+      await abrirReporte(tester);
+
+      expect(enviarHabilitado(tester), isFalse);
+      await tester.tap(
+        find.byKey(DetallePublicacionScreen.claveEnviarReporte),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(repositorio.reporteRecibido, isNull);
+      expect(dialogo, findsOneWidget);
+
+      await elegir(tester, MotivoReporte.spam);
+
+      expect(enviarHabilitado(tester), isTrue);
+    });
+
+    testWidgets('si ya la reportó, no registra un segundo reporte y avisa que '
+        'está en revisión (criterio 3 de SCRUM-369)', (tester) async {
+      await abrir(tester);
+      await reportar(tester, MotivoReporte.acoso);
+      expect(find.text(ReportePublicacion.recibido), findsOneWidget);
+
+      await reportar(tester, MotivoReporte.spam);
+
+      expect(find.text(ReportePublicacion.duplicado), findsOneWidget);
+      expect(delUsuario(), hasLength(1));
+      expect(delUsuario().single.motivo, MotivoReporte.acoso);
+    });
+
+    testWidgets('cancelar no registra nada', (tester) async {
+      await abrir(tester);
+      await abrirReporte(tester);
+      await elegir(tester, MotivoReporte.spam);
+
+      await tester.tap(
+        find.descendant(of: dialogo, matching: find.text('Cancelar')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(dialogo, findsNothing);
+      expect(repositorio.reporteRecibido, isNull);
+      expect(repositorio.reportesGuardados, isEmpty);
+      expect(find.text(ReportePublicacion.recibido), findsNothing);
+    });
+
+    testWidgets('con el motivo "Otro" pide contar por qué antes de enviar', (
+      tester,
+    ) async {
+      await abrir(tester);
+      await abrirReporte(tester);
+      await elegir(tester, MotivoReporte.otro);
+      await escribirDetalle(tester, '   ');
+
+      await enviar(tester);
+
+      expect(find.text(ReportePublicacion.sinDetalle), findsOneWidget);
+      expect(repositorio.reporteRecibido, isNull);
+      expect(dialogo, findsOneWidget);
+
+      await escribirDetalle(tester, 'Publica el teléfono de otra corredora');
+      await enviar(tester);
+
+      expect(delUsuario().single.motivo, MotivoReporte.otro);
+      expect(find.text(ReportePublicacion.recibido), findsOneWidget);
+    });
+
+    testWidgets('el detalle no pasa del límite de la base', (tester) async {
+      await abrir(tester);
+      await abrirReporte(tester);
+
+      await escribirDetalle(tester, 'a' * (maxCaracteresDetalleReporte + 20));
+
+      final texto = tester
+          .widget<EditableText>(
+            find.descendant(
+              of: find.byKey(DetallePublicacionScreen.claveDetalleReporte),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .controller
+          .text;
+      expect(texto.length, maxCaracteresDetalleReporte);
+    });
+
+    testWidgets('si la publicación dejó de estar publicada, lo avisa', (
+      tester,
+    ) async {
+      await abrir(tester);
+      repositorio.rechazar('pub-1');
+
+      await reportar(tester, MotivoReporte.spam);
+
+      expect(find.text(ReportePublicacion.noDisponible), findsOneWidget);
+      expect(repositorio.reportesGuardados, isEmpty);
+    });
+
+    testWidgets('si dejó de estar publicada, el detalle se actualiza y deja de '
+        'ofrecer reportarla', (tester) async {
+      await abrir(tester);
+      repositorio.rechazar('pub-1');
+
+      await reportar(tester, MotivoReporte.spam);
+
+      expect(find.text(DetallePublicacionScreen.noDisponible), findsOneWidget);
+      expect(find.byKey(DetallePublicacionScreen.claveReportar), findsNothing);
+    });
+
+    testWidgets('un fallo de red avisa que no se pudo enviar', (tester) async {
+      await abrir(
+        tester,
+        preparar: (r) => r.errorAlReportar = Exception('sin red'),
+      );
+
+      await reportar(tester, MotivoReporte.spam);
+
+      expect(find.text(ReportePublicacion.noSePudo), findsOneWidget);
+    });
+
+    testWidgets('al autor de una publicación reportada no se le dice que la '
+        'reportaron ni quién (criterio 2 de SCRUM-369)', (tester) async {
+      await abrir(
+        tester,
+        usuario: autor,
+        preparar: (r) {
+          r.reportesGuardados.add(reporteDePrueba(id: 'rep-1'));
+          r.reportanteDe['rep-1'] = ForoRepositorioFalso.usuario;
+        },
+      );
+
+      expect(find.text('¿Qué tenis para asfalto?'), findsOneWidget);
+      expect(
+        find.textContaining(RegExp('report', caseSensitive: false)),
+        findsNothing,
+      );
+      expect(find.textContaining(ForoRepositorioFalso.usuario), findsNothing);
     });
   });
 }

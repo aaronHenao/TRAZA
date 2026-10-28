@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:traza/models/revision_ruta.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/services/revision_rutas_service.dart';
 
@@ -39,9 +38,7 @@ void main() {
       final supabase = _SupabaseFalso(respuesta: [fila()]);
       addTearDown(supabase.cerrar);
 
-      final rutas = await supabase.repositorio.pendientes(
-        EtapaRevision.administrador,
-      );
+      final rutas = await supabase.repositorio.pendientes();
 
       final peticion = supabase.peticiones.single;
       expect(peticion.url.path, '/rest/v1/rutas');
@@ -54,29 +51,12 @@ void main() {
       expect(rutas.single.trazado.length, 2);
     });
 
-    test('el Runner Experto pide lo que ya aprobo el administrador', () async {
-      final supabase = _SupabaseFalso(
-        respuesta: [fila(estado: 'revision_experto')],
-      );
-      addTearDown(supabase.cerrar);
-
-      final rutas = await supabase.repositorio.pendientes(
-        EtapaRevision.experto,
-      );
-
-      expect(
-        supabase.peticiones.single.url.queryParameters['estado'],
-        'eq.revision_experto',
-      );
-      expect(rutas.single.estado, EstadoRuta.revisionExperto);
-    });
-
     test('sin sesion no pregunta', () async {
       final supabase = _SupabaseFalso(usuarioActual: null);
       addTearDown(supabase.cerrar);
 
       await expectLater(
-        supabase.repositorio.pendientes(EtapaRevision.administrador),
+        supabase.repositorio.pendientes(),
         throwsA(isA<SesionRequeridaParaRevisarException>()),
       );
       expect(supabase.peticiones, isEmpty);
@@ -132,16 +112,13 @@ void main() {
 
     test('tambien entiende la fila cuando llega en una lista', () async {
       final supabase = _SupabaseFalso(
-        respuesta: [
-          fila(estado: 'publicada')
-            ..['fecha_publicacion'] = '2026-10-18T12:00:00Z',
-        ],
+        respuesta: [fila(estado: 'revision_experto')],
       );
       addTearDown(supabase.cerrar);
 
       final ruta = await supabase.repositorio.decidir('ruta-1', aprobar: true);
 
-      expect(ruta.publicada, isTrue);
+      expect(ruta.estado, EstadoRuta.revisionExperto);
     });
 
     test('sin el rol de la etapa, o siendo el autor, no se permite', () async {
@@ -153,6 +130,19 @@ void main() {
         throwsA(isA<RevisionNoPermitidaException>()),
       );
     });
+
+    test(
+      'el experto que intenta aprobar sin dificultad tampoco (0048)',
+      () async {
+        final supabase = _SupabaseFalso(codigoPostgres: '22023');
+        addTearDown(supabase.cerrar);
+
+        await expectLater(
+          supabase.repositorio.decidir('ruta-1', aprobar: true),
+          throwsA(isA<RevisionNoPermitidaException>()),
+        );
+      },
+    );
 
     test('un rechazo sin motivo lo para la base (criterio 6)', () async {
       final supabase = _SupabaseFalso(codigoPostgres: '23514');

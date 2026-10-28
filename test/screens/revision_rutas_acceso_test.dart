@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:traza/models/revision_ruta.dart';
 import 'package:traza/models/ruta.dart';
 import 'package:traza/screens/rutas/revision_rutas_screen.dart';
 import 'package:traza/screens/rutas/rutas_revision.dart';
@@ -28,16 +27,16 @@ class _RolFalso implements RolRepository {
   Future<bool> esAdministrador() async => admin;
 }
 
-/// Acceso restringido a la revisión de rutas (SCRUM-332, criterio 7 de
-/// SCRUM-321).
+/// Acceso restringido a la revisión de rutas del administrador (SCRUM-332,
+/// criterio 7 de SCRUM-321).
 ///
-/// Monta las mismas rutas que `main.dart` (`rutasRevision`). Esto es la mitad
+/// Monta la misma ruta que `main.dart` (`rutasRevision`). Esto es la mitad
 /// de presentación: la otra mitad, que la base no deje leer ni decidir a
 /// quien no tiene el rol, está en las policies de `rutas` y en
-/// `decidir_revision_ruta` (0036).
+/// `decidir_revision_ruta` (0043 y 0048). La bandeja del Runner Experto,
+/// "Rutas por clasificar", tiene la suya (SCRUM-363).
 void main() {
   const soloAdmin = 'Esta sección es solo para administradores';
-  const soloExperto = 'Esto es de Runner Experto';
 
   late RevisionRutasFalso revision;
 
@@ -61,7 +60,7 @@ void main() {
     final router = GoRouter(
       initialLocation: ruta,
       routes: [
-        ...rutasRevision,
+        rutasRevision,
         GoRoute(
           path: '/inicio',
           builder: (_, _) => const Scaffold(body: Text('Pantalla Inicio')),
@@ -92,7 +91,7 @@ void main() {
 
   group('un corredor sin roles', () {
     testWidgets('no entra a la bandeja del administrador', (tester) async {
-      await entrar(tester, EtapaRevision.administrador.ruta);
+      await entrar(tester, RevisionRutasScreen.ruta);
 
       expect(find.text(soloAdmin), findsOneWidget);
       expect(find.byType(RevisionRutasScreen), findsNothing);
@@ -100,28 +99,14 @@ void main() {
       expect(revision.consultas, 0);
     });
 
-    testWidgets('no entra a la del Runner Experto', (tester) async {
-      await entrar(tester, EtapaRevision.experto.ruta);
-
-      expect(find.text(soloExperto), findsOneWidget);
-      expect(find.byType(RevisionRutasScreen), findsNothing);
-      expect(revision.consultas, 0);
-    });
-
     testWidgets('tampoco abre una ruta por su direccion', (tester) async {
-      await entrar(tester, EtapaRevision.administrador.detalleDe('nueva'));
+      await entrar(tester, RevisionRutasScreen.detalleDe('nueva'));
       expect(find.text(soloAdmin), findsOneWidget);
       expect(find.byType(RevisionRutaScreen), findsNothing);
     });
 
-    testWidgets('ni la del experto', (tester) async {
-      await entrar(tester, EtapaRevision.experto.detalleDe('aprobada'));
-      expect(find.text(soloExperto), findsOneWidget);
-      expect(find.byType(RevisionRutaScreen), findsNothing);
-    });
-
     testWidgets('puede volver al inicio', (tester) async {
-      await entrar(tester, EtapaRevision.administrador.ruta);
+      await entrar(tester, RevisionRutasScreen.ruta);
 
       await tester.tap(find.text('Volver al inicio'));
       await tester.pumpAndSettle();
@@ -132,33 +117,19 @@ void main() {
 
   group('el administrador', () {
     testWidgets('entra a su bandeja', (tester) async {
-      await entrar(tester, EtapaRevision.administrador.ruta, admin: true);
+      await entrar(tester, RevisionRutasScreen.ruta, admin: true);
 
       expect(find.byType(RevisionRutasScreen), findsOneWidget);
       expect(find.text('Revisión de rutas'), findsOneWidget);
     });
-
-    testWidgets('no hace la revision del experto si no tiene el rol', (
-      tester,
-    ) async {
-      await entrar(tester, EtapaRevision.experto.ruta, admin: true);
-
-      expect(find.text(soloExperto), findsOneWidget);
-    });
   });
 
   group('el Runner Experto', () {
-    testWidgets('entra a su bandeja', (tester) async {
-      await entrar(tester, EtapaRevision.experto.ruta, experto: true);
-
-      expect(find.byType(RevisionRutasScreen), findsOneWidget);
-      expect(find.text('Rutas por revisar'), findsOneWidget);
-    });
-
     testWidgets('no hace la revision del administrador', (tester) async {
-      await entrar(tester, EtapaRevision.administrador.ruta, experto: true);
+      await entrar(tester, RevisionRutasScreen.ruta, experto: true);
 
       expect(find.text(soloAdmin), findsOneWidget);
+      expect(revision.consultas, 0);
     });
   });
 }

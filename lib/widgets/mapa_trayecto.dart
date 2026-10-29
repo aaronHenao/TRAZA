@@ -17,14 +17,31 @@ import '../theme/traza_theme.dart';
 /// curso (`MapaRecorrido`). Cada tramo es una línea aparte: no se une el
 /// punto donde se pausó con el punto donde se reanudó (BUG-005).
 class MapaTrayecto extends ConsumerWidget {
-  const MapaTrayecto({required this.puntos, this.cortes = const [], super.key})
-    : assert(puntos.length > 0, 'Sin puntos no hay trayecto que mostrar');
+  const MapaTrayecto({
+    required this.puntos,
+    this.cortes = const [],
+    this.extremosRecortados = false,
+    super.key,
+  }) : assert(puntos.length > 0, 'Sin puntos no hay trayecto que mostrar');
 
   /// Puntos del recorrido en orden de captura.
   final List<PuntoGps> puntos;
 
   /// Índices de [puntos] donde empieza un tramo tras una pausa.
   final List<int> cortes;
+
+  /// Si los extremos no son donde el recorrido empezó y terminó de verdad,
+  /// porque se recortaron al publicarlo (RNF-04).
+  ///
+  /// Lo pone el detalle de una ruta publicada; el resumen del entrenamiento
+  /// no, porque ahí sí son la partida y la llegada reales. Solo cambia lo
+  /// que lee un lector de pantalla: el dibujo es el mismo.
+  final bool extremosRecortados;
+
+  static const etiquetaPartida = 'Partida';
+  static const etiquetaLlegada = 'Llegada';
+  static const etiquetaInicioPublico = 'Inicio del tramo público';
+  static const etiquetaFinPublico = 'Fin del tramo público';
 
   /// Zoom de calle: al que se muestra un recorrido de un solo lugar y el
   /// máximo al que llega el encuadre, para no pegarse demasiado a una ruta
@@ -96,13 +113,26 @@ class MapaTrayecto extends ConsumerWidget {
               point: coordenadas.first,
               width: 18,
               height: 18,
-              child: const _Extremo(key: clavePartida, color: Colors.white),
+              child: Semantics(
+                label: extremosRecortados
+                    ? etiquetaInicioPublico
+                    : etiquetaPartida,
+                child: const _Extremo(key: clavePartida, color: Colors.white),
+              ),
             ),
             Marker(
               point: coordenadas.last,
               width: 18,
               height: 18,
-              child: const _Extremo(key: claveLlegada, color: AppColors.accent),
+              child: Semantics(
+                label: extremosRecortados
+                    ? etiquetaFinPublico
+                    : etiquetaLlegada,
+                child: const _Extremo(
+                  key: claveLlegada,
+                  color: AppColors.accent,
+                ),
+              ),
             ),
           ],
         ),

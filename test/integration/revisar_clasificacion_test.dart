@@ -428,6 +428,9 @@ Map<String, Object?> _fila(
   ],
   'dificultad': dificultad?.valorDb,
   'clasificada_por': clasificadaPor,
+  // RNF-04: la pide el detalle para saber si avisar de que el trazo está
+  // recortado. Nula es "no consta", que es como quedan las rutas anteriores.
+  'recorrido_completo': null,
 };
 
 class _MockPermisosService extends Mock implements PermisosService {}

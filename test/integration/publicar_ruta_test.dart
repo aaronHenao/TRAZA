@@ -49,12 +49,15 @@ import '../utiles/rutas_repository_falso.dart';
 void main() {
   final ahora = DateTime(2026, 10, 17, 12);
 
+  // ~1,1 km, con un punto cada ~11 m. Tiene que ser bastante más largo que
+  // los dos radios de privacidad (RNF-04) o apenas quedaría trazo que
+  // publicar.
   final recorrido = [
-    for (var i = 0; i < 40; i++)
+    for (var i = 0; i <= 100; i++)
       PuntoGps(
         latitud: 6.2442 + i / 10000,
         longitud: -75.5812,
-        capturadoEn: DateTime(2026, 10, 17, 7, i),
+        capturadoEn: DateTime(2026, 10, 17, 7).add(Duration(seconds: i * 5)),
       ),
   ];
 
@@ -181,7 +184,10 @@ void main() {
     expect(enviada.entrenamientoId, 'e-123');
     expect(enviada.nombre, 'Vuelta al Parque Norte');
     expect(enviada.descripcion, 'Plana y con sombra.');
-    expect(enviada.trazado.length, recorrido.length);
+    // Menos puntos que el recorrido: los extremos no se publican (RNF-04).
+    expect(enviada.trazado.length, lessThan(recorrido.length));
+    expect(enviada.trazado.first.latitud, isNot(recorrido.first.latitud));
+    expect(enviada.recorridoCompleto, isFalse);
 
     // Y lo que ve el autor: que no está publicada, que está en revisión.
     expect(find.text(PublicacionRuta.enRevision), findsOneWidget);

@@ -30,10 +30,16 @@ void main() {
     capturadoEn: DateTime(2026, 10, 17, 7),
   );
 
+  /// ~1,1 km en línea recta, con un punto cada ~11 m. Tiene que ser bastante
+  /// más largo que los dos radios de privacidad (RNF-04) o la pantalla diría
+  /// que no queda trazo que publicar.
   final recorrido = [
-    punto(6.2442, -75.5812),
-    punto(6.2450, -75.5800),
-    punto(6.2461, -75.5795),
+    for (var i = 0; i <= 100; i++) punto(6.2442 + i / 10000, -75.5812),
+  ];
+
+  /// Un recorrido de ~330 m: entero dentro de los dos círculos de privacidad.
+  final recorridoCorto = [
+    for (var i = 0; i <= 30; i++) punto(6.2442 + i / 10000, -75.5812),
   ];
 
   ResumenEntrenamiento resumen({
@@ -49,6 +55,23 @@ void main() {
     puntos: puntos ?? recorrido,
   );
 
+  /// Enciende "Mostrar el recorrido completo" (RNF-04).
+  ///
+  /// Hay que desplazarse hasta el interruptor y centrarlo: tras el
+  /// desplazamiento queda al borde de la pantalla y el toque no lo alcanza.
+  Future<void> encenderRecorridoCompleto(WidgetTester tester) async {
+    final interruptor = find.byKey(PublicarRutaScreen.claveRecorridoCompleto);
+    await tester.scrollUntilVisible(
+      interruptor,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(interruptor);
+    await tester.pumpAndSettle();
+    await tester.tap(interruptor);
+    await tester.pumpAndSettle();
+  }
+
   group('lo que se publica', () {
     testWidgets('muestra el trazado, la distancia y el aviso de revision', (
       tester,
@@ -61,13 +84,121 @@ void main() {
         find.text('5.23 km · la distancia que llevará tu ruta'),
         findsOneWidget,
       );
-      // SCRUM-321: dos revisiones, primero el administrador.
+      final lista = find.byType(Scrollable).first;
+
+      // RNF-04: antes de publicar se le dice qué no se publica.
+      final aviso = find.byKey(PublicarRutaScreen.claveAvisoPrivacidad);
+      await tester.scrollUntilVisible(aviso, 200, scrollable: lista);
+      expect(find.textContaining('no publicamos los primeros'), findsOneWidget);
+      expect(find.textContaining('200 m'), findsOneWidget);
+      // Y que la distancia mostrada sigue siendo la que corrió.
       expect(
-        find.textContaining(
-          'El administrador y después un Runner Experto revisan tu ruta',
-        ),
+        find.textContaining('la distancia que se muestra sigue siendo'),
         findsOneWidget,
       );
+
+      // SCRUM-321: dos revisiones, primero el administrador.
+      final revision = find.textContaining(
+        'El administrador y después un Runner Experto revisan tu ruta',
+      );
+      await tester.scrollUntilVisible(revision, 200, scrollable: lista);
+      expect(revision, findsOneWidget);
+    });
+
+    testWidgets('el interruptor del recorrido completo viene apagado '
+        '(RNF-04)', (tester) async {
+      await _abrir(tester, resumen: resumen());
+
+      final interruptor = find.byKey(PublicarRutaScreen.claveRecorridoCompleto);
+      await tester.scrollUntilVisible(
+        interruptor,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      // La privacidad no se pide, se da.
+      expect(tester.widget<SwitchListTile>(interruptor).value, isFalse);
+      expect(
+        find.text('Mostrar el recorrido completo (incluye mi inicio y fin)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al encenderlo, el aviso advierte en vez de explicar '
+        '(RNF-04)', (tester) async {
+      await _abrir(tester, resumen: resumen());
+
+      await encenderRecorridoCompleto(tester);
+
+      expect(
+        find.textContaining('cualquiera que vea tu ruta sabrá dónde empieza'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('tu casa o tu trabajo'), findsOneWidget);
+      // Y deja de decir que no se publican los extremos.
+      expect(find.textContaining('no publicamos los primeros'), findsNothing);
+    });
+
+    testWidgets('encendido manda el recorrido entero (RNF-04)', (tester) async {
+      final repositorio = await _abrir(tester, resumen: resumen());
+
+      await tester.enterText(
+        find.byKey(PublicarRutaScreen.claveNombre),
+        'Vuelta al estadio',
+      );
+      await encenderRecorridoCompleto(tester);
+      await tester.tap(find.byKey(PublicarRutaScreen.clavePublicar));
+      await tester.pumpAndSettle();
+
+      final enviada = repositorio.recibida!;
+      expect(enviada.recorridoCompleto, isTrue);
+      expect(enviada.trazado.length, recorrido.length);
+      expect(enviada.trazado.first.latitud, recorrido.first.latitud);
+    });
+
+    testWidgets('una ruta corta sí se puede publicar entera (RNF-04)', (
+      tester,
+    ) async {
+      final repositorio = await _abrir(
+        tester,
+        resumen: resumen(puntos: recorridoCorto),
+      );
+
+      await tester.enterText(
+        find.byKey(PublicarRutaScreen.claveNombre),
+        'Vuelta corta',
+      );
+      await encenderRecorridoCompleto(tester);
+      await tester.tap(find.byKey(PublicarRutaScreen.clavePublicar));
+      await tester.pumpAndSettle();
+
+      expect(repositorio.recibida, isNotNull);
+      expect(repositorio.recibida!.recorridoCompleto, isTrue);
+    });
+
+    testWidgets('un recorrido más corto que los dos radios no se puede '
+        'publicar y dice por qué (RNF-04)', (tester) async {
+      final repositorio = await _abrir(
+        tester,
+        resumen: resumen(puntos: recorridoCorto),
+      );
+
+      await tester.enterText(
+        find.byKey(PublicarRutaScreen.claveNombre),
+        'Vuelta corta',
+      );
+      await tester.tap(find.byKey(PublicarRutaScreen.clavePublicar));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('no publicamos los primeros ni los últimos 200 m'),
+        findsWidgets,
+      );
+      expect(
+        find.textContaining('Publica un entrenamiento más largo'),
+        findsOneWidget,
+      );
+      expect(repositorio.creaciones, 0);
     });
 
     testWidgets('un entrenamiento sin distancia lo dice (SCRUM-240)', (
@@ -162,7 +293,11 @@ void main() {
       expect(enviada.entrenamientoId, 'e-123');
       expect(enviada.nombre, 'Vuelta al estadio');
       expect(enviada.descripcion, 'Plana y con sombra');
-      expect(enviada.trazado.length, recorrido.length);
+      // Menos puntos que el recorrido: los extremos privados no se mandan
+      // (RNF-04).
+      expect(enviada.trazado.length, lessThan(recorrido.length));
+      expect(enviada.trazado.first.latitud, isNot(recorrido.first.latitud));
+      expect(enviada.trazado.last.latitud, isNot(recorrido.last.latitud));
 
       // Vuelve al resumen y el aviso sigue a la vista.
       expect(find.text('Pantalla de resumen'), findsOneWidget);

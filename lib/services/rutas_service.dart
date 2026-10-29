@@ -260,7 +260,7 @@ class SupabaseRutasRepository implements RutasRepository {
   static const _columnas =
       'id,autor_id,autor_nombre,entrenamiento_id,nombre,descripcion,'
       'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion,'
-      'miniatura,dificultad';
+      'miniatura,dificultad,recorrido_completo';
 
   static const _columnasConTrazado = '$_columnas,trazado';
 

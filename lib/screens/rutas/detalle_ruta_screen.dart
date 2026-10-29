@@ -73,6 +73,7 @@ class DetalleRutaScreen extends ConsumerWidget {
   static const claveDificultad = Key('detalle-ruta-dificultad');
   static const claveReintentar = Key('detalle-ruta-reintentar');
   static const claveCargandoTrazado = Key('detalle-ruta-cargando-trazado');
+  static const claveNotaPrivacidad = Key('detalle-ruta-nota-privacidad');
 
   // Clasificación (SCRUM-363).
   static const claveEstado = Key('detalle-ruta-estado');
@@ -186,7 +187,18 @@ class _Contenido extends StatelessWidget {
         AppSpacing.xl,
       ),
       children: [
-        _Mapa(trazado: ruta.trazado, cargando: cargandoTrazado),
+        _Mapa(
+          trazado: ruta.trazado,
+          cargando: cargandoTrazado,
+          extremosRecortados: ruta.trazoRecortado,
+        ),
+        // Solo cuando consta que se recortó: una ruta publicada entera no
+        // debe decir que está recortada, y de las anteriores a RNF-04 no se
+        // sabe (RNF-04).
+        if (ruta.trazado.isNotEmpty && ruta.trazoRecortado) ...[
+          const SizedBox(height: AppSpacing.xs),
+          const _NotaPrivacidad(),
+        ],
         const SizedBox(height: AppSpacing.md),
         Text(
           ruta.nombre,
@@ -662,10 +674,49 @@ class _RevisarClasificacion extends ConsumerWidget {
 }
 
 /// El trazado sobre el mapa.
+/// Por qué el trazo no llega hasta donde empezó y terminó el recorrido
+/// (RNF-04).
+///
+/// Va debajo del mapa y no en el aviso de publicar, porque quien lee esto es
+/// la comunidad, no el autor: sin la nota, un trazo que arranca a media calle
+/// parece un fallo del GPS.
+class _NotaPrivacidad extends StatelessWidget {
+  const _NotaPrivacidad();
+
+  static const texto = 'Trazo recortado por privacidad';
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: DetalleRutaScreen.claveNotaPrivacidad,
+      children: [
+        const Icon(Icons.shield_outlined, size: 13, color: AppColors.ink3),
+        const SizedBox(width: 5),
+        // Con el texto del sistema en grande esta línea no cabe en una
+        // pantalla estrecha: cede el ancho en vez de desbordar.
+        const Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(fontSize: 11.5, color: AppColors.ink3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _Mapa extends StatelessWidget {
-  const _Mapa({required this.trazado, this.cargando = false});
+  const _Mapa({
+    required this.trazado,
+    this.cargando = false,
+    this.extremosRecortados = false,
+  });
 
   final List<PuntoRuta> trazado;
+
+  /// Si los extremos del trazo no son donde empezó y terminó el recorrido
+  /// (RNF-04). Solo cambia lo que lee un lector de pantalla.
+  final bool extremosRecortados;
 
   /// El trazado viene en camino. Sin esto, el de la ruta del listado —que no
   /// lo trae— se tomaría por uno que no se guardó (SCRUM-250).
@@ -712,7 +763,10 @@ class _Mapa extends StatelessWidget {
                   ),
                 ),
               )
-            : MapaTrayecto(puntos: _paraElMapa(trazado)),
+            : MapaTrayecto(
+                puntos: _paraElMapa(trazado),
+                extremosRecortados: extremosRecortados,
+              ),
       ),
     );
   }

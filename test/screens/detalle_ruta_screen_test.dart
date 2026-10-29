@@ -46,7 +46,11 @@ void main() {
       PuntoRuta(latitud: 6.2442, longitud: -75.5812),
       PuntoRuta(latitud: 6.2450, longitud: -75.5800),
     ],
+    // Por defecto, "no consta": es como quedan las rutas anteriores a
+    // RNF-04.
+    bool? recorridoCompleto,
   }) => Ruta(
+    recorridoCompleto: recorridoCompleto,
     id: 'ruta-1',
     autorId: 'usuario-9',
     autorNombre: 'Ana',
@@ -84,11 +88,42 @@ void main() {
       expect(find.byType(MapaTrayecto), findsOneWidget);
     });
 
+    testWidgets('si se recortó, lo dice (RNF-04)', (tester) async {
+      await _abrir(tester, rutas: [ruta(recorridoCompleto: false)]);
+
+      // Sin la nota, un trazo que arranca a media calle parece un fallo del
+      // GPS.
+      expect(find.byKey(DetalleRutaScreen.claveNotaPrivacidad), findsOneWidget);
+      expect(find.text('Trazo recortado por privacidad'), findsOneWidget);
+
+      // Y los extremos no se anuncian como la partida y la llegada reales.
+      final mapa = tester.widget<MapaTrayecto>(find.byType(MapaTrayecto));
+      expect(mapa.extremosRecortados, isTrue);
+    });
+
+    testWidgets('si se publicó entera, no lo dice (RNF-04)', (tester) async {
+      await _abrir(tester, rutas: [ruta(recorridoCompleto: true)]);
+
+      expect(find.byKey(DetalleRutaScreen.claveNotaPrivacidad), findsNothing);
+      final mapa = tester.widget<MapaTrayecto>(find.byType(MapaTrayecto));
+      expect(mapa.extremosRecortados, isFalse);
+    });
+
+    testWidgets('si no consta, tampoco lo dice (RNF-04)', (tester) async {
+      // Las rutas anteriores a RNF-04: no se sabe cómo se publicaron, así
+      // que no se afirma nada.
+      await _abrir(tester, rutas: [ruta()]);
+
+      expect(find.byKey(DetalleRutaScreen.claveNotaPrivacidad), findsNothing);
+    });
+
     testWidgets('una ruta sin trazado no revienta el mapa', (tester) async {
       await _abrir(tester, rutas: [ruta(trazado: const [])]);
 
       expect(find.byType(MapaTrayecto), findsNothing);
       expect(find.text('Esta ruta no guardó su trazado'), findsOneWidget);
+      // Sin trazo no hay nada que recortar, así que tampoco la nota.
+      expect(find.byKey(DetalleRutaScreen.claveNotaPrivacidad), findsNothing);
     });
   });
 

@@ -4,6 +4,7 @@ import 'dart:ui' show Offset;
 import 'package:flutter/foundation.dart';
 
 import 'punto_gps.dart';
+import 'simplificador_trazado.dart';
 import 'tramos.dart';
 
 /// Forma del recorrido para dibujarla en el resumen (SCRUM-119): la polilínea
@@ -13,6 +14,12 @@ import 'tramos.dart';
 /// y la otra conserva su proporción. Quien lo dibuja solo tiene que escalarlo
 /// a su espacio. Se dibuja una línea por tramo ([tramos]): lo recorrido en
 /// pausa no se une (BUG-005).
+///
+/// El recorrido llega como se grabó —un punto cada 5 m, miles en una hora— y
+/// se simplifica al construirlo (RNF-06): dibujar esa cantidad de segmentos
+/// congela la pantalla y no se ve distinto. **Solo se simplifica para
+/// dibujar**: `puntos_gps` no se toca, y el resumen sigue contando los km
+/// que midió el GPS.
 @immutable
 class Trazado {
   const Trazado._({
@@ -23,13 +30,25 @@ class Trazado {
   });
 
   /// [cortes]: índices de [puntosGps] donde empieza un tramo tras una pausa.
+  ///
+  /// [maximo] es el tope de puntos que se dibujan; cada tramo se simplifica
+  /// por separado y los cortes se recolocan sobre los que quedan.
   factory Trazado.desdePuntos(
     List<PuntoGps> puntosGps, {
     List<int> cortes = const [],
+    int maximo = maxPuntosTrazado,
   }) {
     if (puntosGps.isEmpty) {
       return const Trazado._(puntos: [], ancho: 0, alto: 0);
     }
+
+    final simplificado = simplificarRecorrido(
+      puntosGps,
+      maximo: maximo,
+      cortes: cortes,
+    );
+    puntosGps = simplificado.puntos;
+    cortes = simplificado.cortes;
 
     // A la escala de un entrenamiento, un grado de longitud mide cos(latitud)
     // veces lo que mide uno de latitud; sin esta corrección el recorrido se

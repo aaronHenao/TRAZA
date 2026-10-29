@@ -152,8 +152,12 @@ void main() {
 
       final enviada = repositorio.recibida!;
       expect(enviada.recorridoCompleto, isTrue);
-      expect(enviada.trazado.length, recorrido.length);
+      // Entero quiere decir que no se recorta por los extremos: empieza y
+      // acaba donde el recorrido. El número de puntos sí baja, porque el
+      // trazado se simplifica igual (RNF-06).
       expect(enviada.trazado.first.latitud, recorrido.first.latitud);
+      expect(enviada.trazado.last.latitud, recorrido.last.latitud);
+      expect(enviada.trazado.length, lessThanOrEqualTo(recorrido.length));
     });
 
     testWidgets('una ruta corta sí se puede publicar entera (RNF-04)', (

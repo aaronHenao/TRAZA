@@ -307,3 +307,43 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 - **Borrar el usuario sí sigue arrasando**: `auth.users` cascadea a 16 tablas y ese borrado no pasa por RLS. Solo se puede hacer desde el dashboard o con la clave secreta, así que no es una puerta abierta a los clientes, pero conviene saberlo antes de borrar una cuenta "para probar".
 - **`puntos_gps` no tiene policy de `update`, a propósito.** El reenvío de lotes manda `on conflict do nothing` (`ignoreDuplicates`, SCRUM-292) y no actualiza ninguna fila. Si alguien le quita ese `ignoreDuplicates` a `guardarLote`, el reenvío empezará a fallar con 42501 y habrá que añadir la policy. **Las pruebas no lo verían**: usan dobles, nunca la base.
 - **Nada de esto lo cubre `flutter test`.** La autorización vive en el SQL, y la suite no habla con Postgres. Lo único que lo comprueba es el guion en transacción con `rollback` que va al pie de `0056`, y hay que correrlo a mano.
+
+## SCRUM-119 / BUG-005: el resumen inmediato no dibuja el hueco de la pausa
+
+**Qué pasa:** al terminar una actividad con pausas, el resumen que se abre en
+ese momento dibuja el recorrido todo unido, con una línea recta donde estuvo la
+pausa. Si la misma actividad se abre después desde el historial, el hueco sí
+aparece. Es el mismo dato pintado de dos maneras.
+
+**Por qué:** el resumen se construye en dos sitios distintos y solo uno lleva
+las pausas.
+
+- **Inmediato** (`tracking_con_actividad_elegida.dart:89-96`): construye el
+  `ResumenEntrenamiento` con `puntos: recorrido.puntos` y **no pasa
+  `cortes`**, que por defecto es `const []`. Sin cortes, `dividirEnTramos`
+  devuelve un solo tramo y se dibuja una sola polilínea.
+- **Historial** (`entrenamiento_service.dart:225-229`): calcula
+  `cortes: cortesDesdeTramos(...)` leyendo la columna `puntos_gps.tramo`
+  (migración 0007), así que sí sabe dónde se reanudó.
+
+Lo que hace que esto sea un descuido y no una decisión: el `Recorrido` en
+memoria **ya tiene los cortes** (`lib/models/recorrido.dart:33` los declara y
+`recorrido_provider.dart:117` los va llenando al reanudar), y en ese sitio se lee
+el objeto entero (`ref.read(recorridoProvider)`). Están a mano y no se pasan.
+
+**El arreglo es una línea**, `cortes: recorrido.cortes` junto a
+`puntos: recorrido.puntos`. No se hace aquí porque es anterior a RNF-06 y queda
+fuera de su alcance.
+
+**Comprobado que es anterior**, ejecutando el mismo caso —100 puntos con una
+pausa en el medio— en `develop` (en un worktree, sin los cambios de RNF-06) y en
+la rama de RNF-06. El resultado es idéntico en las dos: el camino inmediato da
+`cortes=[]` y **1 tramo**, y el del historial, `cortes=[50]` y **2 tramos**. La
+simplificación de RNF-06 ni lo causa ni lo cambia: con la lista de cortes vacía
+simplifica el recorrido como una sola línea, que es lo que ya se dibujaba.
+
+**Al arreglarlo**, la prueba que lo reproduce es de widget sobre la pantalla de
+tracking: finalizar con una pausa registrada y comprobar que el
+`ResumenEntrenamiento` que viaja en el `extra` de la ruta lleva los cortes. Una
+prueba solo del modelo no lo habría cazado nunca, porque el defecto está en lo
+que la pantalla decide pasar, no en cómo se dibuja.

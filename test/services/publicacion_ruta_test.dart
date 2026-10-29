@@ -26,20 +26,19 @@ void main() {
     addTearDown(container.dispose);
   });
 
+  // ~1,1 km en línea recta, con un punto cada ~11 m. Tiene que ser bastante
+  // más largo que los dos radios de privacidad (RNF-04) o no quedaría trazo
+  // que publicar.
   final borrador = BorradorRuta(
     entrenamientoId: 'e-123',
     nombre: 'Vuelta al estadio',
     puntos: [
-      PuntoGps(
-        latitud: 6.2442,
-        longitud: -75.5812,
-        capturadoEn: DateTime(2026, 10, 17, 7),
-      ),
-      PuntoGps(
-        latitud: 6.2450,
-        longitud: -75.5800,
-        capturadoEn: DateTime(2026, 10, 17, 7, 1),
-      ),
+      for (var i = 0; i <= 100; i++)
+        PuntoGps(
+          latitud: 6.2442 + i / 10000,
+          longitud: -75.5812,
+          capturadoEn: DateTime(2026, 10, 17, 7).add(Duration(seconds: i * 5)),
+        ),
     ],
   );
 

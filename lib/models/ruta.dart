@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../services/calculadora_distancia.dart';
 import 'dificultad.dart';
 import 'punto_gps.dart';
 
@@ -102,6 +103,21 @@ class PuntoRuta {
 /// Con 500 puntos, una ruta de 10 km conserva uno cada 20 m.
 const maxPuntosTrazadoRuta = 500;
 
+/// Cuánto del principio y del final del recorrido no se publica, en metros
+/// (RNF-04).
+///
+/// Una ruta empieza y acaba donde vive quien la grabó. Publicar esos dos
+/// puntos exactos es publicar su portal, y con varias rutas suyas la
+/// coincidencia deja de ser una casualidad.
+///
+/// 200 m es el orden de magnitud que usan las zonas de privacidad de otras
+/// apps de running: oculta el edificio y normalmente la manzana, y a una
+/// ruta de 10 km le quita un 4 % del trazo. No se difumina el punto
+/// —desplazarlo al azar dentro de un radio sigue delatando el barrio, y el
+/// promedio de varias rutas converge al punto real—, se recorta: lo exacto
+/// no sale del teléfono.
+const radioPrivacidadMetros = 200.0;
+
 /// Una ruta de la comunidad, tal como vive en `rutas` (SCRUM-241).
 ///
 /// El nombre del autor, el estado, el punto de inicio, la distancia y las
@@ -121,6 +137,7 @@ class Ruta {
     this.miniatura = const [],
     this.distanciaKm,
     this.dificultad,
+    this.recorridoCompleto,
     this.motivoRechazo,
     this.fechaPublicacion,
   });
@@ -158,6 +175,19 @@ class Ruta {
   /// La que le asignó un Runner Experto (SCRUM-363), o null si todavía no
   /// tiene: "Sin clasificar".
   final Dificultad? dificultad;
+
+  /// Cómo se publicó su trazado (RNF-04): `true` si su autor compartió el
+  /// recorrido entero, `false` si se le quitaron los extremos, y **null si
+  /// no consta** —las rutas anteriores a RNF-04, y las que llegan de
+  /// `rutas_cercanas` o `buscar_rutas`, que no devuelven esta columna—.
+  ///
+  /// No afirmar nada es distinto de afirmar que se recortó: por eso null no
+  /// se trata como `false`.
+  final bool? recorridoCompleto;
+
+  /// Si hay que avisar de que el trazo no llega a los extremos reales.
+  /// Solo cuando consta que se recortó.
+  bool get trazoRecortado => recorridoCompleto == false;
 
   /// Por qué el administrador o el experto no la aprobó (SCRUM-321). Null
   /// mientras no la rechacen.
@@ -229,6 +259,10 @@ class Ruta {
       miniatura: trazadoDesdeJson(fila['miniatura']),
       distanciaKm: _comoDouble(fila['distancia_km']),
       dificultad: Dificultad.desdeDb(fila['dificultad']),
+      // Ausente en lo que devuelven `rutas_cercanas` y `buscar_rutas`, que
+      // listan con una lista fija de columnas: ahí queda en null, que es
+      // "no consta", y los listados no muestran la nota.
+      recorridoCompleto: fila['recorrido_completo'] as bool?,
       motivoRechazo: motivo as String?,
       fechaPublicacion: publicacion is String
           ? DateTime.parse(publicacion).toLocal()
@@ -287,6 +321,7 @@ class BorradorRuta {
     required this.puntos,
     this.nombre = '',
     this.descripcion = '',
+    this.recorridoCompleto = false,
   });
 
   final String entrenamientoId;
@@ -297,12 +332,28 @@ class BorradorRuta {
   final String nombre;
   final String descripcion;
 
-  BorradorRuta copyWith({String? nombre, String? descripcion}) => BorradorRuta(
+  /// Si su autor eligió publicar el recorrido entero, con sus extremos
+  /// reales (RNF-04).
+  ///
+  /// Falso por defecto: la privacidad no se pide, se da. Quien quiera
+  /// compartir de dónde sale tiene que decirlo a propósito.
+  final bool recorridoCompleto;
+
+  BorradorRuta copyWith({
+    String? nombre,
+    String? descripcion,
+    bool? recorridoCompleto,
+  }) => BorradorRuta(
     entrenamientoId: entrenamientoId,
     puntos: puntos,
     nombre: nombre ?? this.nombre,
     descripcion: descripcion ?? this.descripcion,
+    recorridoCompleto: recorridoCompleto ?? this.recorridoCompleto,
   );
+
+  /// Cuánto se le quita a cada extremo al publicar: nada si se publica el
+  /// recorrido completo.
+  double get radioPrivacidad => recorridoCompleto ? 0 : radioPrivacidadMetros;
 
   /// Qué le falta o qué está mal, por campo. Vacío si se puede publicar.
   ///
@@ -333,6 +384,22 @@ class BorradorRuta {
         puntos.every((punto) => punto.mismaCoordenadaQue(puntos.first))) {
       errores[CampoRuta.trazado] =
           'Este entrenamiento no tiene un recorrido que publicar.';
+    } else if (NuevaRuta.trazadoDesdePuntos(
+          puntos,
+          radioPrivacidad: radioPrivacidad,
+        ).length <
+        2) {
+      // Al quitar los extremos privados (RNF-04) no queda camino. Pasa con
+      // un recorrido más corto que los dos radios, o que da vueltas sin
+      // alejarse. Se dice qué hacer, no solo que no se puede: publicar el
+      // recorrido completo también lo resuelve, y el interruptor está ahí
+      // mismo.
+      final metros = radioPrivacidadMetros.round();
+      errores[CampoRuta.trazado] =
+          'Por privacidad no publicamos los primeros ni los últimos $metros m '
+          'del recorrido, y a este no le queda trazo después de quitarlos. '
+          'Publica un entrenamiento más largo o que se aleje más del punto de '
+          'partida.';
     }
 
     return errores;
@@ -352,7 +419,11 @@ class BorradorRuta {
       entrenamientoId: entrenamientoId,
       nombre: nombre.trim(),
       descripcion: descripcion.isEmpty ? null : descripcion,
-      trazado: NuevaRuta.trazadoDesdePuntos(puntos),
+      trazado: NuevaRuta.trazadoDesdePuntos(
+        puntos,
+        radioPrivacidad: radioPrivacidad,
+      ),
+      recorridoCompleto: recorridoCompleto,
     );
   }
 }
@@ -367,6 +438,7 @@ class NuevaRuta {
     required this.entrenamientoId,
     required this.nombre,
     required this.trazado,
+    required this.recorridoCompleto,
     this.descripcion,
   });
 
@@ -374,6 +446,10 @@ class NuevaRuta {
   final String nombre;
   final String? descripcion;
   final List<PuntoRuta> trazado;
+
+  /// Si [trazado] es el recorrido entero o se le quitaron los extremos
+  /// (RNF-04). Va a la base para que el detalle sepa si avisar.
+  final bool recorridoCompleto;
 
   /// Lo que manda el cliente. Autor, nombre del autor, estado, inicio,
   /// distancia y fechas los pone la base.
@@ -384,25 +460,34 @@ class NuevaRuta {
     // guardar una cadena vacía sería guardar ruido.
     'descripcion': ?descripcion,
     'trazado': [for (final punto in trazado) punto.aJson()],
+    'recorrido_completo': recorridoCompleto,
   };
 
-  /// Convierte el recorrido de un entrenamiento en el trazado de una ruta,
-  /// recortándolo a [maximo] puntos.
+  /// Convierte el recorrido de un entrenamiento en el trazado de una ruta:
+  /// primero quita los extremos privados, después lo reparte a [maximo]
+  /// puntos.
   ///
-  /// El recorte reparte los puntos a lo largo del recorrido y conserva
-  /// siempre el primero y el último: el primero es el que la base guarda
-  /// como inicio de la ruta, y el último es donde termina.
+  /// **Ese orden importa.** Si se repartiera antes de recortar, el recorte
+  /// trabajaría sobre puntos ya separados entre sí y dejaría fuera más o
+  /// menos recorrido según lo largo que fuera. Recortando primero, lo que
+  /// se publica siempre empieza y acaba a la misma distancia real de donde
+  /// empezó y acabó de verdad.
+  ///
+  /// Puede devolver menos de dos puntos: una ruta más corta que los dos
+  /// radios se queda sin nada que publicar. Quien la pida tiene que
+  /// comprobarlo ([BorradorRuta.errores] lo hace).
   ///
   /// Las pausas no se marcan: quien siga la ruta no necesita saber dónde
   /// paró a tomar agua el que la grabó.
   static List<PuntoRuta> trazadoDesdePuntos(
     List<PuntoGps> puntos, {
     int maximo = maxPuntosTrazadoRuta,
+    double radioPrivacidad = radioPrivacidadMetros,
   }) {
     assert(maximo >= 2, 'un trazado necesita al menos dos puntos');
 
     final todos = [
-      for (final punto in puntos)
+      for (final punto in sinExtremosPrivados(puntos, radio: radioPrivacidad))
         PuntoRuta(latitud: punto.latitud, longitud: punto.longitud),
     ];
     if (todos.length <= maximo) return todos;
@@ -411,6 +496,46 @@ class NuevaRuta {
     return [
       for (var i = 0; i < maximo - 1; i++) todos[(i * paso).round()],
       todos.last,
+    ];
+  }
+
+  /// [puntos] sin los que estén a menos de [radio] metros de donde empezó o
+  /// terminó el recorrido (RNF-04).
+  ///
+  /// Se mide contra el primer y el último punto **originales**, no contra el
+  /// anterior: lo que se quita es un círculo alrededor de cada extremo, no
+  /// una cuenta de metros recorridos. Así, dar vueltas cerca de casa al
+  /// empezar no deja un trozo del trazo pegado a ella.
+  ///
+  /// Devuelve una lista vacía si no queda nada fuera de los dos círculos.
+  static List<PuntoGps> sinExtremosPrivados(
+    List<PuntoGps> puntos, {
+    double radio = radioPrivacidadMetros,
+  }) {
+    if (puntos.length < 2 || radio <= 0) return [...puntos];
+
+    final inicio = puntos.first;
+    final fin = puntos.last;
+
+    bool esPublico(PuntoGps punto) =>
+        CalculadoraDistancia.haversineMetros(
+              inicio.latitud,
+              inicio.longitud,
+              punto.latitud,
+              punto.longitud,
+            ) >=
+            radio &&
+        CalculadoraDistancia.haversineMetros(
+              fin.latitud,
+              fin.longitud,
+              punto.latitud,
+              punto.longitud,
+            ) >=
+            radio;
+
+    return [
+      for (final punto in puntos)
+        if (esPublico(punto)) punto,
     ];
   }
 

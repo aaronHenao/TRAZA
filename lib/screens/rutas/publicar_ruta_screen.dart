@@ -37,6 +37,8 @@ class PublicarRutaScreen extends ConsumerStatefulWidget {
   static const claveDescripcion = Key('ruta-descripcion');
   static const clavePublicar = Key('ruta-publicar');
   static const claveYaPublicada = Key('ruta-ya-publicada');
+  static const claveAvisoPrivacidad = Key('ruta-aviso-privacidad');
+  static const claveRecorridoCompleto = Key('ruta-recorrido-completo');
   static const claveVerRuta = Key('ruta-ver-mi-ruta');
 
   static const revisaLosCampos = 'Revisa los campos marcados';
@@ -55,6 +57,10 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
   Map<CampoRuta, String> _errores = const {};
 
   bool _publicando = false;
+
+  /// Si el autor eligió publicar el recorrido entero (RNF-04). Apagado por
+  /// defecto: la privacidad no se pide, se da.
+  bool _recorridoCompleto = false;
 
   /// Si este entrenamiento ya tiene una ruta en pie. Se pregunta al abrir:
   /// mejor decírselo antes de que escriba que después de que toque publicar.
@@ -81,6 +87,16 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
     _nombre.dispose();
     _descripcion.dispose();
     super.dispose();
+  }
+
+  /// Cambia el interruptor de privacidad (RNF-04) y, de paso, quita el error
+  /// del trazado: publicar el recorrido completo es una de las dos formas de
+  /// resolver "no queda trazo después de recortar".
+  void _alCambiarPrivacidad(bool completo) {
+    setState(() {
+      _recorridoCompleto = completo;
+      _errores = {..._errores}..remove(CampoRuta.trazado);
+    });
   }
 
   /// Quita el error de un campo en cuanto se toca, y repinta el contador.
@@ -111,6 +127,7 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
               puntos: resumen.puntos,
               nombre: _nombre.text,
               descripcion: _descripcion.text,
+              recorridoCompleto: _recorridoCompleto,
             ),
           );
       if (!mounted) return;
@@ -178,7 +195,9 @@ class _PublicarRutaScreenState extends ConsumerState<PublicarRutaScreen> {
                             descripcion: _descripcion,
                             errores: _errores,
                             publicando: _publicando,
+                            recorridoCompleto: _recorridoCompleto,
                             onEditar: _alEditar,
+                            onRecorridoCompleto: _alCambiarPrivacidad,
                             onPublicar: () => _publicar(resumen),
                           );
                         },
@@ -320,7 +339,9 @@ class _Formulario extends StatelessWidget {
     required this.descripcion,
     required this.errores,
     required this.publicando,
+    required this.recorridoCompleto,
     required this.onEditar,
+    required this.onRecorridoCompleto,
     required this.onPublicar,
   });
 
@@ -329,7 +350,12 @@ class _Formulario extends StatelessWidget {
   final TextEditingController descripcion;
   final Map<CampoRuta, String> errores;
   final bool publicando;
+
+  /// Si el autor eligió publicar el recorrido entero (RNF-04).
+  final bool recorridoCompleto;
+
   final void Function(CampoRuta campo) onEditar;
+  final void Function(bool completo) onRecorridoCompleto;
   final VoidCallback onPublicar;
 
   @override
@@ -368,6 +394,11 @@ class _Formulario extends StatelessWidget {
                 maxCaracteres: maxCaracteresDescripcionRuta,
                 lineas: 6,
                 onCambio: () => onEditar(CampoRuta.descripcion),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _AvisoPrivacidad(
+                recorridoCompleto: recorridoCompleto,
+                onCambiar: onRecorridoCompleto,
               ),
               const SizedBox(height: AppSpacing.md),
               const _AvisoRevision(),
@@ -449,6 +480,97 @@ class _Recorrido extends StatelessWidget {
 }
 
 /// Que publicar no publica: manda a revisión (criterio 1).
+/// Qué se publica del recorrido, y la opción de publicarlo entero (RNF-04).
+///
+/// Se dice antes de publicar y no después: el autor tiene que saber que su
+/// ruta va a empezar más adelante de donde él empezó, y que por eso el trazo
+/// mide menos que la distancia que la ruta anuncia —esa sigue siendo la del
+/// entrenamiento, que es lo que corrió de verdad.
+///
+/// El interruptor viene apagado y, al encenderlo, el aviso deja de explicar
+/// y pasa a advertir: lo que se gana en exactitud se pierde en privacidad, y
+/// eso hay que decirlo donde se decide.
+class _AvisoPrivacidad extends StatelessWidget {
+  const _AvisoPrivacidad({
+    required this.recorridoCompleto,
+    required this.onCambiar,
+  });
+
+  final bool recorridoCompleto;
+  final void Function(bool completo) onCambiar;
+
+  static const etiquetaInterruptor =
+      'Mostrar el recorrido completo (incluye mi inicio y fin)';
+
+  static String get textoRecortado {
+    final metros = radioPrivacidadMetros.round();
+    return 'Por tu privacidad no publicamos los primeros ni los últimos '
+        '$metros m del recorrido, para que no se sepa de dónde saliste ni '
+        'dónde terminaste. El trazo que verá la comunidad empieza y acaba más '
+        'adentro; la distancia que se muestra sigue siendo la que corriste.';
+  }
+
+  static const textoCompleto =
+      'Vas a publicar el recorrido entero: cualquiera que vea tu ruta sabrá '
+      'dónde empieza y dónde termina, que puede ser tu casa o tu trabajo. '
+      'Si no quieres eso, deja el interruptor apagado.';
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = recorridoCompleto ? textoCompleto : textoRecortado;
+
+    return Container(
+      key: PublicarRutaScreen.claveAvisoPrivacidad,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: recorridoCompleto ? AppColors.dangerTint : AppColors.bgAlt,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                recorridoCompleto
+                    ? Icons.warning_amber_rounded
+                    : Icons.shield_outlined,
+                size: 17,
+                color: recorridoCompleto ? AppColors.danger : AppColors.ink3,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  texto,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: recorridoCompleto
+                        ? AppColors.danger
+                        : AppColors.ink2,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SwitchListTile.adaptive(
+            key: PublicarRutaScreen.claveRecorridoCompleto,
+            value: recorridoCompleto,
+            onChanged: onCambiar,
+            title: const Text(
+              etiquetaInterruptor,
+              style: TextStyle(fontSize: 12.5, color: AppColors.ink),
+            ),
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            activeThumbColor: AppColors.danger,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AvisoRevision extends StatelessWidget {
   const _AvisoRevision();
 

@@ -33,20 +33,18 @@ void main() {
     'fecha_publicacion': null,
   };
 
+  // ~1,1 km: lo bastante largo para que quede trazo tras quitar los extremos
+  // privados (RNF-04).
   final nueva = BorradorRuta(
     entrenamientoId: 'entrenamiento-1',
     nombre: 'Vuelta al estadio',
     puntos: [
-      PuntoGps(
-        latitud: 6.2442,
-        longitud: -75.5812,
-        capturadoEn: DateTime(2026, 10, 17, 7),
-      ),
-      PuntoGps(
-        latitud: 6.2450,
-        longitud: -75.5800,
-        capturadoEn: DateTime(2026, 10, 17, 7, 1),
-      ),
+      for (var i = 0; i <= 100; i++)
+        PuntoGps(
+          latitud: 6.2442 + i / 10000,
+          longitud: -75.5812,
+          capturadoEn: DateTime(2026, 10, 17, 7).add(Duration(seconds: i * 5)),
+        ),
     ],
   ).aNuevaRuta()!;
 
@@ -68,15 +66,20 @@ void main() {
         final peticion = supabase.peticiones.single;
         expect(peticion.method, 'POST');
         expect(peticion.url.path, '/rest/v1/rutas');
-        expect(jsonDecode(peticion.body), {
-          'entrenamiento_id': 'entrenamiento-1',
-          'nombre': 'Vuelta al estadio',
-          'autor_id': 'usuario-1',
-          'trazado': [
-            {'lat': 6.2442, 'lng': -75.5812},
-            {'lat': 6.2450, 'lng': -75.5800},
-          ],
-        });
+        final enviado = jsonDecode(peticion.body) as Map<String, dynamic>;
+        expect(enviado['entrenamiento_id'], 'entrenamiento-1');
+        expect(enviado['nombre'], 'Vuelta al estadio');
+        expect(enviado['autor_id'], 'usuario-1');
+        // Nada de estado, inicio, distancia ni fechas: los pone la base.
+        expect(enviado.keys, hasLength(5));
+        // RNF-04: cómo se publicó lo decide el autor, no la base.
+        expect(enviado['recorrido_completo'], false);
+        // El trazado va sin los extremos privados (RNF-04), así que lleva
+        // menos puntos que el recorrido y no empieza donde él.
+        final trazado = enviado['trazado'] as List;
+        expect(trazado, isNotEmpty);
+        expect(trazado.length, lessThan(nueva.trazado.length + 1));
+        expect((trazado.first as Map)['lat'], isNot(6.2442));
       },
     );
 
@@ -222,6 +225,12 @@ void main() {
       final peticion = supabase.peticiones.single;
       expect(peticion.url.queryParameters['id'], 'eq.ruta-1');
       expect(peticion.url.queryParameters['select'], contains('trazado'));
+      // RNF-04: sin esta columna el detalle no sabría si avisar de que el
+      // trazo está recortado, y la nota saldría siempre o nunca.
+      expect(
+        peticion.url.queryParameters['select'],
+        contains('recorrido_completo'),
+      );
     });
   });
 

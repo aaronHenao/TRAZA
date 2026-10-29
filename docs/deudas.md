@@ -275,3 +275,20 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 - **Restituir.** No hay forma de deshacer un retiro desde la app; se hace por SQL, con las dos sentencias de `traza.moderando` en la misma ejecución (está al pie de 0052). La bitácora tampoco registraría la restitución: hoy solo asienta retiros, y una acción nueva pediría su columna `accion`.
 - **Comentarios.** La HU habla de publicaciones, así que un comentario ofensivo no se puede retirar por separado (los de una publicación retirada desaparecen con ella, por la policy de 0035). `comentarios_foro` ya admite `estado = 'eliminada'` desde 0035, así que sería el mismo patrón: una función hermana y su asiento.
 
+## RNF-04: privacidad de los extremos de una ruta
+
+**Qué quedó hecho:**
+
+- Al publicar, el trazado sale sin los puntos que caen a menos de `radioPrivacidadMetros` (200 m) de donde empezó y terminó el recorrido (`lib/models/ruta.dart`, `NuevaRuta.sinExtremosPrivados`). Lo exacto no sale del teléfono: el recorte es del cliente, no de la base.
+- `rutas.inicio_latitud/inicio_longitud` las deriva un trigger del primer punto del trazado (`0029:161-162`), así que al recortar el trazado la columna se corrige sola y las dos no pueden contradecirse.
+- La pantalla de publicar lo advierte antes de enviar, con un interruptor **apagado por defecto** para compartir el recorrido entero. Encendido, el aviso deja de explicar y pasa a advertir que cualquiera sabrá dónde empieza y termina.
+- `0054_recorrido_completo_de_la_ruta.sql` guarda cómo se publicó cada ruta, para que el detalle diga "Trazo recortado por privacidad" **solo cuando es verdad**. La columna es **anulable a propósito**: `null` es "no consta", y es como quedan las rutas anteriores. Con `not null default false` habrían pasado a afirmar que están recortadas, que es mentira. La migración recrea además `proteger_ruta` (0046) para que la columna no se pueda cambiar después.
+- Un recorrido más corto que los dos radios no se puede publicar recortado, y el mensaje dice qué hacer; entero sí se puede.
+
+**Qué falta:**
+
+- **Las rutas publicadas antes de esto conservan sus extremos exactos**, y quedan con `recorrido_completo` en nulo: ni se recortan ni dicen nada. Se acordó no tocarlas: arreglarlas pediría una migración que reescribe el trazado de rutas de otros usuarios y que, al cambiar `inicio_latitud/longitud`, movería su posición en la búsqueda por cercanía. Si alguna vez se decide hacerlo, el recorte tendría que repetirse en SQL sobre `trazado`, y conviene avisar a sus autores.
+- **Los listados no saben cómo se publicó cada ruta.** `rutas_cercanas` y `buscar_rutas` devuelven una lista fija de columnas (`returns table (...)`, 0045) que no incluye `recorrido_completo`, así que ahí llega en nulo. No importa porque los listados no muestran la nota; si algún día hiciera falta, habría que borrar y recrear esas funciones con sus permisos.
+- **La distancia no coincide con el trazo.** `distancia_km` se copia del entrenamiento (`0030:76-79`), así que una ruta anuncia los km que su autor corrió de verdad, pero el trazo que se dibuja mide ~400 m menos. Se eligió así a propósito —la distancia es el dato que le importa a quien busca una ruta— y el aviso de publicar lo explica. Si alguna vez molesta, la salida es calcular la distancia del trazado recortado, no recortar menos.
+- **Nada lo impide del lado de la base.** Un cliente modificado podría enviar el trazado entero: la tabla no sabe cuál era el recorrido original y no hay forma de que lo compruebe. Es una decisión consciente, no un olvido.
+

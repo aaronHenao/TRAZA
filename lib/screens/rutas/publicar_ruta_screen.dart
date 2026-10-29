@@ -396,9 +396,21 @@ class _Formulario extends StatelessWidget {
                 onCambio: () => onEditar(CampoRuta.descripcion),
               ),
               const SizedBox(height: AppSpacing.md),
-              _AvisoPrivacidad(
-                recorridoCompleto: recorridoCompleto,
-                onCambiar: onRecorridoCompleto,
+              _AvisoPrivacidad(recorridoCompleto: recorridoCompleto),
+              // Fuera de la caja del aviso, no dentro: un ListTile sobre un
+              // fondo decorado esconde su propio reflejo al tocarlo, y
+              // Flutter lo rechaza. Va como los demás campos del formulario.
+              SwitchListTile(
+                key: PublicarRutaScreen.claveRecorridoCompleto,
+                value: recorridoCompleto,
+                onChanged: onRecorridoCompleto,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                activeThumbColor: AppColors.danger,
+                title: const Text(
+                  _AvisoPrivacidad.etiquetaInterruptor,
+                  style: TextStyle(fontSize: 12.5, color: AppColors.ink),
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               const _AvisoRevision(),
@@ -491,13 +503,9 @@ class _Recorrido extends StatelessWidget {
 /// y pasa a advertir: lo que se gana en exactitud se pierde en privacidad, y
 /// eso hay que decirlo donde se decide.
 class _AvisoPrivacidad extends StatelessWidget {
-  const _AvisoPrivacidad({
-    required this.recorridoCompleto,
-    required this.onCambiar,
-  });
+  const _AvisoPrivacidad({required this.recorridoCompleto});
 
   final bool recorridoCompleto;
-  final void Function(bool completo) onCambiar;
 
   static const etiquetaInterruptor =
       'Mostrar el recorrido completo (incluye mi inicio y fin)';
@@ -552,18 +560,6 @@ class _AvisoPrivacidad extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          SwitchListTile.adaptive(
-            key: PublicarRutaScreen.claveRecorridoCompleto,
-            value: recorridoCompleto,
-            onChanged: onCambiar,
-            title: const Text(
-              etiquetaInterruptor,
-              style: TextStyle(fontSize: 12.5, color: AppColors.ink),
-            ),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            activeThumbColor: AppColors.danger,
           ),
         ],
       ),

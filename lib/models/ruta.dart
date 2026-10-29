@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/calculadora_distancia.dart';
+import 'simplificador_trazado.dart';
 import 'dificultad.dart';
 import 'punto_gps.dart';
 
@@ -91,17 +92,6 @@ class PuntoRuta {
   @override
   String toString() => 'PuntoRuta($latitud, $longitud)';
 }
-
-/// Cuántos puntos conserva el trazado de una ruta como máximo.
-///
-/// El recorrido se graba con un punto cada 5 m
-/// (`ConfiguracionRastreo.distanciaMinimaRegistroMetros`), así que una hora
-/// de carrera deja miles. Guardarlos todos no mejora el camino que se sigue
-/// y sí pesa en cada consulta y en cada dibujado, y el trazado se escribe
-/// una sola vez: lo que entre mal se queda mal.
-///
-/// Con 500 puntos, una ruta de 10 km conserva uno cada 20 m.
-const maxPuntosTrazadoRuta = 500;
 
 /// Cuánto del principio y del final del recorrido no se publica, en metros
 /// (RNF-04).
@@ -464,14 +454,18 @@ class NuevaRuta {
   };
 
   /// Convierte el recorrido de un entrenamiento en el trazado de una ruta:
-  /// primero quita los extremos privados, después lo reparte a [maximo]
-  /// puntos.
+  /// primero quita los extremos privados, después lo simplifica conservando
+  /// su forma y sin pasar de [maximo] puntos (RNF-06).
   ///
-  /// **Ese orden importa.** Si se repartiera antes de recortar, el recorte
+  /// **Ese orden importa.** Si se simplificara antes de recortar, el recorte
   /// trabajaría sobre puntos ya separados entre sí y dejaría fuera más o
   /// menos recorrido según lo largo que fuera. Recortando primero, lo que
   /// se publica siempre empieza y acaba a la misma distancia real de donde
   /// empezó y acabó de verdad.
+  ///
+  /// La distancia de la ruta no sale de aquí: la copia un trigger de
+  /// `entrenamientos.distancia_total_m` (`0030`, `0045`), medida al correr
+  /// sobre la traza completa. Simplificar no la cambia (SCRUM-305).
   ///
   /// Puede devolver menos de dos puntos: una ruta más corta que los dos
   /// radios se queda sin nada que publicar. Quien la pida tiene que
@@ -481,21 +475,16 @@ class NuevaRuta {
   /// paró a tomar agua el que la grabó.
   static List<PuntoRuta> trazadoDesdePuntos(
     List<PuntoGps> puntos, {
-    int maximo = maxPuntosTrazadoRuta,
+    int maximo = maxPuntosTrazado,
     double radioPrivacidad = radioPrivacidadMetros,
   }) {
-    assert(maximo >= 2, 'un trazado necesita al menos dos puntos');
-
-    final todos = [
-      for (final punto in sinExtremosPrivados(puntos, radio: radioPrivacidad))
-        PuntoRuta(latitud: punto.latitud, longitud: punto.longitud),
-    ];
-    if (todos.length <= maximo) return todos;
-
-    final paso = (todos.length - 1) / (maximo - 1);
+    final publicos = sinExtremosPrivados(puntos, radio: radioPrivacidad);
+    // Sin cortes: las pausas no se marcan en una ruta publicada, así que
+    // el trazado es una sola línea.
+    final simplificados = simplificarRecorrido(publicos, maximo: maximo).puntos;
     return [
-      for (var i = 0; i < maximo - 1; i++) todos[(i * paso).round()],
-      todos.last,
+      for (final punto in simplificados)
+        PuntoRuta(latitud: punto.latitud, longitud: punto.longitud),
     ];
   }
 

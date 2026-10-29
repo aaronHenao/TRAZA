@@ -83,7 +83,10 @@ void main() {
     ]);
 
     expect(trazado.estaVacio, isFalse);
-    expect(trazado.puntos, List.filled(3, Offset.zero));
+    // Quedan la partida y la llegada: los de en medio no aportan forma y
+    // la simplificación los quita (RNF-06). Las tres están en el mismo
+    // sitio, así que el dibujo es el mismo.
+    expect(trazado.puntos, List.filled(2, Offset.zero));
     expect(trazado.ancho, 0);
     expect(trazado.alto, 0);
   });

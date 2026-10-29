@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/ruta.dart';
+import 'package:traza/models/simplificador_trazado.dart';
 import 'package:traza/services/calculadora_distancia.dart';
 
 /// Validación de una ruta antes de enviarla (criterio 3 de SCRUM-241),
@@ -24,6 +27,22 @@ void main() {
   /// dos radios de privacidad (RNF-04), o no quedaría trazo que publicar.
   final recorrido = [
     for (var i = 0; i <= 100; i++) punto(6.2442 + i * paso, -75.5812),
+  ];
+
+  /// Un recorrido curvo de ~1,1 km: una senoide de 40 m de amplitud sobre
+  /// un eje de latitud. Hace falta una curva, y no una recta, porque
+  /// Douglas-Peucker conserva los puntos por su geometría: en una recta no
+  /// hay ninguno que aporte forma y la colapsa a sus dos extremos (RNF-06).
+  List<PuntoGps> recorridoCurvo({int puntos = 100, double amplitud = 40}) => [
+    for (var i = 0; i <= puntos; i++)
+      punto(
+        6.2442 + i * paso,
+        -75.5812 +
+            amplitud /
+                111320 *
+                math.sin(i * 2 * math.pi / 12) /
+                math.cos(6.2442 * math.pi / 180),
+      ),
   ];
 
   BorradorRuta borrador({
@@ -164,42 +183,59 @@ void main() {
       expect(nueva.aSupabase().containsKey('descripcion'), isFalse);
     });
 
-    test('un recorrido que cabe en el tope se guarda sin repartir', () {
-      // Lo bastante largo para que, tras quitar los extremos privados,
-      // queden menos puntos que el tope.
-      final nueva = borrador(
-        puntos: [for (var i = 0; i < 400; i++) punto(6.24 + i * paso, -75.58)],
-      ).aNuevaRuta()!;
+    test('un recorrido curvo se guarda con muchos menos puntos', () {
+      final nueva = borrador(puntos: recorridoCurvo(puntos: 400)).aNuevaRuta()!;
 
-      // 400 puntos menos los ~18 de cada extremo que caen dentro de 200 m.
-      expect(nueva.trazado.length, lessThan(400));
-      expect(nueva.trazado.length, greaterThan(300));
+      // Entran 400 y sale una fracción: quedan los que dibujan las curvas.
+      expect(nueva.trazado.length, lessThan(200));
+      expect(nueva.trazado.length, greaterThan(2));
     });
 
-    test('un recorrido largo se recorta al tope de puntos', () {
-      // Una hora de carrera con un punto cada 5 m deja miles; guardarlos
-      // todos no mejora el camino que se sigue y pesa en cada consulta.
+    test('un recorrido recto se queda en sus dos extremos', () {
+      // El caso que separa Douglas-Peucker del reparto uniforme: aquí no
+      // hay ningún punto que aporte forma, así que no se conserva ninguno.
       final puntos = [
         for (var i = 0; i < 3000; i++) punto(6.24 + i * paso, -75.58),
       ];
 
       final nueva = borrador(puntos: puntos).aNuevaRuta()!;
 
-      expect(nueva.trazado.length, maxPuntosTrazadoRuta);
+      expect(nueva.trazado.length, 2);
     });
 
-    test('el recorte reparte los puntos a lo largo del recorrido', () {
-      // Separados un grado (~111 km): el radio de privacidad solo alcanza a
-      // los dos extremos, así que esta prueba mide el reparto del resto.
-      final puntos = [for (var i = 0; i < 100; i++) punto(i.toDouble(), 0)];
+    test('una ruta de 10 km cabe de sobra en el tope (RNF-06)', () {
+      // 2000 puntos es lo que deja un GPS que graba cada 5 m en 10 km.
+      final nueva = borrador(
+        puntos: recorridoCurvo(puntos: 2000, amplitud: 25),
+      ).aNuevaRuta()!;
 
-      final trazado = NuevaRuta.trazadoDesdePuntos(puntos, maximo: 10);
+      expect(nueva.trazado.length, lessThanOrEqualTo(maxPuntosTrazado));
+      // El criterio pide unos pocos cientos conservando la forma, no dos.
+      expect(nueva.trazado.length, greaterThan(50));
+    });
 
-      expect(trazado.length, 10);
-      expect(trazado.first.latitud, 1);
-      expect(trazado.last.latitud, 98);
-      // Repartidos, no los diez primeros.
-      expect(trazado[1].latitud, greaterThan(5));
+    test('nunca pasa del tope, por revirado que sea el recorrido', () {
+      // Un zigzag que cambia de dirección en cada punto: con la tolerancia
+      // por defecto habría que conservarlos todos, así que es lo que
+      // obliga a subirla hasta que quepa.
+      final puntos = [
+        for (var i = 0; i < 4000; i++)
+          punto(6.24 + i * paso, -75.58 + (i.isEven ? 0 : paso * 3)),
+      ];
+
+      final trazado = NuevaRuta.trazadoDesdePuntos(puntos);
+
+      expect(trazado.length, lessThanOrEqualTo(maxPuntosTrazado));
+    });
+
+    test('el tope se puede bajar y se respeta', () {
+      final trazado = NuevaRuta.trazadoDesdePuntos(
+        recorridoCurvo(puntos: 600),
+        maximo: 10,
+      );
+
+      expect(trazado.length, lessThanOrEqualTo(10));
+      expect(trazado.length, greaterThanOrEqualTo(2));
     });
   });
 
@@ -241,15 +277,16 @@ void main() {
     });
 
     test('el medio del recorrido se conserva entero', () {
-      final puntos = [
-        for (var i = 0; i <= 200; i++) punto(6.2442 + i * paso, -75.5812),
-      ];
+      // Curvo a propósito: en una recta no se podría distinguir "se
+      // conservó el medio" de "se colapsó todo" (RNF-06). La senoide da
+      // una vuelta cada 12 puntos, así que un trazo de 200 puntos con los
+      // extremos recortados tiene que dejar bastantes.
+      final trazado = NuevaRuta.trazadoDesdePuntos(recorridoCurvo(puntos: 200));
 
-      final trazado = NuevaRuta.trazadoDesdePuntos(puntos);
-
-      // 200 pasos de 11 m son ~2,2 km; quitando 200 m por lado queda la
-      // mayor parte.
-      expect(trazado.length, greaterThan(140));
+      expect(trazado.length, greaterThan(20));
+      // Y lo que queda está dentro del recorrido, sin los extremos.
+      expect(trazado.first.latitud, greaterThan(6.2442));
+      expect(trazado.last.latitud, lessThan(6.2442 + 200 * paso));
     });
 
     test('dar vueltas cerca del inicio no deja un trozo pegado a él', () {
@@ -296,7 +333,10 @@ void main() {
     test('con el recorrido completo no se recorta nada', () {
       final nueva = borrador(recorridoCompleto: true).aNuevaRuta()!;
 
-      expect(nueva.trazado.length, recorrido.length);
+      // No recortar es empezar y acabar donde el recorrido. Los puntos del
+      // medio bajan igual, porque el trazado se simplifica siempre
+      // (RNF-06), y este recorrido es recto: se queda en sus extremos.
+      expect(nueva.trazado.length, lessThanOrEqualTo(recorrido.length));
       expect(nueva.trazado.first.latitud, recorrido.first.latitud);
       expect(nueva.trazado.last.latitud, recorrido.last.latitud);
       expect(nueva.recorridoCompleto, isTrue);
@@ -354,8 +394,11 @@ void main() {
 
       final trazado = NuevaRuta.trazadoDesdePuntos(puntos, radioPrivacidad: 0);
 
-      expect(trazado.length, puntos.length);
+      // Con el radio en cero el recorte no quita nada, así que el trazado
+      // llega hasta los dos extremos del recorrido. La simplificación sí
+      // quita los de en medio (RNF-06): estos diez están en línea recta.
       expect(trazado.first.latitud, puntos.first.latitud);
+      expect(trazado.last.latitud, puntos.last.latitud);
     });
   });
 

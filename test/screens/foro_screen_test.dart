@@ -642,22 +642,91 @@ void main() {
       await abrirForo(tester, publicaciones: [tenis]);
 
       repositorio.moderacionesGuardadas.add(moderacionDePrueba());
+      const rechazo = CambioForo(
+        tipo: TipoCambioForo.editado,
+        tabla: TablaForo.moderaciones,
+        id: 'mod-1',
+        autorId: 'usuario-1',
+        estado: 'rechazada',
+        motivo: 'Spam',
+        tipoModeracion: TipoModeracion.publicacion,
+        accionModeracion: AccionModeracion.creacion,
+      );
+      cambios.emitirForo(rechazo);
+      await tester.pump();
+      await tester.pump(esperaCambiosForo);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tu publicación no se aprobó: Spam'), findsOneWidget);
+      expect(contador(1), findsOneWidget);
+    });
+
+    testWidgets('al abrir "Mis rechazados" no vuelve a avisar los rechazos '
+        'que ya conocía', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      // Marcarlos vistos vuelve a guardar la fila, que llega otra vez.
+      const yaVisto = CambioForo(
+        tipo: TipoCambioForo.editado,
+        tabla: TablaForo.moderaciones,
+        id: 'mod-1',
+        autorId: 'usuario-1',
+        estado: 'rechazada',
+        motivo: 'Spam',
+        vistaPorAutor: true,
+      );
+      cambios.emitirForo(yaVisto);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text(ForoScreen.textoRechazo(yaVisto)), findsNothing);
+    });
+
+    testWidgets('un motivo largo no se mete en el aviso: lo manda a '
+        '"Mis rechazados"', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      cambios.emitirForo(
+        CambioForo(
+          tipo: TipoCambioForo.editado,
+          tabla: TablaForo.moderaciones,
+          autorId: 'usuario-1',
+          estado: 'rechazada',
+          motivo: 'No se permiten ventas en el foro. ' * 3,
+          tipoModeracion: TipoModeracion.comentario,
+          accionModeracion: AccionModeracion.creacion,
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Tu comentario no se aprobó. Mira el motivo en "Mis rechazados".',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('si la moderación aprueba algo propio, avisa que ya lo ven '
+        'los demás', (tester) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
       cambios.emitirForo(
         const CambioForo(
           tipo: TipoCambioForo.editado,
           tabla: TablaForo.moderaciones,
           id: 'mod-1',
           autorId: 'usuario-1',
-          estado: 'rechazada',
-          motivo: 'Spam',
+          estado: 'aprobada',
+          tipoModeracion: TipoModeracion.publicacion,
+          accionModeracion: AccionModeracion.creacion,
         ),
       );
       await tester.pump();
-      await tester.pump(esperaCambiosForo);
       await tester.pumpAndSettle();
 
-      expect(find.text(ForoScreen.textoRechazo('Spam')), findsOneWidget);
-      expect(contador(1), findsOneWidget);
+      expect(find.text('Tu publicación ya está en el foro'), findsOneWidget);
     });
 
     testWidgets('lo que la moderación le rechaza a otro no se le avisa', (
@@ -665,19 +734,38 @@ void main() {
     ) async {
       await abrirForo(tester, publicaciones: [tenis]);
 
-      cambios.emitirForo(
-        const CambioForo(
-          tipo: TipoCambioForo.editado,
-          tabla: TablaForo.moderaciones,
-          autorId: 'otro-usuario',
-          estado: 'rechazada',
-          motivo: 'Spam',
-        ),
+      const deOtro = CambioForo(
+        tipo: TipoCambioForo.editado,
+        tabla: TablaForo.moderaciones,
+        autorId: 'otro-usuario',
+        estado: 'rechazada',
+        motivo: 'Spam',
       );
+      cambios.emitirForo(deOtro);
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text(ForoScreen.textoRechazo('Spam')), findsNothing);
+      expect(find.text(ForoScreen.textoRechazo(deOtro)), findsNothing);
+    });
+
+    testWidgets('lo que la moderación le aprueba a otro no se le avisa', (
+      tester,
+    ) async {
+      await abrirForo(tester, publicaciones: [tenis]);
+
+      const deOtro = CambioForo(
+        tipo: TipoCambioForo.editado,
+        tabla: TablaForo.moderaciones,
+        autorId: 'otro-usuario',
+        estado: 'aprobada',
+        tipoModeracion: TipoModeracion.comentario,
+        accionModeracion: AccionModeracion.creacion,
+      );
+      cambios.emitirForo(deOtro);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text(ForoScreen.textoAprobacion(deOtro)), findsNothing);
     });
   });
 }

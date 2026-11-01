@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/moderacion_foro.dart';
 import '../../models/publicacion_foro.dart';
+import '../../services/cambios_foro.dart';
 import '../../services/foro_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/rutas_provider.dart';
@@ -60,10 +62,39 @@ class ForoScreen extends ConsumerStatefulWidget {
   static String textoNuevas(int cuantas) =>
       cuantas == 1 ? '1 publicación nueva' : '$cuantas publicaciones nuevas';
 
+  /// Hasta cuántos caracteres el motivo cabe en el aviso. Uno más largo (el
+  /// que escribe a mano el administrador) no se alcanza a leer al pie: se
+  /// lee completo en "Mis rechazados".
+  static const _motivoQueCabe = 60;
+
+  /// Qué se moderó, como se le nombra a su autor.
+  static String _loTuyo(CambioForo cambio) =>
+      switch ((cambio.tipoModeracion, cambio.accionModeracion)) {
+        (_, AccionModeracion.edicion) => 'Tu edición',
+        (TipoModeracion.publicacion, _) => 'Tu publicación',
+        (TipoModeracion.comentario, _) => 'Tu comentario',
+        _ => 'Tu contenido',
+      };
+
   /// El aviso de un rechazo que llegó en vivo (criterio 5 de SCRUM-322).
-  static String textoRechazo(String? motivo) =>
-      'La moderación rechazó tu contenido'
-      '${motivo == null ? '' : ': $motivo'}';
+  static String textoRechazo(CambioForo rechazo) {
+    final motivo = rechazo.motivo?.trim();
+    if (motivo == null || motivo.isEmpty || motivo.length > _motivoQueCabe) {
+      return '${_loTuyo(rechazo)} no se aprobó. Mira el motivo en '
+          '"Mis rechazados".';
+    }
+    return '${_loTuyo(rechazo)} no se aprobó: $motivo';
+  }
+
+  /// El aviso de una aprobación que llegó en vivo: el autor dejó algo "en
+  /// revisión" y así se entera de que ya lo ven los demás.
+  static String textoAprobacion(CambioForo aprobacion) =>
+      switch ((aprobacion.tipoModeracion, aprobacion.accionModeracion)) {
+        (_, AccionModeracion.edicion) => 'Tu edición ya está publicada',
+        (TipoModeracion.publicacion, _) => 'Tu publicación ya está en el foro',
+        (TipoModeracion.comentario, _) => 'Tu comentario ya está publicado',
+        _ => 'Lo que enviaste ya está publicado',
+      };
 
   @override
   ConsumerState<ForoScreen> createState() => _ForoScreenState();
@@ -100,10 +131,15 @@ class _ForoScreenState extends ConsumerState<ForoScreen> {
     final rechazosSinVer = ref.watch(rechazosSinVerProvider);
 
     // SCRUM-322: se avisa una vez y se deja de nuevo en null.
-    ref.listen(rechazoRecienteProvider, (_, rechazo) {
-      if (rechazo == null) return;
-      mostrarToast(context, ForoScreen.textoRechazo(rechazo.motivo));
-      ref.read(rechazoRecienteProvider.notifier).state = null;
+    ref.listen(veredictoRecienteProvider, (_, veredicto) {
+      if (veredicto == null) return;
+      mostrarToast(
+        context,
+        veredicto.esRechazo
+            ? ForoScreen.textoRechazo(veredicto)
+            : ForoScreen.textoAprobacion(veredicto),
+      );
+      ref.read(veredictoRecienteProvider.notifier).state = null;
     });
 
     // Refrescar a mano también muestra lo que estaba esperando.

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/moderacion_foro.dart';
+
 /// De dónde salen los avisos de cambios del foro. Las pruebas lo sustituyen
 /// con `overrideWithValue`.
 final fuenteCambiosForoProvider = Provider<FuenteCambiosForo>(
@@ -40,6 +42,9 @@ class CambioForo {
     this.autorId,
     this.estado,
     this.motivo,
+    this.tipoModeracion,
+    this.accionModeracion,
+    this.vistaPorAutor = false,
   });
 
   const CambioForo.reconectado() : this(tipo: TipoCambioForo.reconectado);
@@ -62,14 +67,32 @@ class CambioForo {
   /// En una moderación, por qué se rechazó.
   final String? motivo;
 
+  /// En una moderación, si fue una publicación o un comentario, y si era lo
+  /// recién creado o una edición: el aviso al autor dice qué fue.
+  final TipoModeracion? tipoModeracion;
+  final AccionModeracion? accionModeracion;
+
+  /// En una moderación, si el autor ya abrió "Mis rechazados".
+  final bool vistaPorAutor;
+
   bool get esPublicacionNueva =>
       tipo == TipoCambioForo.nuevo && tabla == TablaForo.publicaciones;
 
   /// La moderación rechazó algo (criterio 5 de SCRUM-322).
+  ///
+  /// Abrir "Mis rechazados" vuelve a guardar los rechazos, ya vistos: eso no
+  /// es un rechazo nuevo y no se vuelve a avisar.
   bool get esRechazo =>
       tabla == TablaForo.moderaciones &&
       tipo == TipoCambioForo.editado &&
-      estado == 'rechazada';
+      estado == EstadoModeracion.rechazada.valorDb &&
+      !vistaPorAutor;
+
+  /// La moderación aprobó algo que estaba en revisión: ya lo ven todos.
+  bool get esAprobacion =>
+      tabla == TablaForo.moderaciones &&
+      tipo == TipoCambioForo.editado &&
+      estado == EstadoModeracion.aprobada.valorDb;
 
   @override
   String toString() => 'CambioForo(${tipo.name}, ${tabla?.name}, $id)';
@@ -259,6 +282,13 @@ class SupabaseCambiosForo implements FuenteCambiosForo {
       autorId: fila['autor_id'] as String?,
       estado: estado,
       motivo: fila['motivo'] as String?,
+      tipoModeracion: tabla == TablaForo.moderaciones
+          ? TipoModeracion.desdeDb(fila['tipo'] as String?)
+          : null,
+      accionModeracion: tabla == TablaForo.moderaciones
+          ? AccionModeracion.desdeDb(fila['accion'] as String?)
+          : null,
+      vistaPorAutor: fila['vista_por_autor'] == true,
     );
   }
 }

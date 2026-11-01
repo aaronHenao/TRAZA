@@ -656,9 +656,11 @@ final publicacionesNuevasProvider = StateProvider.autoDispose<Set<String>>(
   (ref) => const {},
 );
 
-/// El último rechazo de algo propio que llegó en vivo, para avisarlo
-/// (criterio 5 de SCRUM-322). Lo consume el foro y lo vuelve a null.
-final rechazoRecienteProvider = StateProvider.autoDispose<CambioForo?>(
+/// El último veredicto de la moderación sobre algo propio que llegó en vivo,
+/// para avisarlo: el rechazo (criterio 5 de SCRUM-322) o la aprobación, que
+/// le cuenta al autor que ya terminó la espera de "en revisión". Lo consume
+/// el foro y lo vuelve a null.
+final veredictoRecienteProvider = StateProvider.autoDispose<CambioForo?>(
   (ref) => null,
 );
 
@@ -695,9 +697,10 @@ final foroEnVivoProvider = Provider.autoDispose<void>((ref) {
       final nuevas = ref.read(publicacionesNuevasProvider.notifier);
       nuevas.state = {...nuevas.state, id};
     }
-    // SCRUM-322: la moderación rechazó algo propio.
-    if (cambio.esRechazo && cambio.autorId == usuario) {
-      ref.read(rechazoRecienteProvider.notifier).state = cambio;
+    // SCRUM-322: la moderación decidió algo propio.
+    if ((cambio.esRechazo || cambio.esAprobacion) &&
+        cambio.autorId == usuario) {
+      ref.read(veredictoRecienteProvider.notifier).state = cambio;
     }
     recargar();
   });

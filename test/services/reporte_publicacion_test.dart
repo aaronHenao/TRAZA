@@ -58,7 +58,7 @@ void main() {
       '(criterio 2 de SCRUM-369)', () {
     expect(
       ReportePublicacion.recibido,
-      'Recibimos tu reporte. El autor no sabrá quién lo envió.',
+      'Reporte enviado. El autor no sabrá que fuiste tú.',
     );
   });
 

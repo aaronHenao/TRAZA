@@ -60,7 +60,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
   );
   static const comentarioEditado = 'Comentario actualizado';
   static const comentarioEnRevision =
-      'Tu cambio está en revisión. Mientras tanto se ve el texto anterior.';
+      'Cambio en revisión. Mientras, se ve el texto anterior.';
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 

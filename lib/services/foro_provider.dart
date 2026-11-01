@@ -201,7 +201,8 @@ class CreacionPublicacion {
 
   static const sinSesion = 'Inicia sesión para publicar en el foro.';
   static const noSePudo = 'No se pudo publicar. Inténtalo de nuevo.';
-  static const datosRechazados = 'Revisa tu publicación: la base no la aceptó.';
+  static const datosRechazados =
+      'No se pudo guardar así. Revisa el título y el contenido.';
 
   Future<ResultadoPublicacion> publicar(BorradorPublicacion borrador) async {
     final nueva = borrador.aNuevaPublicacion();
@@ -302,8 +303,7 @@ class ComentarioPublicacion {
   static const sinSesion = 'Inicia sesión para comentar.';
   static const noSePudo =
       'No se pudo enviar el comentario. Inténtalo de nuevo.';
-  static const enRevision =
-      'Tu comentario está en revisión. Los demás lo verán cuando se apruebe.';
+  static const enRevision = 'Comentario en revisión. Se verá al aprobarse.';
 
   Future<ResultadoComentario> comentar(
     String publicacionId,
@@ -402,8 +402,7 @@ class EdicionPublicacion {
       'No se pudieron guardar los cambios. Inténtalo de '
       'nuevo.';
   static const datosRechazados = CreacionPublicacion.datosRechazados;
-  static const yaEnRevision =
-      'Ya tienes una edición en revisión. Espera a que se resuelva.';
+  static const yaEnRevision = 'Ya tienes una edición en revisión.';
 
   Future<ResultadoEdicion> editar(
     String publicacionId,
@@ -831,8 +830,7 @@ class ReportePublicacion {
   final Ref _ref;
 
   /// Criterio 2: se confirma sin decir nada que identifique a nadie.
-  static const recibido =
-      'Recibimos tu reporte. El autor no sabrá quién lo envió.';
+  static const recibido = 'Reporte enviado. El autor no sabrá que fuiste tú.';
   static const duplicado = 'Ya reportaste esta publicación. Está en revisión.';
   static const sinDetalle = 'Cuéntanos por qué la reportas.';
   static const noDisponible = 'Esta publicación ya no está disponible.';

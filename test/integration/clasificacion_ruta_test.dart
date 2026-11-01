@@ -43,6 +43,7 @@ import 'package:traza/services/roles_service.dart';
 import 'package:traza/services/rutas_provider.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/widgets/solo_experto.dart';
+import 'package:traza/widgets/traza_toast.dart';
 
 import '../utiles/experiencia_falsa.dart';
 import '../utiles/insignias_falsas.dart';
@@ -379,7 +380,7 @@ Future<void> _tocar(WidgetTester tester, Finder objetivo) async {
 
 /// Deja pasar el aviso del pie, para que no tape lo que se toca después.
 Future<void> _esperarQueSeVayaElAviso(WidgetTester tester) async {
-  await tester.pump(const Duration(seconds: 3));
+  await tester.pump(duracionMaximaToast);
   await tester.pumpAndSettle();
 }
 

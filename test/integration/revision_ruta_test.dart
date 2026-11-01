@@ -25,6 +25,7 @@ import 'package:traza/services/roles_service.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/widgets/dialogo_motivo_rechazo.dart';
 import 'package:traza/widgets/tarjeta_revision_ruta.dart';
+import 'package:traza/widgets/traza_toast.dart';
 
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/revision_rutas_falso.dart';
@@ -166,7 +167,7 @@ void main() {
     pasarAlExperto('buena');
     // Que se vaya el aviso de la aprobación: tapa el pie de la pantalla,
     // donde queda "Rechazar".
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(duracionMaximaToast);
     await tester.pumpAndSettle();
 
     await abrirComoExperto(tester, 'buena');

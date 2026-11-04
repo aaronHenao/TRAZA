@@ -74,14 +74,9 @@ void main() {
     // Quedó registrada: no es un error que haya que reintentar.
     expect(repositorio.creaciones, 1);
     expect(repositorio.rutas.single.estado, EstadoRuta.datosIncompletos);
-    expect(
-      PublicacionRuta.sinDatosParaClasificar,
-      contains('No pudimos clasificar'),
-    );
-    expect(
-      PublicacionRuta.sinDatosParaClasificar,
-      contains('dificultad pendiente'),
-    );
+    expect(PublicacionRuta.sinDatosParaClasificar, contains('guardada'));
+    expect(PublicacionRuta.sinDatosParaClasificar, contains('sin dificultad'));
+    expect(PublicacionRuta.sinDatosParaClasificar, contains('distancia'));
   });
 
   test('un borrador sin nombre sigue sin llegar a la base', () async {

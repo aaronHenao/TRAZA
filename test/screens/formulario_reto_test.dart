@@ -11,6 +11,7 @@ import 'package:traza/screens/admin/formulario_reto_screen.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/retos_provider.dart';
 import 'package:traza/services/retos_service.dart';
+import 'package:traza/widgets/traza_toast.dart';
 
 import '../utiles/retos_repository_falso.dart';
 
@@ -278,7 +279,7 @@ void main() {
       await tocarCrear(tester);
 
       // El aviso del primero tapa el botón del segundo: se deja pasar.
-      await tester.pump(const Duration(milliseconds: 2500));
+      await tester.pump(duracionMaximaToast);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Gestión'));

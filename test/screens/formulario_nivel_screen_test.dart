@@ -9,6 +9,7 @@ import 'package:traza/services/niveles_provider.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/retos_service.dart'
     show SoloAdministradorException;
+import 'package:traza/widgets/traza_toast.dart';
 
 import '../utiles/niveles_falso.dart';
 
@@ -138,7 +139,7 @@ void main() {
     expect(find.byType(FormularioNivelScreen), findsOneWidget);
 
     // El aviso desaparece solo; se espera para no dejar su temporizador vivo.
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(duracionMaximaToast);
   });
 }
 

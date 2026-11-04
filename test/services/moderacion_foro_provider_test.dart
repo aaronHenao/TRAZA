@@ -229,6 +229,43 @@ void main() {
       expect(cambio.publicacionId, 'pub-1');
     });
 
+    test('un rechazo dice qué se moderó', () {
+      final cambio = SupabaseCambiosForo.cambioDesdeFila(
+        TablaForo.moderaciones,
+        TipoCambioForo.editado,
+        {
+          'id': 'mod-1',
+          'estado': 'rechazada',
+          'tipo': 'comentario',
+          'accion': 'edicion',
+        },
+      )!;
+
+      expect(cambio.tipoModeracion, TipoModeracion.comentario);
+      expect(cambio.accionModeracion, AccionModeracion.edicion);
+    });
+
+    test('un rechazo que el autor ya vio no es un rechazo nuevo', () {
+      final cambio = SupabaseCambiosForo.cambioDesdeFila(
+        TablaForo.moderaciones,
+        TipoCambioForo.editado,
+        {'id': 'mod-1', 'estado': 'rechazada', 'vista_por_autor': true},
+      )!;
+
+      expect(cambio.esRechazo, isFalse);
+    });
+
+    test('lo que la moderación aprueba es una aprobación', () {
+      final cambio = SupabaseCambiosForo.cambioDesdeFila(
+        TablaForo.moderaciones,
+        TipoCambioForo.editado,
+        {'id': 'mod-1', 'estado': 'aprobada', 'tipo': 'publicacion'},
+      )!;
+
+      expect(cambio.esAprobacion, isTrue);
+      expect(cambio.esRechazo, isFalse);
+    });
+
     test('lo que entra a la cola no es un rechazo', () {
       final cambio = SupabaseCambiosForo.cambioDesdeFila(
         TablaForo.moderaciones,

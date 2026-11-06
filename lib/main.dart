@@ -36,6 +36,7 @@ import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
+import 'services/reporte_errores.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/puerta_admin.dart';
@@ -46,6 +47,8 @@ import 'widgets/ventana_rol_experto.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Primero, para que también se reporte si falla lo que sigue.
+  await iniciarReporteErrores();
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,

@@ -121,7 +121,7 @@ Los lineamientos piden Firebase Authentication y Firestore. TRAZA usa Supabase d
 | Firestore | Postgres de Supabase |
 | Reglas de seguridad de Firestore | Row Level Security y funciones `security definer`, versionadas en `supabase/migrations/` |
 | Ver los cambios de otros roles | Supabase Realtime en el foro y las notificaciones (`0028`, `0034`). Las demás pantallas muestran el estado nuevo al recargar. |
-| Firebase Crashlytics | Pendiente: se va a usar Firebase solo para esto |
+| Firebase Crashlytics | Firebase Crashlytics, el único servicio de Firebase que usa la app (ver [Reporte de errores](#reporte-de-errores-crashlytics)) |
 
 Dónde está cada pieza de la configuración:
 
@@ -130,6 +130,19 @@ Dónde está cada pieza de la configuración:
 - **Correos de Supabase Auth:** las plantillas para confirmar el registro y para recuperar la contraseña están en `supabase/templates/`.
 - **Moderación del foro:** la Edge Function `supabase/functions/moderar-foro/`. Sus secretos (`NVIDIA_API_KEY` y `MODERACION_WEBHOOK_SECRET`) están guardados en Supabase, no en el repositorio. Cómo desplegarla está en [docs/deudas.md](docs/deudas.md).
 - **Esquema y reglas de acceso:** las migraciones de `supabase/migrations/` (ver [Base de datos](#base-de-datos)).
+- **Proyecto de Firebase (`traza-final-movil`):** `android/app/google-services.json` y `lib/firebase_options.dart`, generados con `flutterfire configure --project=traza-final-movil --platforms=android`. Como la publishable key, la llave que traen identifica al proyecto y no es un secreto.
+
+### Reporte de errores (Crashlytics)
+
+`lib/services/reporte_errores.dart` envía a Crashlytics los errores que la app no atrapó: los de Flutter, los asíncronos de Dart y los crashes nativos de Android. Solo funciona en el APK release de Android. En debug no se envía nada.
+
+Para no exponer datos personales:
+
+- De cada error viaja solo el tipo (`StateError`, `PostgrestException`) y la pila. El mensaje no, porque el de Supabase puede traer el valor que falló y el del GPS, coordenadas. Tampoco la descripción de los widgets, que puede incluir el texto de la pantalla.
+- No se identifica al usuario: ni su id, ni su correo, ni claves o logs propios. `test/config/configuracion_crashlytics_test.dart` falla si alguien lo agrega en `lib/`.
+- El proyecto de Firebase no tiene Google Analytics.
+
+Evento de prueba: compilar con `flutter build apk --release --dart-define=CRASHLYTICS_PRUEBA=true`, abrir la app, cerrarla y volver a abrirla. A los pocos minutos aparece en Firebase → Crashlytics un `StateError` cuyo mensaje original traía un correo inventado. El reporte llega sin ese correo. Ese APK es solo para la prueba; el de entrega se compila sin el `--dart-define`.
 
 ## Base de datos
 
@@ -235,7 +248,7 @@ Servicios externos que reciben datos:
 - **Nominatim (OpenStreetMap):** el texto buscado y, si se conoce, una caja alrededor del usuario con su posición redondeada a la décima de grado (unos 11 km). Nunca la posición exacta.
 - **Esri:** las imágenes del mapa, así que sabe qué zona del mapa se está mirando.
 - **NVIDIA:** el texto del foro que se modera.
-- **Firebase Crashlytics,** cuando se integre: errores para diagnóstico, sin contraseñas, tokens ni datos personales.
+- **Firebase Crashlytics:** los errores no atrapados del APK release, con el tipo de error y la pila, el modelo del teléfono, las versiones de Android y de la app, y un identificador de instalación aleatorio que no está ligado a la cuenta. No recibe el mensaje del error ni nada que identifique al usuario.
 
 La app no guarda contraseñas ni tokens por su cuenta. La sesión la guarda el SDK de Supabase en el teléfono para restaurarla al abrir la app (ver [Límites conocidos](#límites-conocidos)).
 
@@ -253,7 +266,7 @@ Las cuentas por rol, una ruta en cada uno de los seis estados y cómo reproducir
 ## Límites conocidos
 
 - La base es Supabase y no Firebase. Falta la respuesta del docente.
-- Crashlytics todavía no está integrado.
+- Crashlytics solo está configurado en Android. Como no recibe el mensaje del error, a veces hay que reproducirlo para diagnosticarlo.
 - Todavía no hay Drift, ni una preferencia en SharedPreferences, ni un indicador del estado de sincronización. Sin red, lo que se conserva son los puntos del recorrido en curso; iniciar y finalizar necesitan conexión.
 - Al cambiar de cuenta en el mismo teléfono, los puntos que la cuenta anterior no alcanzó a subir se descartan en el siguiente arranque. No se suben con la otra cuenta, pero se pierden.
 - La policy de update de `perfiles` no protege la columna `rol` (ver RNF-14 en [docs/deudas.md](docs/deudas.md)). Falta una migración que impida cambiarla desde el cliente.

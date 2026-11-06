@@ -51,6 +51,8 @@ dependencies:
   # los puntos del recorrido se guardan en disco según se capturan, para
   # que una caída de red no se los lleve.
   path_provider: ^2.1.5
+  firebase_core: ^5.1.0
+  firebase_crashlytics: ^6.0.1
 
 dev_dependencies:
   flutter_test:

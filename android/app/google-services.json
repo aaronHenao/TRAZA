@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "401063998190",
+    "project_id": "traza-final-movil",
+    "storage_bucket": "traza-final-movil.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:401063998190:android:b8b3abde2f748eea2039ff",
+        "android_client_info": {
+          "package_name": "com.traza.traza"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDH_i7tsyRzRxHEmOyVq0SuDbVQLc6i0LQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

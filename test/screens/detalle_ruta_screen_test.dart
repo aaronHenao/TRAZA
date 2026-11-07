@@ -791,10 +791,7 @@ void main() {
           false,
           'Pasa por una zona sin andén',
         ));
-        expect(
-          find.text('Rechazada. Le avisamos al autor el motivo.'),
-          findsOneWidget,
-        );
+        expect(find.text('Rechazada. Le avisamos al autor.'), findsOneWidget);
         expect(find.text('Pantalla anterior'), findsOneWidget);
       });
 

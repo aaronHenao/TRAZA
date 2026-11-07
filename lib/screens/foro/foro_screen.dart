@@ -62,10 +62,11 @@ class ForoScreen extends ConsumerStatefulWidget {
   static String textoNuevas(int cuantas) =>
       cuantas == 1 ? '1 publicación nueva' : '$cuantas publicaciones nuevas';
 
-  /// Hasta cuántos caracteres el motivo cabe en el aviso. Uno más largo (el
-  /// que escribe a mano el administrador) no se alcanza a leer al pie: se
-  /// lee completo en "Mis rechazados".
-  static const _motivoQueCabe = 60;
+  /// Hasta cuántos caracteres el motivo cabe en el aviso: los de la IA, como
+  /// "Spam" o "Groserías". Uno más largo (el que escribe a mano el
+  /// administrador) no se alcanza a leer al pie: se lee completo en "Mis
+  /// rechazados".
+  static const _motivoQueCabe = 30;
 
   /// Qué se moderó, como se le nombra a su autor.
   static String _loTuyo(CambioForo cambio) =>
@@ -80,8 +81,7 @@ class ForoScreen extends ConsumerStatefulWidget {
   static String textoRechazo(CambioForo rechazo) {
     final motivo = rechazo.motivo?.trim();
     if (motivo == null || motivo.isEmpty || motivo.length > _motivoQueCabe) {
-      return '${_loTuyo(rechazo)} no se aprobó. Mira el motivo en '
-          '"Mis rechazados".';
+      return '${_loTuyo(rechazo)} no se aprobó. Revisa "Mis rechazados"';
     }
     return '${_loTuyo(rechazo)} no se aprobó: $motivo';
   }

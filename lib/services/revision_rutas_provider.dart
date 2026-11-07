@@ -68,12 +68,12 @@ class DecisionRevisionRuta {
   static const yaResuelta = 'Esta ruta ya fue revisada.';
   static const sinPermiso = 'No puedes revisar esta ruta.';
   static const sinSesion = 'Inicia sesión para revisar rutas.';
-  static const noSePudo = 'No se pudo guardar la decisión. Inténtalo de nuevo.';
+  static const noSePudo = 'No se pudo guardar la decisión';
 
   /// Lo que se le dice al revisor cuando su decisión queda guardada.
   static String hecho(Ruta ruta) => switch (ruta.estado) {
     EstadoRuta.revisionExperto => 'Aprobada. Pasa a un Runner Experto.',
-    EstadoRuta.rechazada => 'Rechazada. Le avisamos al autor el motivo.',
+    EstadoRuta.rechazada => 'Rechazada. Le avisamos al autor.',
     _ => 'Decisión guardada.',
   };
 

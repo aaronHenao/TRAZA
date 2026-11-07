@@ -318,10 +318,7 @@ void main() {
 
       expect(find.byType(NuevaPublicacionScreen), findsOneWidget);
       expect(find.text('Tenis'), findsOneWidget);
-      expect(
-        find.text('No se pudo publicar. Inténtalo de nuevo.'),
-        findsOneWidget,
-      );
+      expect(find.text('No se pudo publicar'), findsOneWidget);
     });
   });
 
@@ -701,9 +698,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(
-          'Tu comentario no se aprobó. Mira el motivo en "Mis rechazados".',
-        ),
+        find.text('Tu comentario no se aprobó. Revisa "Mis rechazados"'),
         findsOneWidget,
       );
     });

@@ -161,10 +161,7 @@ void main() {
 
       await _tocarFinalizar(tester);
 
-      expect(
-        find.text('No se pudo guardar el entrenamiento. Inténtalo de nuevo.'),
-        findsOneWidget,
-      );
+      expect(find.text('No se pudo guardar el entrenamiento'), findsOneWidget);
       expect(find.byType(TrackingScreen), findsOneWidget);
       expect(find.byType(ResumenScreen), findsNothing);
       expect(entorno.container.read(actividadIniciadaProvider), isTrue);
@@ -190,10 +187,7 @@ void main() {
 
       await _tocarFinalizar(tester);
 
-      expect(
-        find.text('No se pudo guardar el recorrido. Inténtalo de nuevo.'),
-        findsOneWidget,
-      );
+      expect(find.text('No se pudo guardar el recorrido'), findsOneWidget);
       expect(entorno.entrenamientos.cierres, isEmpty);
       expect(find.byType(TrackingScreen), findsOneWidget);
       expect(find.byType(ResumenScreen), findsNothing);

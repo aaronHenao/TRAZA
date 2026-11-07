@@ -46,10 +46,8 @@ class InicioEntrenamiento {
   final Ref _ref;
 
   static const sinSesion = 'Inicia sesión para empezar a entrenar.';
-  static const noSePudo =
-      'No se pudo iniciar el entrenamiento. Inténtalo de nuevo.';
-  static const ubicacionApagada =
-      'Activa la ubicación del teléfono para empezar a entrenar.';
+  static const noSePudo = 'No se pudo iniciar el entrenamiento';
+  static const ubicacionApagada = 'Activa la ubicación para entrenar';
 
   /// Devuelve null si el entrenamiento quedó creado y la actividad puede
   /// arrancar, o el mensaje para el usuario si no se pudo (SCRUM-100). En ese
@@ -243,7 +241,7 @@ class CierreEntrenamiento {
     // Sin los puntos guardados el resumen no tendría recorrido, así que el
     // entrenamiento no se da por finalizado.
     if (recorrido.sincronizacion == EstadoSincronizacion.fallida) {
-      return 'No se pudo guardar el recorrido. Inténtalo de nuevo.';
+      return 'No se pudo guardar el recorrido';
     }
 
     // Sin entrenamiento creado (todavía no hay login ni SCRUM-99) no hay fila
@@ -261,7 +259,7 @@ class CierreEntrenamiento {
             );
       } catch (error) {
         debugPrint('No se pudo cerrar el entrenamiento: $error');
-        return 'No se pudo guardar el entrenamiento. Inténtalo de nuevo.';
+        return 'No se pudo guardar el entrenamiento';
       }
 
       // El recorrido ya está entero en la base: lo guardado en disco deja

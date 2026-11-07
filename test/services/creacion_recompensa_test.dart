@@ -189,15 +189,12 @@ void main() {
       );
       expect(
         CreacionRecompensa.soloAdministrador,
-        'Solo el administrador puede crear recompensas.',
+        'Solo el administrador crea recompensas',
       );
-      expect(
-        CreacionRecompensa.noSePudo,
-        'No se pudo crear la recompensa. Inténtalo de nuevo.',
-      );
+      expect(CreacionRecompensa.noSePudo, 'No se pudo crear la recompensa');
       expect(
         CreacionRecompensa.datosRechazados,
-        'Revisa los datos de la recompensa: la base no los aceptó.',
+        'Revisa los datos de la recompensa',
       );
     });
   });

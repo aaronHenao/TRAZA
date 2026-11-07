@@ -79,26 +79,23 @@ class PublicacionRuta {
   /// que pide el criterio 1: publicar la manda a revisión de un Runner
   /// Experto (SCRUM-363).
   static const enRevision =
-      'Ruta pendiente de revisión del administrador y un Runner Experto.';
+      'Ruta pendiente de revisión: administrador y Runner Experto';
 
   /// Criterio 3 de SCRUM-363: no se pudo clasificar, pero quedó guardada.
   static const sinDatosParaClasificar =
-      'Ruta guardada sin dificultad: le falta la distancia.';
+      'Ruta guardada sin dificultad: falta la distancia';
 
   static const sinSesion = 'Inicia sesión para publicar tu ruta.';
 
   static const yaPublicada = 'Ya publicaste este entrenamiento como ruta.';
 
-  static const noPublicable =
-      'Solo puedes publicar tus entrenamientos terminados.';
+  static const noPublicable = 'Solo se publican entrenamientos terminados';
 
-  static const sinEntrenamiento =
-      'Este entrenamiento no se guardó: no se puede publicar.';
+  static const sinEntrenamiento = 'Este entrenamiento no se guardó';
 
-  static const datosRechazados =
-      'No se pudo publicar así. Revisa el nombre y la descripción.';
+  static const datosRechazados = 'Revisa el nombre y la descripción';
 
-  static const noSePudo = 'No se pudo publicar la ruta. Inténtalo de nuevo.';
+  static const noSePudo = 'No se pudo publicar la ruta';
 
   Future<ResultadoPublicacionRuta> publicar(BorradorRuta borrador) async {
     final nueva = borrador.aNuevaRuta();
@@ -187,14 +184,11 @@ class ClasificacionRuta {
 
   final Ref _ref;
 
-  static const clasificada =
-      'Dificultad asignada. El autor ya puede publicarla.';
-  static const sinPermiso =
-      'Solo un Runner Experto puede clasificar rutas ajenas.';
+  static const clasificada = 'Dificultad asignada';
+  static const sinPermiso = 'Solo un Runner Experto clasifica rutas';
   static const yaCambio = 'Esta ruta ya no está en revisión.';
   static const sinSesion = 'Inicia sesión para clasificar rutas.';
-  static const noSePudo =
-      'No se pudo asignar la dificultad. Inténtalo de nuevo.';
+  static const noSePudo = 'No se pudo asignar la dificultad';
 
   Future<ResultadoClasificacionRuta> clasificar(
     Ruta ruta,
@@ -253,9 +247,9 @@ class ConfirmacionPublicacionRuta {
 
   static const publicada = '¡Ruta publicada! Ya la ve la comunidad.';
   static const sinPermiso = 'Solo el autor puede publicar su ruta.';
-  static const yaCambio = 'Esta ruta ya no está esperando tu confirmación.';
+  static const yaCambio = 'Esta ruta ya no espera tu confirmación';
   static const sinSesion = 'Inicia sesión para publicar tu ruta.';
-  static const noSePudo = 'No se pudo publicar la ruta. Inténtalo de nuevo.';
+  static const noSePudo = 'No se pudo publicar la ruta';
 
   Future<ResultadoConfirmacionRuta> confirmar(Ruta ruta) async {
     try {

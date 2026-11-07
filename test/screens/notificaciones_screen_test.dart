@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/notificacion.dart';
 import 'package:traza/screens/notificaciones/notificaciones_screen.dart';
+import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
 import 'package:traza/services/cambios_notificaciones.dart';
 import 'package:traza/services/foro_service.dart' show usuarioActualProvider;
 import 'package:traza/services/notificaciones_service.dart';
@@ -87,6 +88,48 @@ void main() {
       expect(find.textContaining('Confírmala para publicarla'), findsOneWidget);
       expect(
         find.byIcon(TipoNotificacion.rutaClasificada.icono),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('muestra las dos etapas previas a la publicación', (
+      tester,
+    ) async {
+      // El autor tiene que poder seguir el recorrido entero de su ruta en la
+      // bandeja: primero el administrador, después el experto.
+      await _abrir(
+        tester,
+        notificaciones: [
+          notificacionDePrueba(
+            id: 'aviso-revision',
+            tipo: TipoNotificacion.rutaEnRevision,
+            titulo: 'Tu ruta está en revisión',
+            mensaje:
+                'El administrador está revisando «Vuelta al estadio». Te '
+                'avisamos en cuanto haya novedades.',
+            fechaCreacion: ahora,
+          ),
+          notificacionDePrueba(
+            id: 'aviso-clasificacion',
+            tipo: TipoNotificacion.rutaEnClasificacion,
+            titulo: 'Tu ruta pasó la primera revisión',
+            mensaje:
+                'El administrador aprobó «Vuelta al estadio». Ahora un Runner '
+                'Experto le pondrá la dificultad.',
+            fechaCreacion: ahora,
+          ),
+        ],
+      );
+
+      expect(find.text('Tu ruta está en revisión'), findsOneWidget);
+      expect(find.text('Tu ruta pasó la primera revisión'), findsOneWidget);
+      // Cada etapa se distingue de un vistazo por su icono.
+      expect(
+        find.byIcon(TipoNotificacion.rutaEnRevision.icono),
+        findsOneWidget,
+      );
+      expect(
+        find.byIcon(TipoNotificacion.rutaEnClasificacion.icono),
         findsOneWidget,
       );
     });
@@ -214,25 +257,66 @@ void main() {
       expect(find.text('Publicación pub-7'), findsOneWidget);
     });
 
-    testWidgets(
-      'los avisos de rutas todavía no abren nada, y no lo aparentan',
-      (tester) async {
-        await _abrir(
-          tester,
-          notificaciones: [
-            notificacionDePrueba(id: 'aviso-ruta', entidadId: 'ruta-1'),
-          ],
-        );
+    testWidgets('el de una ruta lleva a su detalle, que es donde se '
+        'confirma la publicación', (tester) async {
+      // El aviso de que ya tiene dificultad dice «confírmala para
+      // publicarla», y el botón de confirmar vive en el detalle. Sin este
+      // destino el autor tenía que buscar su ruta por el historial.
+      await _abrir(
+        tester,
+        notificaciones: [
+          notificacionDePrueba(
+            id: 'aviso-ruta',
+            tipo: TipoNotificacion.rutaClasificada,
+            titulo: 'Tu ruta ya tiene dificultad',
+            entidadId: 'ruta-1',
+          ),
+        ],
+      );
 
-        // Sin flecha y sin nada que tocar: abrir una ruta desde la bandeja es
-        // de SCRUM-363 y está anotado como pendiente.
+      // Y se ve que se puede tocar antes de tocarlo.
+      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(NotificacionesScreen.claveFila('aviso-ruta')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ruta ruta-1'), findsOneWidget);
+    });
+
+    test('todos los avisos de una ruta llevan a su detalle', () {
+      // Ninguna etapa se queda sin destino: el autor llega a su ruta desde
+      // cualquiera de los avisos, y en el detalle está el botón de
+      // publicarla cuando ya tiene dificultad.
+      for (final tipo in [
+        TipoNotificacion.rutaEnRevision,
+        TipoNotificacion.rutaEnClasificacion,
+        TipoNotificacion.rutaClasificada,
+        TipoNotificacion.rutaPublicada,
+        TipoNotificacion.rutaRechazada,
+      ]) {
         expect(
-          find.byKey(NotificacionesScreen.claveFila('aviso-ruta')),
-          findsNothing,
+          NotificacionesScreen.rutaDe(
+            notificacionDePrueba(tipo: tipo, entidadId: 'ruta-9'),
+          ),
+          DetalleRutaScreen.rutaDe('ruta-9'),
+          reason: tipo.valorDb,
         );
-        expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
-      },
-    );
+      }
+    });
+
+    test('un aviso de ruta sin a qué apuntar no lleva a ninguna parte', () {
+      expect(
+        NotificacionesScreen.rutaDe(
+          notificacionDePrueba(
+            tipo: TipoNotificacion.rutaClasificada,
+            entidadId: null,
+          ),
+        ),
+        isNull,
+      );
+    });
 
     testWidgets('un aviso de retiro sin a qué apuntar no se puede abrir', (
       tester,
@@ -287,6 +371,11 @@ Future<({NotificacionesFalso repositorio, GoRouter router})> _abrir(
         builder: (_, _) => const NotificacionesScreen(),
       ),
       // A donde lleva el aviso de una publicación retirada (SCRUM-242).
+      GoRoute(
+        path: DetalleRutaScreen.ruta,
+        builder: (_, estado) =>
+            Scaffold(body: Text('Ruta ${estado.pathParameters['rutaId']}')),
+      ),
       GoRoute(
         path: '/foro/:publicacionId',
         builder: (_, estado) => Scaffold(

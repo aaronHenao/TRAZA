@@ -180,7 +180,7 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 - **Pendiente y desnivel.** La HU los nombra, pero la app no guarda altitud (`0001`: "puntos_gps SIN altitud, a petición explícita"). Acordado con el equipo: el experto clasifica con la distancia y el mapa. Para usarlos haría falta guardar la altitud al entrenar o pedírsela a un servicio de elevación al guardar la ruta; con ellos, `preparar_ruta` podría exigirlos para "datos suficientes" y el detalle mostrarlos.
 - **Completar los datos.** Una ruta en `datos_incompletos` se queda así: no hay de dónde sacar la distancia que le falta, y el índice de `0031` no deja volver a publicar ese entrenamiento (solo las rechazadas se pueden mandar de nuevo). Si se resuelve la distancia, haría falta una función que la recalcule y la pase a `en_revision`.
 - **Los scripts de verificación de 0045 y 0047** describen el flujo de antes (el experto clasifica desde `en_revision`): después de `0048` fallan a propósito. El que vale es el de `0048`.
-- **Tocar el aviso.** La bandeja de notificaciones no abre la ruta. El autor llega a confirmarla por "Ver mi ruta" en la pantalla de publicar de ese entrenamiento.
+- ~~**Tocar el aviso.**~~ Resuelto: tocar cualquier aviso de una ruta abre su detalle, que es donde está el botón de confirmar la publicación. Antes el aviso decía "confírmala para publicarla" y no llevaba a ninguna parte, así que el autor tenía que buscar su ruta por el historial.
 
 ## SCRUM-321: validar la publicación de rutas (administrador y Runner Experto)
 

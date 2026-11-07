@@ -41,7 +41,10 @@ void main() {
   late FuenteUbicacionFalsa fuente;
   late _MockPermisosService permisos;
 
-  /// Una ruta en revisión, con su dificultad propuesta.
+  /// Una ruta con su clasificación por revisar: publicada y con dificultad.
+  ///
+  /// Publicada porque es lo que exige `puede_revisar_clasificacion` (0054):
+  /// la revisión de HU-35 pasa después de que el autor la publica, no antes.
   Ruta enRevision({
     Dificultad? dificultad = Dificultad.moderada,
     double? distanciaKm = 7.5,
@@ -49,12 +52,14 @@ void main() {
     id: 'ruta-1',
     nombre: 'Subida al Volador',
     autorNombre: 'Luis',
+    estado: EstadoRuta.publicada,
     distanciaKm: distanciaKm,
     dificultad: dificultad,
     trazado: const [
       PuntoRuta(latitud: 6.2650, longitud: -75.5800),
       PuntoRuta(latitud: 6.2680, longitud: -75.5760),
     ],
+    fechaPublicacion: DateTime(2026, 10, 20, 9),
   );
 
   setUp(() {

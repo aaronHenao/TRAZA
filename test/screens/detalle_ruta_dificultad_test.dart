@@ -24,16 +24,21 @@ void main() {
   final ahora = DateTime(2026, 10, 24, 12);
   final ayer = DateTime(2026, 10, 23, 18);
 
-  Ruta ruta({Dificultad? dificultad = Dificultad.moderada}) => rutaDePrueba(
+  Ruta ruta({
+    Dificultad? dificultad = Dificultad.moderada,
+    EstadoRuta estado = EstadoRuta.publicada,
+  }) => rutaDePrueba(
     id: 'ruta-1',
     nombre: 'Subida al Volador',
-    estado: EstadoRuta.publicada,
+    estado: estado,
     dificultad: dificultad,
     trazado: const [
       PuntoRuta(latitud: 6.2650, longitud: -75.5800),
       PuntoRuta(latitud: 6.2680, longitud: -75.5760),
     ],
-    fechaPublicacion: DateTime(2026, 10, 20, 9),
+    fechaPublicacion: estado == EstadoRuta.publicada
+        ? DateTime(2026, 10, 20, 9)
+        : null,
   );
 
   /// Abre el detalle de [ruta]. Con [revisadaEn], la base dice que la
@@ -158,6 +163,30 @@ void main() {
       findsNothing,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('clasificada pero sin publicar no habla de la revisión, que '
+      'todavía no puede pasar', (tester) async {
+    // 0054 exige la ruta publicada para revisarla. Mientras el autor espera
+    // confirmar su publicación, decirle que un Runner Experto no ha
+    // confirmado la dificultad le anuncia como pendiente algo que no depende
+    // de él, justo debajo de que la asignó uno: se leen contradictorias.
+    final repositorio = await abrir(
+      tester,
+      ruta(estado: EstadoRuta.clasificada),
+    );
+
+    expect(enLaTarjeta(find.text('Moderada')), findsOneWidget);
+    expect(
+      enLaTarjeta(find.text('Asignada por un Runner Experto')),
+      findsOneWidget,
+    );
+    expect(enLaTarjeta(find.text(DetalleRutaScreen.sinRevisar)), findsNothing);
+    expect(
+      enLaTarjeta(find.textContaining('Revisada por un Runner Experto')),
+      findsNothing,
+    );
+    expect(repositorio.consultasDeRevisadaEn, 0);
   });
 
   testWidgets('sin dificultad va "Sin clasificar", como en su tarjeta', (

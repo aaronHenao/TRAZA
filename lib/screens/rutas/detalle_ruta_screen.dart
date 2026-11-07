@@ -65,7 +65,17 @@ class DetalleRutaScreen extends ConsumerWidget {
   /// (SCRUM-264, criterio 5 de HU-35).
   static String revisadaPorExperto(DateTime en, DateTime ahora) =>
       'Revisada por un Runner Experto · ${fechaRelativa(en, ahora)}';
-  static const sinRevisar = 'Todavía no la revisa un Runner Experto.';
+
+  /// Que la revisión de 0054 todavía no ha pasado.
+  ///
+  /// No dice «todavía no la revisa un Runner Experto» porque justo encima
+  /// pone que la dificultad la asignó uno: leídas seguidas se contradicen.
+  /// Son dos actos distintos —asignarla (`clasificar_ruta`, 0048) y
+  /// confirmarla o corregirla con la ruta ya publicada
+  /// (`revisiones_clasificacion`, 0054)—, así que el texto habla de
+  /// confirmar, que es lo que falta.
+  static const sinRevisar =
+      'Un Runner Experto todavía no ha confirmado su dificultad.';
   static const sinDificultadAsignada =
       'Todavía no tiene una dificultad asignada.';
 
@@ -422,6 +432,11 @@ class _EstadoDelAutorState extends ConsumerState<_EstadoDelAutor> {
 /// agrega nada. La revisión se pregunta aparte de la ruta (0054): mientras
 /// llega, o si no se pudo saber, no se dice ni que sí ni que no. Se lee de
 /// una vez con el lector de pantalla.
+///
+/// De la revisión solo se habla si la ruta está publicada: 0054 exige que lo
+/// esté para poder revisarla, así que antes no es que esté pendiente, es que
+/// todavía no puede pasar. Decírselo al autor mientras espera confirmar su
+/// publicación le anuncia como pendiente algo que no depende de él.
 class _Dificultad extends ConsumerWidget {
   const _Dificultad({required this.ruta, required this.ahora});
 
@@ -431,8 +446,9 @@ class _Dificultad extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dificultad = ruta.dificultad;
-    // Sin dificultad no hay revisión que preguntar.
-    final revision = dificultad == null
+    // Sin dificultad, o sin publicar, no hay revisión que preguntar: con
+    // `revision` en null la tarjeta no dice ni que sí ni que no.
+    final revision = dificultad == null || !ruta.publicada
         ? null
         : ref.watch(clasificacionRevisadaEnProvider(ruta.id));
     const detalle = TextStyle(fontSize: 12.5, color: AppColors.ink2);

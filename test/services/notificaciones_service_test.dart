@@ -81,6 +81,50 @@ void main() {
     expect(TipoNotificacion.rutaClasificada.valorDb, 'ruta_clasificada');
   });
 
+  test('lee el aviso de que el administrador esta revisando la ruta', () async {
+    // Lo crea el trigger de 0057 al mandarla, para que el autor no se quede
+    // sin saber nada entre que la manda y que un experto la clasifica.
+    final supabase = _SupabaseFalso(
+      filas: [
+        {
+          ...fila,
+          'id': 'aviso-3',
+          'tipo': 'ruta_en_revision',
+          'titulo': 'Tu ruta está en revisión',
+        },
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final avisos = await supabase.repositorio.mias();
+
+    expect(avisos.single.tipo, TipoNotificacion.rutaEnRevision);
+    expect(avisos.single.entidadId, 'ruta-1');
+    expect(TipoNotificacion.rutaEnRevision.valorDb, 'ruta_en_revision');
+  });
+
+  test('lee el aviso de que paso al Runner Experto', () async {
+    final supabase = _SupabaseFalso(
+      filas: [
+        {
+          ...fila,
+          'id': 'aviso-4',
+          'tipo': 'ruta_en_clasificacion',
+          'titulo': 'Tu ruta pasó la primera revisión',
+        },
+      ],
+    );
+    addTearDown(supabase.cerrar);
+
+    final avisos = await supabase.repositorio.mias();
+
+    expect(avisos.single.tipo, TipoNotificacion.rutaEnClasificacion);
+    expect(
+      TipoNotificacion.rutaEnClasificacion.valorDb,
+      'ruta_en_clasificacion',
+    );
+  });
+
   test('sin sesion no sale ninguna peticion', () async {
     final supabase = _SupabaseFalso(usuarioActual: null);
     addTearDown(supabase.cerrar);
@@ -138,11 +182,10 @@ class _SupabaseFalso {
 
   late final SupabaseClient cliente;
 
-  NotificacionesRepository get repositorio =>
-      SupabaseNotificacionesRepository(
-        cliente: cliente,
-        usuarioActual: () => usuarioActual,
-      );
+  NotificacionesRepository get repositorio => SupabaseNotificacionesRepository(
+    cliente: cliente,
+    usuarioActual: () => usuarioActual,
+  );
 
   Future<http.Response> _responder(http.Request peticion) async {
     peticiones.add(peticion);

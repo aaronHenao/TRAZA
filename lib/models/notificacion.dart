@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// De qué avisa una notificación.
 ///
 /// Los nombres coinciden con la restricción `tipo in (...)` de la tabla
-/// `notificaciones` (`0032_notificaciones.sql`, ampliada en 0045).
+/// `notificaciones` (`0032_notificaciones.sql`, ampliada en 0045 y 0057).
 enum TipoNotificacion {
   /// El Runner Experto aprobó una ruta y ya la ve la comunidad (criterio 2
   /// de SCRUM-241).
@@ -19,7 +19,15 @@ enum TipoNotificacion {
 
   /// Un Runner Experto le asignó la dificultad a la ruta del autor, que ya
   /// puede confirmar su publicación (SCRUM-363).
-  rutaClasificada('ruta_clasificada', Icons.terrain_outlined);
+  rutaClasificada('ruta_clasificada', Icons.terrain_outlined),
+
+  /// La ruta acaba de mandarse y la está revisando el administrador: la
+  /// primera de las dos puertas antes de publicarse.
+  rutaEnRevision('ruta_en_revision', Icons.pending_outlined),
+
+  /// El administrador la aprobó y ahora un Runner Experto le pondrá la
+  /// dificultad: la segunda puerta.
+  rutaEnClasificacion('ruta_en_clasificacion', Icons.rule_outlined);
 
   const TipoNotificacion(this.valorDb, this.icono);
 

@@ -12,6 +12,7 @@ import '../../theme/app_dimens.dart';
 import '../../utils/fecha_relativa.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
+import '../rutas/detalle_ruta_screen.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../foro/detalle_publicacion_screen.dart';
 
@@ -31,10 +32,17 @@ class NotificacionesScreen extends ConsumerStatefulWidget {
 
   /// A dónde lleva un aviso, o null si no lleva a ningún lado.
   ///
-  /// Solo el retiro de una publicación (criterio 2 de SCRUM-242): el autor
-  /// llega a su publicación, que ya no sale en ninguna lista del foro, y ahí
-  /// lee por qué la retiramos. Los avisos de rutas no abren nada todavía;
-  /// está anotado como pendiente de SCRUM-363 en `docs/deudas.md`.
+  /// El retiro de una publicación abre la publicación (criterio 2 de
+  /// SCRUM-242): el autor llega a la suya, que ya no sale en ninguna lista
+  /// del foro, y ahí lee por qué la retiramos.
+  ///
+  /// Los avisos de una ruta abren su detalle, que es donde se ve en qué
+  /// etapa va y, si ya está clasificada, donde está el botón de publicarla.
+  /// Un aviso que dice «confírmala para publicarla» y no lleva a ninguna
+  /// parte obliga al autor a buscar su ruta por el historial, que nadie
+  /// adivina. El autor puede leerla en cualquier estado (`0029`: «el autor
+  /// ve sus propias rutas»), así que el detalle siempre tiene algo que
+  /// contar.
   static String? rutaDe(Notificacion notificacion) {
     final entidad = notificacion.entidadId;
     if (entidad == null) return null;
@@ -45,7 +53,9 @@ class NotificacionesScreen extends ConsumerStatefulWidget {
       ),
       TipoNotificacion.rutaPublicada ||
       TipoNotificacion.rutaRechazada ||
-      TipoNotificacion.rutaClasificada => null,
+      TipoNotificacion.rutaClasificada ||
+      TipoNotificacion.rutaEnRevision ||
+      TipoNotificacion.rutaEnClasificacion => DetalleRutaScreen.rutaDe(entidad),
     };
   }
 

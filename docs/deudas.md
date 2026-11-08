@@ -367,3 +367,15 @@ que la pantalla decide pasar, no en cómo se dibuja.
 
 - **Nadie completa todavía una ruta.** Correrla entera no cambia el mapa hasta la etapa 4, que valida los puntos en la base.
 - **El detalle de cualquier ruta consulta el mapa del corredor** (rutas oficiales y completadas) para saber si ofrecer "Correr esta ruta": dos consultas más por detalle. Las pruebas viejas del detalle no sustituyen `rutasOficialesRepositoryProvider` y pasan porque ese provider cae en error sin Supabase; si se toca el detalle, conviene darles el doble.
+
+## Rutas oficiales, etapa 4: validar el recorrido
+
+**Qué quedó hecho** (`0061_verificar_ruta_completada.sql`): la base compara los puntos GPS con el trazado (40 m, 90 %) con las horas del servidor, sin saltos imposibles y con un tope de puntos, y registra la ruta completada. El resumen muestra "¡Completaste…!" o "Cubriste el X %…", y el mapa avanza. El reenvío de puntos (SCRUM-292) vuelve a verificar cuando sube lo que faltaba.
+
+**Qué falta:**
+
+- **Puntos fabricados (límite conocido).** Con la publishable key y su sesión, un script puede inventar puntos creíbles sobre el trazado y esperar el tiempo real de la carrera. Las reglas lo encarecen, no lo impiden. Va a *Límites conocidos* del README.
+- **El registro depende de que se abra el resumen.** La ruta queda completada cuando `SeccionRutaOficial` (o el reenvío) llama a la función. Si esa llamada falla y el corredor se va, se registra al reabrir el resumen desde el historial o al tocar Reintentar.
+- **Cada apertura del resumen vuelve a calcular la cobertura.** Es barato (CTE materializados, 20 000 puntos como mucho), pero se podría devolver lo ya guardado en `rutas_completadas` para ese entrenamiento.
+- **Entrenamientos terminados antes de `0061`** no tienen `finalizado_en`: su ruta no se puede validar (TZ422).
+- **Medición real pendiente.** Se midió en una réplica local de Postgres (0.1–0.3 s con 20 000 puntos). Falta medirlo en el Supabase compartido con una carrera de una hora.

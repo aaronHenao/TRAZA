@@ -151,12 +151,15 @@ Si se crean HU en Jira, la rama y los commits llevan su ID (`feature/SCRUM-X-...
 
 **Base de datos (`0061_verificar_ruta_completada.sql`)**
 
-- `verificar_ruta_completada(p_entrenamiento_id) returns numeric`, que devuelve la cobertura. Es `security definer`, con `set search_path = public`, `revoke execute ... from public, anon`, y estas reglas:
+- `verificar_ruta_completada(p_entrenamiento_id) returns table (cobertura, necesaria, completada)`, o ninguna fila si el entrenamiento fue libre. Es `security definer`, con `set search_path = public`, `revoke execute ... from public, anon`, y estas reglas:
   - el entrenamiento es de `auth.uid()` (sin parámetro de usuario), está `finalizado` y tiene `ruta_id`. Si es de otro o no existe, el mismo `42501`;
   - la ruta es oficial, comprobado antes de leer el trazado;
   - **horas del servidor, no del teléfono**: un trigger fija `fecha_inicio := now()` al crear y no deja cambiarla, y otra marca del servidor al pasar a `finalizado`. Se exige `fecha_inicio >= rutas_oficiales.fecha_agregada` (nada retroactivo) y una duración real de al menos `distancia_km` / una velocidad máxima plausible;
   - solo cuentan los puntos con `capturado_en` dentro de esa ventana, y se descartan los saltos entre puntos consecutivos (por `orden_secuencia`) con velocidad imposible;
-  - tope de puntos evaluados por entrenamiento y `set statement_timeout` en la función: si no, alguien podría insertar un millón de puntos y llamarla en bucle contra la base compartida;
+  - un entrenamiento terminado (finalizado o cancelado) no cambia de estado desde la API: si no, uno viejo se podría "terminar" semanas después;
+  - la duración mínima se mide con la longitud del trazado (`distancia_km` puede venir nula o falseada);
+  - cada punto se compara con el último **válido**, para que un señuelo puesto justo antes no lo deje pasar;
+  - tope de 20 000 puntos y CTE `materialized` (sin eso Postgres relee los puntos por cada punto del trazado: con 1 millón de puntos, 21 s contra 0.1 s en una réplica). Un `statement_timeout` dentro de la función no corta la sentencia en curso: manda el del rol `authenticated`;
   - compara `rutas.trazado` (jsonb) con `puntos_gps` usando `distancia_km_entre` (`0037`), con un filtro previo por caja de ±0.0005° (unos 55 m) para no comparar todos los puntos contra todos;
   - si la cobertura llega al umbral, `insert ... on conflict do nothing`.
 - Las tolerancias (40 m y 90 %) van como constantes con nombre al inicio de la función, para ajustarlas en una migración nueva si el equipo lo decide.
@@ -168,7 +171,7 @@ Si se crean HU en Jira, la rama y los commits llevan su ID (`feature/SCRUM-X-...
 
 **Flutter**
 
-- `EntrenamientoService` llama a la función al cerrar y `ResumenScreen` muestra el resultado.
+- La verifica el resumen (`SeccionRutaOficial`) y no el cierre: así sirve también al abrirlo desde el historial y no se suma una consulta pesada al cierre. Si se completó, el resumen invalida el mapa.
 - `ReenvioRecorridos` (SCRUM-292) la vuelve a llamar cuando sube lo que había quedado pendiente.
 - Se invalida el provider del mapa.
 

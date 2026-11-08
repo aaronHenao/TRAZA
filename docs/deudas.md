@@ -347,3 +347,14 @@ tracking: finalizar con una pausa registrada y comprobar que el
 `ResumenEntrenamiento` que viaja en el `extra` de la ruta lleva los cortes. Una
 prueba solo del modelo no lo habría cazado nunca, porque el defecto está en lo
 que la pantalla decide pasar, no en cómo se dibuja.
+
+## Rutas oficiales, etapa 1: el administrador arma el mapa
+
+**Qué quedó hecho** (`0058_rutas_oficiales.sql`, `GestionRutasOficialesScreen`): el módulo **Mapa de rutas oficiales** del panel del administrador agrega rutas publicadas al camino, las sube, las baja y las quita. Las posiciones las mantiene la base, siempre `1..n`. El plan de las demás etapas está en [docs/roadmap_mapa_rutas_oficiales.md](roadmap_mapa_rutas_oficiales.md).
+
+**Qué falta:**
+
+- **El criterio 6 ("nadie que no sea administrador, aunque llame a la base") depende de `es_admin()`, que hoy se puede burlar.** Ver RNF-14: un corredor puede ponerse `rol = 'admin'`. Además, el arreglo que se anotó ahí (`revoke update (rol) on perfiles ...`) **no funciona**: en Postgres, revocar una columna no tiene efecto mientras el rol tenga `update` sobre la tabla entera, y Supabase se lo da a `authenticated`. Lo que sí funciona es un trigger `before insert or update on perfiles` que conserve `rol` cuando quien escribe es `authenticated` o `anon`, o bien `revoke update on perfiles` + `grant update (<columnas editables>)`.
+- **Las candidatas son las 100 publicadas más recientes**, porque reusan `RutasRepository.publicadas()` (`limite = 100`). Si algún día hay más, las antiguas no se pueden agregar desde el selector. Se arregla con una búsqueda en el selector (ya existe `buscar()`).
+- **La guarda `SoloAdministrador` de `/admin/rutas-oficiales` en `main.dart` no tiene prueba.** Las rutas de niveles y recompensas tienen el mismo hueco. El patrón para probarla existe: sacar el `GoRoute` a una variable pública, como `rutasRevision` (`lib/screens/rutas/rutas_revision.dart`), y probarla como `test/screens/revision_rutas_acceso_test.dart`.
+- **Para la etapa 2:** hoy una ruta publicada no puede dejar de estarlo, así que el embed `ruta:rutas(...)` siempre la trae. Si algún día se pudiera retirar, el corredor recibiría `ruta: null` y `RutaOficial.desdeSupabase` tumbaría la lista. Para entonces: `rutas!inner` en la consulta, o quitarla del mapa al retirarla.

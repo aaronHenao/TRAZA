@@ -13,6 +13,7 @@ import '../../theme/traza_theme.dart';
 import '../../widgets/mapa_trayecto.dart';
 import '../rutas/publicar_ruta_screen.dart';
 import '../../widgets/seccion_experiencia.dart';
+import '../../widgets/seccion_ruta_oficial.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/trazado_recorrido.dart';
@@ -197,6 +198,13 @@ class _ContenidoResumen extends ConsumerWidget {
                   resumen: resumen,
                   recienFinalizado: recienFinalizado,
                 ),
+              // Si se corría una ruta oficial, si se completó (rutas
+              // oficiales, etapa 4).
+              if ((entrenamientoId, resumen.nombreRuta) case (
+                final id?,
+                final ruta?,
+              ))
+                SeccionRutaOficial(entrenamientoId: id, nombreRuta: ruta),
               const SizedBox(height: 18),
               _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),
               // Publicar el recorrido como ruta de la comunidad (SCRUM-241).

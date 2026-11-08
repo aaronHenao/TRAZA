@@ -291,8 +291,9 @@ class CierreEntrenamiento {
     _ref.read(rutaEnCursoProvider.notifier).limpiar();
     // La XP la asignó el trigger en el mismo cierre (SCRUM-206): la
     // progresión vuelve a leer la acumulada y las insignias que esa XP haya
-    // desbloqueado (SCRUM-193). El mapa, por si el entrenamiento completó
-    // una ruta oficial (rutas oficiales, etapas 2 y 4).
+    // desbloqueado (SCRUM-193). El mapa se relee por si cambió mientras se
+    // corría; si esta carrera completó una ruta oficial, lo invalida el
+    // resumen al recibir la verificación (rutas oficiales, etapa 4).
     _ref
       ..invalidate(progresionProvider)
       ..invalidate(insigniasProvider);

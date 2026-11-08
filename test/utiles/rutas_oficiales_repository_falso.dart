@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:traza/models/ruta.dart';
 import 'package:traza/models/ruta_oficial.dart';
+import 'package:traza/models/verificacion_ruta.dart';
 import 'package:traza/services/rutas_oficiales_service.dart';
 
 /// Repositorio de rutas oficiales en memoria (rutas oficiales, etapa 1):
@@ -7,15 +10,19 @@ import 'package:traza/services/rutas_oficiales_service.dart';
 /// de `0058_rutas_oficiales.sql`, sin huecos ni posiciones repetidas.
 ///
 /// También dice qué rutas completó el corredor (etapa 2), como la tabla
-/// `rutas_completadas` con RLS: solo las propias.
+/// `rutas_completadas` con RLS: solo las propias, y contesta lo que la
+/// prueba programe a la verificación de un recorrido (etapa 4).
 class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
   RutasOficialesRepositorioFalso({
     List<Ruta> oficiales = const [],
     List<Ruta> rutas = const [],
     Set<String> completadasPorMi = const {},
+    Map<String, VerificacionRuta> verificaciones = const {},
+    this.verificacion,
   }) : enOrden = [...oficiales],
        rutas = [...rutas],
-       completadasPorMi = {...completadasPorMi};
+       completadasPorMi = {...completadasPorMi},
+       verificaciones = {...verificaciones};
 
   /// Las rutas oficiales en el orden del camino: la primera es la posición 1.
   final List<Ruta> enOrden;
@@ -53,6 +60,24 @@ class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
 
   /// El id de cada ruta que se pidió quitar. Vacío si nadie confirmó.
   final quitadas = <String>[];
+
+  /// Lo que contesta `verificar` para cada entrenamiento (etapa 4).
+  final Map<String, VerificacionRuta> verificaciones;
+
+  /// Lo que contesta `verificar` para un entrenamiento que no está en
+  /// [verificaciones]. Null, como la base con un entrenamiento sin ruta.
+  VerificacionRuta? verificacion;
+
+  /// Lo que lanza `verificar`, si algo. Va aparte de los demás errores para
+  /// que pueda fallar la verificación sin que falle el mapa.
+  Object? errorAlVerificar;
+
+  /// Si no es null, `verificar` no contesta hasta que se complete: es el
+  /// rato en que la base está comparando el recorrido.
+  Completer<void>? esperaVerificar;
+
+  /// El id de cada entrenamiento que se pidió verificar, aunque fallara.
+  final verificados = <String>[];
 
   /// Los ids de las oficiales, en orden.
   List<String> get ids => [for (final ruta in enOrden) ruta.id];
@@ -117,6 +142,19 @@ class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
 
     if (!ids.contains(rutaId)) throw const RutaNoOficialException();
     enOrden.removeWhere((ruta) => ruta.id == rutaId);
+  }
+
+  /// Como `verificar_ruta_completada`: anota el pedido, espera si la prueba
+  /// lo indica y contesta lo programado. No toca [completadasPorMi]: si la
+  /// prueba quiere que la base haya registrado la ruta, la agrega ella.
+  @override
+  Future<VerificacionRuta?> verificar(String entrenamientoId) async {
+    verificados.add(entrenamientoId);
+    await esperaVerificar?.future;
+    final error = errorAlVerificar;
+    if (error != null) throw error;
+
+    return verificaciones[entrenamientoId] ?? verificacion;
   }
 
   void _lanzarSiHayError() {

@@ -19,6 +19,7 @@ import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/niveles_service.dart';
+import 'package:traza/services/rutas_oficiales_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
@@ -34,6 +35,7 @@ import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
+import '../utiles/rutas_oficiales_repository_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
 /// Pruebas de la parte B de SCRUM-93 y de la verificación que SCRUM-95 dejó
@@ -279,6 +281,11 @@ void main() {
       expect(resumenMostrado(tester)?.nombreRuta, 'Vuelta al estadio');
       expect(find.text('Ruta: Vuelta al estadio'), findsOneWidget);
       expect(entorno.container.read(rutaEnCursoProvider), isNull);
+      // Y le pregunta a la base si la completó (etapa 4).
+      final rutasOficiales =
+          entorno.container.read(rutasOficialesRepositoryProvider)
+              as RutasOficialesRepositorioFalso;
+      expect(rutasOficiales.verificados, ['e-123']);
     });
 
     testWidgets('sin ruta en curso, el resumen no habla de ninguna ruta', (
@@ -486,6 +493,11 @@ Future<_Entorno> _montar(
       ),
       // Sin niveles creados: el resumen no muestra nivel (SCRUM-198).
       nivelesRepositoryProvider.overrideWithValue(NivelesFalso()),
+      // El resumen de una ruta oficial le pregunta a la base si se completó
+      // (rutas oficiales, etapa 4): nunca al Supabase real.
+      rutasOficialesRepositoryProvider.overrideWithValue(
+        RutasOficialesRepositorioFalso(),
+      ),
       tiposActividadRepositoryProvider.overrideWithValue(
         _CatalogoFalso(catalogo),
       ),

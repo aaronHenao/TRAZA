@@ -9,14 +9,17 @@ import 'package:traza/models/nivel.dart';
 import 'package:traza/models/punto_gps.dart';
 import 'package:traza/models/regla_experiencia.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/verificacion_ruta.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/reloj_provider.dart';
+import 'package:traza/services/rutas_oficiales_service.dart';
 import 'package:traza/widgets/mapa_trayecto.dart';
 import 'package:traza/widgets/seccion_experiencia.dart';
+import 'package:traza/widgets/seccion_ruta_oficial.dart';
 import 'package:traza/widgets/trazado_recorrido.dart';
 
 import '../utiles/experiencia_falsa.dart';
@@ -24,10 +27,12 @@ import '../utiles/niveles_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
+import '../utiles/rutas_oficiales_repository_falso.dart';
 
 /// Pruebas de la pantalla de resumen: su diseño (SCRUM-117), que muestre solo
 /// la sesión que indica la navegación (SCRUM-122) y de dónde salen sus datos
-/// (SCRUM-118). Desde rutas oficiales, etapa 3, también qué ruta se corrió.
+/// (SCRUM-118). Desde rutas oficiales, etapa 3, también qué ruta se corrió,
+/// y desde la etapa 4, si la completó.
 void main() {
   final resumen = ResumenEntrenamiento(
     entrenamientoId: 'e-123',
@@ -529,6 +534,111 @@ void main() {
     });
   });
 
+  group('si completó la ruta (rutas oficiales, etapa 4, criterio 1)', () {
+    final conRuta = ResumenEntrenamiento(
+      entrenamientoId: 'e-123',
+      nombreActividad: 'Trote',
+      fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+      duracion: const Duration(minutes: 32, seconds: 17),
+      distanciaMetros: 5230.5,
+      nombreRuta: 'Vuelta al estadio',
+    );
+
+    RutasOficialesRepositorioFalso conVerificacion() =>
+        RutasOficialesRepositorioFalso(
+          verificacion: const VerificacionRuta(
+            cobertura: 0.72,
+            necesaria: 0.9,
+            completada: false,
+          ),
+        );
+
+    testWidgets('con ruta, le pide a la base la verificación del '
+        'entrenamiento y muestra el resultado', (tester) async {
+      final rutasOficiales = conVerificacion();
+
+      await _montar(tester, resumen: conRuta, rutasOficiales: rutasOficiales);
+
+      expect(rutasOficiales.verificados, ['e-123']);
+      expect(find.byKey(SeccionRutaOficial.clave), findsOneWidget);
+      expect(
+        find.text('Cubriste el 72 % de Vuelta al estadio'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('la sección va debajo de la XP y antes del recorrido', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resumen: conRuta,
+        rutasOficiales: conVerificacion(),
+      );
+
+      final seccion = tester.getRect(find.byKey(SeccionRutaOficial.clave));
+      final experiencia = tester.getRect(find.byType(SeccionExperiencia));
+      final recorrido = tester.getRect(find.text('Sin recorrido registrado'));
+      expect(seccion.top, greaterThanOrEqualTo(experiencia.bottom));
+      expect(seccion.bottom, lessThanOrEqualTo(recorrido.top));
+    });
+
+    testWidgets('también al abrirlo sin los datos de la navegación', (
+      tester,
+    ) async {
+      // Se recargó la página: el entrenamiento guardado trae su ruta.
+      final rutasOficiales = conVerificacion();
+
+      await _montar(
+        tester,
+        ruta: '/resumen/e-123',
+        resumen: null,
+        guardados: {'e-123': conRuta},
+        rutasOficiales: rutasOficiales,
+      );
+
+      expect(rutasOficiales.verificados, ['e-123']);
+      expect(find.byKey(SeccionRutaOficial.clave), findsOneWidget);
+    });
+
+    testWidgets('sin ruta no aparece ni se le pregunta nada a la base', (
+      tester,
+    ) async {
+      final rutasOficiales = conVerificacion();
+
+      await _montar(tester, resumen: resumen, rutasOficiales: rutasOficiales);
+
+      expect(find.byType(SeccionRutaOficial), findsNothing);
+      expect(find.byKey(SeccionRutaOficial.clave), findsNothing);
+      expect(rutasOficiales.verificados, isEmpty);
+      expect(find.textContaining('Cubriste'), findsNothing);
+    });
+
+    testWidgets('sin id de entrenamiento (sin sesión) no aparece aunque haya '
+        'ruta', (tester) async {
+      final rutasOficiales = conVerificacion();
+
+      await _montar(
+        tester,
+        ruta: '/resumen',
+        resumen: ResumenEntrenamiento(
+          entrenamientoId: null,
+          nombreActividad: 'Trote',
+          fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+          duracion: const Duration(minutes: 32, seconds: 17),
+          nombreRuta: 'Vuelta al estadio',
+        ),
+        rutasOficiales: rutasOficiales,
+      );
+
+      // El resumen sí se muestra; la verificación, no.
+      expect(find.text('Ruta: Vuelta al estadio'), findsOneWidget);
+      expect(find.byType(SeccionRutaOficial), findsNothing);
+      expect(find.byKey(SeccionRutaOficial.clave), findsNothing);
+      expect(rutasOficiales.verificados, isEmpty);
+    });
+  });
+
   group('ruta del resumen', () {
     test('lleva el id del entrenamiento', () {
       expect(ResumenScreen.rutaPara('e-123'), '/resumen/e-123');
@@ -590,6 +700,8 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
 /// Abre [ruta] con [resumen] como datos de la navegación, en un teléfono de
 /// 390 x 844, con el inicio como destino al cerrar y el reloj fijo el mismo día
 /// del entrenamiento. Las rutas del resumen son las mismas de `main.dart`.
+/// [rutasOficiales] contesta la verificación de la ruta; sin él, la base no
+/// encuentra ruta que verificar.
 ///
 /// Devuelve el repositorio falso para revisar qué se consultó.
 Future<_EntrenamientosFalso> _montar(
@@ -600,6 +712,7 @@ Future<_EntrenamientosFalso> _montar(
   Object? error,
   Completer<void>? espera,
   ExperienciaFalsa? experiencia,
+  RutasOficialesRepositorioFalso? rutasOficiales,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
@@ -657,6 +770,11 @@ Future<_EntrenamientosFalso> _montar(
         ),
         // El mapa del recorrido no descarga tiles reales.
         proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
+        // Un resumen con ruta le pregunta a la base si la completó (rutas
+        // oficiales, etapa 4): nunca a la base real.
+        rutasOficialesRepositoryProvider.overrideWithValue(
+          rutasOficiales ?? RutasOficialesRepositorioFalso(),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

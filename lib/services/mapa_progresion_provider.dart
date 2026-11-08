@@ -8,8 +8,9 @@ import 'rutas_oficiales_service.dart';
 ///
 /// Las dos lecturas van una tras otra para que el error que llegue a la
 /// pantalla sea el de verdad. `autoDispose`: se consulta de nuevo cada vez
-/// que se entra a la pestaña, y el cierre del entrenamiento lo invalida por
-/// si completó una ruta.
+/// que se entra a la pestaña. Si una carrera completa una ruta, lo invalidan
+/// el resumen (`SeccionRutaOficial`) o el reenvío de puntos al saberlo
+/// (etapa 4).
 final mapaProgresionProvider = FutureProvider.autoDispose<MapaProgresion>((
   ref,
 ) async {

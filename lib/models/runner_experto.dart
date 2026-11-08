@@ -68,7 +68,7 @@ class EstadoRunnerExperto {
   /// orden.
   ///
   /// Un nivel está alcanzado cuando la XP cubre su umbral: la misma cuenta que
-  /// hacen el mapa de progresión (SCRUM-226) y `evaluar_rol_experto()`.
+  /// hacen `Progresion` y `evaluar_rol_experto()`.
   ///
   /// La antigüedad se cuenta en días del calendario, no en horas: quien se
   /// registró el 15 de marzo cumple seis meses el 15 de septiembre, a

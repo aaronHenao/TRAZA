@@ -5,12 +5,17 @@ import 'package:traza/services/rutas_oficiales_service.dart';
 /// Repositorio de rutas oficiales en memoria (rutas oficiales, etapa 1):
 /// anota lo que le piden y reacomoda el camino como lo hacen las funciones
 /// de `0058_rutas_oficiales.sql`, sin huecos ni posiciones repetidas.
+///
+/// También dice qué rutas completó el corredor (etapa 2), como la tabla
+/// `rutas_completadas` con RLS: solo las propias.
 class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
   RutasOficialesRepositorioFalso({
     List<Ruta> oficiales = const [],
     List<Ruta> rutas = const [],
+    Set<String> completadasPorMi = const {},
   }) : enOrden = [...oficiales],
-       rutas = [...rutas];
+       rutas = [...rutas],
+       completadasPorMi = {...completadasPorMi};
 
   /// Las rutas oficiales en el orden del camino: la primera es la posición 1.
   final List<Ruta> enOrden;
@@ -28,6 +33,17 @@ class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
 
   /// Cuántas veces se pidió la lista.
   var consultas = 0;
+
+  /// Los ids de las rutas que completó el corredor con sesión (etapa 2).
+  /// Como en la tabla, puede traer rutas que ya no son oficiales.
+  Set<String> completadasPorMi;
+
+  /// Lo que lanza `completadas`, si algo. Va aparte de [errorAlListar] para
+  /// que pueda fallar una lectura del mapa sin la otra.
+  Object? errorAlLeerCompletadas;
+
+  /// Cuántas veces se pidieron las completadas.
+  var consultasCompletadas = 0;
 
   /// El id de cada ruta que se pidió agregar, aunque la base lo rechazara.
   final agregadas = <String>[];
@@ -51,6 +67,16 @@ class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
       for (final (i, ruta) in enOrden.indexed)
         RutaOficial(posicion: i + 1, ruta: ruta),
     ];
+  }
+
+  /// Una copia: lo que la prueba cambie después no altera lo ya leído.
+  @override
+  Future<Set<String>> completadas() async {
+    consultasCompletadas++;
+    final error = errorAlLeerCompletadas;
+    if (error != null) throw error;
+
+    return {...completadasPorMi};
   }
 
   /// Como `agregar_ruta_oficial`: la ruta tiene que existir y estar

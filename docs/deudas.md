@@ -62,12 +62,12 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 ## SCRUM-226: mapa de progresión
 
-**Qué quedó hecho:** pestaña **Progreso** en la barra inferior (`MapaProgresionScreen`, ruta `/progreso`) con el camino de niveles y el marcador "Tú". Sin niveles, muestra solo el punto inicial y un aviso.
+**Qué quedó hecho:** pestaña **Progreso** en la barra inferior (`MapaProgresionScreen`, ruta `/progreso`). Desde las rutas oficiales (etapa 2) ya no es el camino de niveles: es el camino de rutas oficiales que arma el administrador, con cada una completada, siguiente o bloqueada y el marcador "Tú" en la siguiente. Los niveles y la XP siguen en Tu progresión (`/progresion`), a donde ahora lleva la tarjeta de nivel de Inicio.
 
 **Qué falta:**
 
-- **Unificar con Tu progresión.** El equipo decidió dejar el mapa como pantalla aparte por ahora. Hoy conviven `/progreso` (mapa, en la barra) y `/progresion` (Tu progresión, desde Inicio), con nombres muy parecidos. Si se unen, la sección de insignias y la barra de avance de `ProgresionScreen` pasarían debajo del mapa.
 - **Diseño.** El prototipo no tiene pantalla de mapa; se usó el estilo de las tarjetas existentes. Validarlo con el equipo.
+- **Completar rutas.** Hasta la etapa 4 del [roadmap](roadmap_mapa_rutas_oficiales.md) nadie completa una ruta: `rutas_completadas` (`0059`) está vacía y todas salen "Siguiente" o "Bloqueada".
 
 ## SCRUM-192: la XP sale solo de los retos
 

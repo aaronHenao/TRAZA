@@ -36,9 +36,10 @@ final seccionRutas = GoRoute(
           PublicarRutaScreen(resumen: state.extra as ResumenEntrenamiento?),
     ),
     // El detalle de una ruta de la comunidad (SCRUM-240). Se abre con `push`
-    // desde Explorar rutas, el carrusel de la portada y el apartado de rutas
-    // del foro, así al cerrarlo se vuelve a donde estaba. Explorar y el
-    // carrusel mandan en `extra` la ruta elegida (SCRUM-250), para mostrar
+    // desde Explorar rutas, el carrusel de la portada, el apartado de rutas
+    // del foro y el mapa de progresión, así al cerrarlo se vuelve a donde
+    // estaba. Explorar, el carrusel y el mapa mandan en `extra` la ruta
+    // elegida (SCRUM-250), para mostrar
     // lo que ya se sabe de ella mientras llega su trazado; sin ella, el
     // detalle la pide por su id.
     GoRoute(

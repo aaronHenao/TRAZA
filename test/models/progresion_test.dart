@@ -186,9 +186,10 @@ void main() {
       expect(con(700, catalogo: const []).numeroNivel, 0);
     });
 
-    test('es el mismo número que la parada del mapa de progresión', () {
-      // El mapa pone el punto de partida en la parada 0 (SCRUM-226), así que
-      // la tarjeta y el mapa no pueden decir niveles distintos.
+    test('es la cantidad de niveles alcanzados', () {
+      // Cero antes del primer nivel: el corredor lee "Nivel 3" cuando lleva
+      // tres. (El mapa de progresión ya no cuenta niveles: es el camino de
+      // rutas oficiales, etapa 2.)
       for (final experiencia in [0, 99, 100, 700, 1500, 9000]) {
         final progresion = con(experiencia);
         final alcanzados = niveles

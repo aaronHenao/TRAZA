@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/progresion.dart';
-import '../screens/home/mapa_progresion_screen.dart';
+import '../screens/home/progresion_screen.dart';
 import '../services/progresion_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
@@ -14,8 +14,9 @@ import 'traza_card.dart';
 ///
 /// Dice de un vistazo lo que antes había que ir a buscar: en qué nivel va y
 /// cómo se llama, cuánta experiencia lleva, cuánta le falta para el siguiente
-/// y, con la barra, qué parte del tramo tiene recorrida. Al tocarla se abre el
-/// mapa de progresión (SCRUM-226), donde se ve el camino completo.
+/// y, con la barra, qué parte del tramo tiene recorrida. Al tocarla se abre Tu
+/// progresión, donde están todos los niveles: el mapa ya no los muestra, es
+/// el camino de rutas oficiales (rutas oficiales, etapa 2).
 ///
 /// Solo consulta: la experiencia la acredita el motor de experiencia y los
 /// umbrales los registra el administrador (SCRUM-177). Aquí no se calcula
@@ -34,9 +35,9 @@ class TarjetaNivel extends ConsumerWidget {
 
     return TrazaCard(
       key: clave,
-      // `go` y no `push`: el mapa es una sección de la barra inferior, así que
-      // se llega a él como a las demás y se vuelve por la barra.
-      onTap: () => context.go(MapaProgresionScreen.ruta),
+      // `push`, como la campana y Recompensas: Tu progresión no es una
+      // sección de la barra, se cierra y se vuelve aquí.
+      onTap: () => context.push(ProgresionScreen.ruta),
       child: switch (progresion) {
         AsyncData(value: final datos) when !datos.hayNiveles => const _Aviso(
           titulo: 'Todavía no hay niveles',

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza/models/nivel.dart';
 import 'package:traza/screens/home/mapa_progresion_screen.dart';
+import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/widgets/barra_progresion.dart';
@@ -18,7 +19,9 @@ import '../utiles/niveles_falso.dart';
 ///
 /// Es el criterio 1 de SCRUM-283: el nivel actual, la experiencia acumulada,
 /// la que falta para el siguiente y la barra de avance, todo sin salir de la
-/// portada. Al tocarla se abre el mapa de progresión.
+/// portada. Al tocarla se abre Tu progresión (rutas oficiales, etapa 2,
+/// criterio 8): el mapa ahora es el camino de rutas oficiales, y los niveles
+/// se ven allá.
 void main() {
   const niveles = [
     Nivel(id: 'n-1', nombre: 'Bronce', umbralExperiencia: 100),
@@ -148,40 +151,48 @@ void main() {
     });
   });
 
-  group('al tocarla', () {
-    testWidgets('abre el mapa de progresión', (tester) async {
+  group('al tocarla (rutas oficiales, etapa 2, criterio 8)', () {
+    testWidgets('abre Tu progresión y ya no el mapa', (tester) async {
       final router = await _montar(tester, niveles: niveles, experiencia: 250);
 
       await tester.tap(find.byKey(TarjetaNivel.clave));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pantalla Mapa'), findsOneWidget);
+      expect(find.text('Pantalla Progresión'), findsOneWidget);
+      expect(find.text('Pantalla Mapa'), findsNothing);
+      // Con `push`, la uri de la lista sigue siendo la de la portada: lo
+      // apilado es la última coincidencia.
       expect(
-        router.routerDelegate.currentConfiguration.uri.path,
-        MapaProgresionScreen.ruta,
+        router.routerDelegate.currentConfiguration.last.matchedLocation,
+        ProgresionScreen.ruta,
       );
     });
 
-    testWidgets('sin niveles también abre el mapa', (tester) async {
-      // El mapa sabe decir que todavía no hay camino (SCRUM-226): la tarjeta
-      // no tiene que bloquear la entrada.
+    testWidgets('sin niveles también abre Tu progresión', (tester) async {
+      // Tu progresión sabe decir que todavía no hay niveles: la tarjeta no
+      // tiene que bloquear la entrada.
       await _montar(tester, niveles: const [], experiencia: 0);
 
       await tester.tap(find.byKey(TarjetaNivel.clave));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pantalla Mapa'), findsOneWidget);
+      expect(find.text('Pantalla Progresión'), findsOneWidget);
     });
 
-    testWidgets('el mapa reemplaza la portada: no se apila encima', (
-      tester,
-    ) async {
+    testWidgets('Tu progresión se apila encima de la portada y se vuelve a '
+        'ella', (tester) async {
       final router = await _montar(tester, niveles: niveles, experiencia: 250);
 
       await tester.tap(find.byKey(TarjetaNivel.clave));
       await tester.pumpAndSettle();
 
-      expect(router.routerDelegate.currentConfiguration.matches.length, 1);
+      // `push`, como el resto de salidas a Tu progresión: la portada sigue
+      // debajo.
+      expect(router.routerDelegate.currentConfiguration.matches.length, 2);
+
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(TarjetaNivel.clave), findsOneWidget);
     });
   });
 
@@ -199,8 +210,9 @@ void main() {
   });
 }
 
-/// Monta la tarjeta como la monta la portada: en una pantalla con la ruta del
-/// mapa al lado, para poder tocarla y ver a dónde lleva.
+/// Monta la tarjeta como la monta la portada: en una pantalla con las rutas
+/// de Tu progresión y del mapa al lado, para poder tocarla y ver a dónde
+/// lleva.
 Future<GoRouter> _montar(
   WidgetTester tester, {
   required List<Nivel> niveles,
@@ -223,6 +235,10 @@ Future<GoRouter> _montar(
         builder: (_, _) => const Scaffold(
           body: Padding(padding: EdgeInsets.all(20), child: TarjetaNivel()),
         ),
+      ),
+      GoRoute(
+        path: ProgresionScreen.ruta,
+        builder: (_, _) => const Scaffold(body: Text('Pantalla Progresión')),
       ),
       GoRoute(
         path: MapaProgresionScreen.ruta,

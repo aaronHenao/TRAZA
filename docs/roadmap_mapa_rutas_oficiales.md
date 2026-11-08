@@ -125,7 +125,10 @@ Si se crean HU en Jira, la rama y los commits llevan su ID (`feature/SCRUM-X-...
 
 **Base de datos (`0060_entrenar_una_ruta.sql`)**
 
-- `entrenamientos.ruta_id uuid null references rutas(id) on delete set null`. Lo escribe el cliente al crear el entrenamiento, con la política de `insert` que ya existe. No da ventaja: la validación de la etapa 4 no le cree al cliente que la completó, mira los puntos.
+- `entrenamientos.ruta_id uuid null references rutas(id) on delete set null`. Lo escribe el cliente al crear el entrenamiento.
+- La policy de `insert` de `entrenamientos` se rehace: con `ruta_id`, solo una ruta que hoy es oficial.
+- Un trigger impide cambiar `ruta_id` después de crear el entrenamiento (salvo volver a null, que es lo que hace el `on delete set null`). Sin él, la policy de `update` dejaría reetiquetar un recorrido viejo, o uno largo varias veces, para completar rutas sin correrlas.
+- No da ventaja por sí sola: la validación de la etapa 4 no le cree al cliente que la completó, mira los puntos.
 
 **Flutter**
 
@@ -148,9 +151,12 @@ Si se crean HU en Jira, la rama y los commits llevan su ID (`feature/SCRUM-X-...
 
 **Base de datos (`0061_verificar_ruta_completada.sql`)**
 
-- `verificar_ruta_completada(p_entrenamiento_id) returns numeric`, que devuelve la cobertura. Es `security definer`, con `set search_path = public` y estas reglas:
-  - el entrenamiento es de `auth.uid()`, está `finalizado` y tiene `ruta_id`;
-  - la ruta es oficial;
+- `verificar_ruta_completada(p_entrenamiento_id) returns numeric`, que devuelve la cobertura. Es `security definer`, con `set search_path = public`, `revoke execute ... from public, anon`, y estas reglas:
+  - el entrenamiento es de `auth.uid()` (sin parámetro de usuario), está `finalizado` y tiene `ruta_id`. Si es de otro o no existe, el mismo `42501`;
+  - la ruta es oficial, comprobado antes de leer el trazado;
+  - **horas del servidor, no del teléfono**: un trigger fija `fecha_inicio := now()` al crear y no deja cambiarla, y otra marca del servidor al pasar a `finalizado`. Se exige `fecha_inicio >= rutas_oficiales.fecha_agregada` (nada retroactivo) y una duración real de al menos `distancia_km` / una velocidad máxima plausible;
+  - solo cuentan los puntos con `capturado_en` dentro de esa ventana, y se descartan los saltos entre puntos consecutivos (por `orden_secuencia`) con velocidad imposible;
+  - tope de puntos evaluados por entrenamiento y `set statement_timeout` en la función: si no, alguien podría insertar un millón de puntos y llamarla en bucle contra la base compartida;
   - compara `rutas.trazado` (jsonb) con `puntos_gps` usando `distancia_km_entre` (`0037`), con un filtro previo por caja de ±0.0005° (unos 55 m) para no comparar todos los puntos contra todos;
   - si la cobertura llega al umbral, `insert ... on conflict do nothing`.
 - Las tolerancias (40 m y 90 %) van como constantes con nombre al inicio de la función, para ajustarlas en una migración nueva si el equipo lo decide.
@@ -188,7 +194,7 @@ Si se crean HU en Jira, la rama y los commits llevan su ID (`feature/SCRUM-X-...
 
 ## Riesgos y límites
 
-- **GPS falsificado:** la base valida los puntos, pero los puntos los manda el teléfono. Con una app de ubicación falsa se podría completar una ruta. Pasa lo mismo con la distancia de los retos; va a *Límites conocidos*.
+- **Puntos fabricados:** la base valida los puntos, pero los puntos los manda el teléfono. No hace falta una app de ubicación falsa: con la publishable key y su propia sesión, un script puede leer el trazado de una ruta publicada e insertar esos mismos puntos. Las reglas de horas y velocidad de la etapa 4 lo encarecen (hay que fingir el tiempo real de la carrera), pero no lo impiden. Pasa lo mismo con la distancia de los retos; va a *Límites conocidos*, y pesa más si la etapa 5 da XP.
 - **Rendimiento de la validación:** un entrenamiento largo puede tener miles de puntos. El filtro por caja y el trazado simplificado (`simplificador_trazado.dart`) lo mantienen acotado. Medirlo en la etapa 4 antes del PR.
 - **Puntos sin subir:** si la validación corre antes de que lleguen todos los puntos, da una cobertura baja. Por eso se repite tras el reenvío (criterio 5 de la etapa 4).
 - **Cambio de comportamiento del mapa:** las pruebas del mapa de niveles se reescriben (etapa 2). Avisar al equipo, porque SCRUM-226 era de otro integrante.

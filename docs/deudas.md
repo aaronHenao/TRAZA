@@ -358,3 +358,12 @@ que la pantalla decide pasar, no en cómo se dibuja.
 - **Las candidatas son las 100 publicadas más recientes**, porque reusan `RutasRepository.publicadas()` (`limite = 100`). Si algún día hay más, las antiguas no se pueden agregar desde el selector. Se arregla con una búsqueda en el selector (ya existe `buscar()`).
 - **La guarda `SoloAdministrador` de `/admin/rutas-oficiales` en `main.dart` no tiene prueba.** Las rutas de niveles y recompensas tienen el mismo hueco. El patrón para probarla existe: sacar el `GoRoute` a una variable pública, como `rutasRevision` (`lib/screens/rutas/rutas_revision.dart`), y probarla como `test/screens/revision_rutas_acceso_test.dart`.
 - **Para la etapa 2:** hoy una ruta publicada no puede dejar de estarlo, así que el embed `ruta:rutas(...)` siempre la trae. Si algún día se pudiera retirar, el corredor recibiría `ruta: null` y `RutaOficial.desdeSupabase` tumbaría la lista. Para entonces: `rutas!inner` en la consulta, o quitarla del mapa al retirarla.
+
+## Rutas oficiales, etapa 3: correr una ruta oficial
+
+**Qué quedó hecho** (`0060_entrenar_una_ruta.sql`): en el detalle de la ruta oficial que le toca, el corredor tiene **Correr esta ruta**. La actividad muestra "Vas a correr", el entrenamiento se crea con su `ruta_id`, el tracking dibuja el trazado como guía y el resumen dice "Ruta: <nombre>" (también al abrirlo desde el historial).
+
+**Qué falta:**
+
+- **Nadie completa todavía una ruta.** Correrla entera no cambia el mapa hasta la etapa 4, que valida los puntos en la base.
+- **El detalle de cualquier ruta consulta el mapa del corredor** (rutas oficiales y completadas) para saber si ofrecer "Correr esta ruta": dos consultas más por detalle. Las pruebas viejas del detalle no sustituyen `rutasOficialesRepositoryProvider` y pasan porque ese provider cae en error sin Supabase; si se toca el detalle, conviene darles el doble.

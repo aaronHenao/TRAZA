@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/ruta_oficial.dart';
+import 'objetivos_service.dart' show SesionRequeridaException;
 import 'retos_service.dart' show SoloAdministradorException;
 import 'rutas_service.dart';
 
@@ -36,7 +37,8 @@ class RutaNoOficialException implements Exception {
   String toString() => 'RutaNoOficialException: la ruta no es oficial';
 }
 
-/// Las rutas del mapa de progresión y su orden (rutas oficiales, etapa 1).
+/// Las rutas del mapa de progresión y su orden (rutas oficiales, etapa 1), y
+/// cuáles completó el corredor (etapa 2).
 abstract interface class RutasOficialesRepository {
   /// Las rutas oficiales en el orden del camino.
   Future<List<RutaOficial>> oficiales();
@@ -56,18 +58,26 @@ abstract interface class RutasOficialesRepository {
   ///
   /// Lanza [SoloAdministradorException] o [RutaNoOficialException].
   Future<void> quitar(String rutaId);
+
+  /// Los ids de las rutas que completó el corredor con sesión (etapa 2).
+  /// Puede traer rutas que ya no son oficiales: el mapa las ignora.
+  Future<Set<String>> completadas();
 }
 
 /// Agregar, mover y quitar van por funciones de la base (`0058`): cada una
 /// reacomoda las demás posiciones en la misma transacción, y la tabla no
 /// deja escribir directo a nadie.
 class SupabaseRutasOficialesRepository implements RutasOficialesRepository {
-  /// [cliente] existe para las pruebas. En la app se deja vacío: se usa el
-  /// cliente global.
-  SupabaseRutasOficialesRepository({SupabaseClient? cliente})
-    : _clienteInyectado = cliente;
+  /// [cliente] y [usuarioActual] existen para las pruebas. En la app se dejan
+  /// vacíos: se usa el cliente global y el usuario de la sesión abierta.
+  SupabaseRutasOficialesRepository({
+    SupabaseClient? cliente,
+    String? Function()? usuarioActual,
+  }) : _clienteInyectado = cliente,
+       _usuarioActual = usuarioActual;
 
   static const _tabla = 'rutas_oficiales';
+  static const _tablaCompletadas = 'rutas_completadas';
 
   /// Códigos que lanzan las funciones de `0058_rutas_oficiales.sql`.
   static const _noEsAdmin = '42501';
@@ -76,6 +86,7 @@ class SupabaseRutasOficialesRepository implements RutasOficialesRepository {
   static const _yaOficial = 'TZ409';
 
   final SupabaseClient? _clienteInyectado;
+  final String? Function()? _usuarioActual;
 
   SupabaseClient get _cliente => _clienteInyectado ?? Supabase.instance.client;
 
@@ -116,6 +127,27 @@ class SupabaseRutasOficialesRepository implements RutasOficialesRepository {
   @override
   Future<void> quitar(String rutaId) =>
       _cambiar('quitar_ruta_oficial', {'p_ruta_id': rutaId});
+
+  @override
+  Future<Set<String>> completadas() async {
+    // La policy de 0059 ya deja ver solo las propias; el filtro va igual,
+    // como en el historial: si un día el administrador puede verlas todas,
+    // su mapa no mezcla las ajenas.
+    final filas = await _cliente
+        .from(_tablaCompletadas)
+        .select('ruta_id')
+        .eq('usuario_id', _usuarioId());
+    return {for (final fila in filas) fila['ruta_id'] as String};
+  }
+
+  String _usuarioId() {
+    final usuarioActual = _usuarioActual;
+    final id = usuarioActual != null
+        ? usuarioActual()
+        : _cliente.auth.currentUser?.id;
+    if (id == null) throw const SesionRequeridaException();
+    return id;
+  }
 
   Future<void> _cambiar(String funcion, Map<String, dynamic> parametros) async {
     try {

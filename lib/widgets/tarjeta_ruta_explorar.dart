@@ -45,6 +45,16 @@ class TarjetaRutaExplorar extends StatelessWidget {
   /// (SCRUM-363).
   static const sinDificultad = 'Sin clasificar';
 
+  /// Distancia y dificultad en una línea, con los mismos textos que esta
+  /// tarjeta cuando falta alguna. La usan las listas de rutas oficiales
+  /// (etapas 1 y 2), que no llevan pastillas.
+  static String distanciaYDificultad(Ruta ruta) {
+    final km = ruta.tieneDistancia
+        ? '${TarjetaReto.textoKm(ruta.distanciaKm!)} km'
+        : TarjetaRuta.sinDistancia;
+    return '$km · ${ruta.dificultad?.etiqueta ?? sinDificultad}';
+  }
+
   /// Lo que se dice del desnivel mientras no haya de dónde sacarlo.
   static const sinDesnivel = 'Desnivel no disponible';
 

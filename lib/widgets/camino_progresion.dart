@@ -1,19 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../models/mapa_progresion.dart';
+import '../models/ruta.dart';
 import '../theme/app_colors.dart';
+import 'tarjeta_ruta_explorar.dart';
 
-/// El camino del mapa de progresión (SCRUM-226): el inicio y los niveles de
-/// arriba abajo, con el marcador "Tú" donde va el corredor.
+/// El camino del mapa de progresión: las rutas oficiales de arriba abajo,
+/// con el marcador "Tú" en la que le toca al corredor (rutas oficiales,
+/// etapa 2).
 ///
 /// Es una columna y no un `ListView`: el desplazamiento lo pone la pantalla,
 /// y así todas las paradas existen aunque queden fuera de la vista.
 class CaminoProgresion extends StatelessWidget {
-  const CaminoProgresion({required this.mapa, super.key});
+  const CaminoProgresion({required this.mapa, this.onTapRuta, super.key});
 
   final MapaProgresion mapa;
 
+  /// Qué hacer al tocar una parada, sea cual sea su estado: el detalle de la
+  /// ruta sirve también para ver la que viene.
+  final void Function(Ruta ruta)? onTapRuta;
+
   static const claveMarcador = Key('camino-marcador');
+  static Key claveParada(String rutaId) => Key('parada-$rutaId');
 
   /// Ancho de la columna donde van los círculos y la línea del camino.
   static const _anchoRiel = 40.0;
@@ -22,27 +30,22 @@ class CaminoProgresion extends StatelessWidget {
   Widget build(BuildContext context) {
     final paradas = mapa.paradas;
     final ultima = paradas.length - 1;
-    final indice = mapa.indiceActual;
+    final actual = mapa.indiceActual;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < paradas.length; i++) ...[
           _Parada(
-            key: ValueKey('parada-$i'),
+            key: claveParada(paradas[i].ruta.id),
             parada: paradas[i],
-            // Sin tramo por delante (nivel máximo o sin niveles), el
-            // marcador se queda sobre la parada.
-            conMarcador: i == indice && mapa.enUltimaParada,
+            conMarcador: i == actual,
+            onTap: onTapRuta == null ? null : () => onTapRuta!(paradas[i].ruta),
           ),
           if (i < ultima)
-            _Tramo(
-              key: ValueKey('tramo-$i'),
-              recorrido: i < indice
-                  ? 1
-                  : (i == indice ? mapa.avanceEnTramo : 0),
-              conMarcador: i == indice,
-            ),
+            // Relleno hasta donde va el corredor: los tramos que quedan
+            // atrás de su parada.
+            _Tramo(recorrido: actual != null && i < actual),
         ],
       ],
     );
@@ -50,76 +53,94 @@ class CaminoProgresion extends StatelessWidget {
 }
 
 class _Parada extends StatelessWidget {
-  const _Parada({required this.parada, required this.conMarcador, super.key});
+  const _Parada({
+    required this.parada,
+    required this.conMarcador,
+    required this.onTap,
+    super.key,
+  });
 
   final ParadaMapa parada;
   final bool conMarcador;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final alcanzada = parada.alcanzada;
-    final icono = parada.esInicio
-        ? Icons.flag
-        : (alcanzada ? Icons.check_circle : Icons.lock_outline);
+    final ruta = parada.ruta;
+    final (icono, etiqueta, activa) = switch (parada.estado) {
+      EstadoParada.completada => (Icons.check_circle, 'Completada', true),
+      // Bandera y no corredor: el corredor es el marcador "Tú", que va justo
+      // en esta parada.
+      EstadoParada.siguiente => (Icons.flag_outlined, 'Siguiente', true),
+      EstadoParada.bloqueada => (Icons.lock_outline, 'Bloqueada', false),
+    };
 
-    return Row(
-      children: [
-        Container(
-          width: CaminoProgresion._anchoRiel,
-          height: CaminoProgresion._anchoRiel,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: alcanzada ? AppColors.primaryTint : AppColors.bgAlt,
-          ),
-          child: Icon(
-            icono,
-            size: 20,
-            color: alcanzada ? AppColors.primary : AppColors.ink3,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                parada.nombre,
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                  color: alcanzada ? AppColors.ink : AppColors.ink2,
-                ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: CaminoProgresion._anchoRiel,
+              height: CaminoProgresion._anchoRiel,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: activa ? AppColors.primaryTint : AppColors.bgAlt,
               ),
-              if (!parada.esInicio)
-                Text(
-                  '${parada.umbralExperiencia} XP',
-                  style: const TextStyle(fontSize: 12, color: AppColors.ink2),
-                ),
-            ],
-          ),
+              child: Icon(
+                icono,
+                size: 20,
+                color: activa ? AppColors.primary : AppColors.ink3,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ruta.nombre,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: activa ? AppColors.ink : AppColors.ink2,
+                    ),
+                  ),
+                  Text(
+                    TarjetaRutaExplorar.distanciaYDificultad(ruta),
+                    style: const TextStyle(fontSize: 12, color: AppColors.ink2),
+                  ),
+                  Text(
+                    etiqueta,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: activa ? AppColors.primary : AppColors.ink3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (conMarcador) ...[const SizedBox(width: 8), const _Marcador()],
+          ],
         ),
-        if (conMarcador) ...[const SizedBox(width: 8), const _Marcador()],
-      ],
+      ),
     );
   }
 }
 
-/// La línea entre dos paradas, rellena hasta donde va el corredor.
+/// La línea entre dos paradas: llena si ya quedó atrás.
 class _Tramo extends StatelessWidget {
-  const _Tramo({required this.recorrido, required this.conMarcador, super.key});
+  const _Tramo({required this.recorrido});
 
-  /// De 0 a 1. Null no ocurre aquí (siempre hay siguiente parada), pero se
-  /// trata como cero.
-  final double? recorrido;
-  final bool conMarcador;
+  final bool recorrido;
 
-  static const _alto = 72.0;
-  static const _altoMarcador = 28.0;
+  static const _alto = 28.0;
 
   @override
   Widget build(BuildContext context) {
-    final fraccion = recorrido ?? 0;
-
     return SizedBox(
       height: _alto,
       child: Row(
@@ -130,35 +151,11 @@ class _Tramo extends StatelessWidget {
               child: Container(
                 width: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.line,
+                  color: recorrido ? AppColors.primary : AppColors.line,
                   borderRadius: BorderRadius.circular(2),
-                ),
-                alignment: Alignment.topCenter,
-                child: FractionallySizedBox(
-                  heightFactor: fraccion,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: conMarcador
-                ? Stack(
-                    children: [
-                      Positioned(
-                        top: fraccion * (_alto - _altoMarcador),
-                        left: 0,
-                        child: const _Marcador(),
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
           ),
         ],
       ),
@@ -166,8 +163,8 @@ class _Tramo extends StatelessWidget {
   }
 }
 
-/// "Tú": dónde está el corredor (criterio 1). Usa un icono distinto de los de
-/// las paradas para no confundirse con ellas.
+/// "Tú": dónde está el corredor. Usa un icono distinto de los de las paradas
+/// para no confundirse con ellas.
 class _Marcador extends StatelessWidget {
   const _Marcador();
 
@@ -175,7 +172,7 @@ class _Marcador extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       key: CaminoProgresion.claveMarcador,
-      height: _Tramo._altoMarcador,
+      height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: AppColors.accent,

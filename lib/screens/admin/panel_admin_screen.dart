@@ -10,6 +10,7 @@ import '../rutas/revision_rutas_screen.dart';
 import 'gestion_niveles_screen.dart';
 import 'gestion_recompensas_screen.dart';
 import 'gestion_retos_screen.dart';
+import 'gestion_rutas_oficiales_screen.dart';
 import 'moderacion_foro_screen.dart';
 
 /// Panel del administrador (SCRUM-194): a donde llega al entrar.
@@ -25,6 +26,7 @@ class PanelAdminScreen extends StatelessWidget {
   static const claveForo = Key('panel-admin-foro');
   static const claveRutas = Key('panel-admin-rutas');
   static const claveRecompensas = Key('panel-admin-recompensas');
+  static const claveRutasOficiales = Key('panel-admin-rutas-oficiales');
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +90,17 @@ class PanelAdminScreen extends StatelessWidget {
                     'Crea los beneficios que los corredores obtienen con sus '
                     'puntos.',
                 onTap: () => context.push(GestionRecompensasScreen.ruta),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Rutas oficiales, etapa 1: el camino del mapa de progresión.
+              _TarjetaAcceso(
+                clave: claveRutasOficiales,
+                icono: Icons.map_outlined,
+                titulo: 'Mapa de rutas oficiales',
+                detalle:
+                    'Elige qué rutas publicadas forman el mapa y en qué '
+                    'orden.',
+                onTap: () => context.push(GestionRutasOficialesScreen.ruta),
               ),
             ],
           ),

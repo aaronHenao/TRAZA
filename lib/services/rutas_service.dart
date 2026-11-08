@@ -262,6 +262,10 @@ class SupabaseRutasRepository implements RutasRepository {
       'distancia_km,estado,motivo_rechazo,fecha_creacion,fecha_publicacion,'
       'miniatura,dificultad,recorrido_completo';
 
+  /// Las mismas columnas, para quien embebe una ruta en otra consulta
+  /// (rutas oficiales, etapa 1).
+  static const columnas = _columnas;
+
   static const _columnasConTrazado = '$_columnas,trazado';
 
   /// La policy de insert no dejó crear la fila.

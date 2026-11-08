@@ -9,13 +9,14 @@ import 'package:traza/services/retos_service.dart'
     show SoloAdministradorException;
 import 'package:traza/services/rutas_oficiales_service.dart';
 
-/// Pruebas del repositorio real de rutas oficiales (rutas oficiales, etapa
-/// 1).
+/// Pruebas del repositorio real de rutas oficiales (rutas oficiales, etapas
+/// 1 y 2).
 ///
 /// No hay base de datos: un cliente HTTP falso intercepta lo que el
 /// repositorio le manda a PostgREST. Que la base reacomode las posiciones y
 /// niegue los cambios a quien no es administrador lo prueba el script de
-/// `0058_rutas_oficiales.sql`.
+/// `0058_rutas_oficiales.sql`; que cada corredor vea solo sus rutas
+/// completadas, el de `0059_rutas_completadas.sql`.
 void main() {
   Map<String, Object?> filaRuta(String id, String nombre, {String? dif}) => {
     'id': id,
@@ -75,6 +76,56 @@ void main() {
       addTearDown(supabase.cerrar);
 
       expect(await supabase.repositorio.oficiales(), isEmpty);
+    });
+  });
+
+  group('las completadas del corredor (etapa 2, criterio 5)', () {
+    test('pide rutas_completadas solo con ruta_id y devuelve el conjunto de '
+        'ids', () async {
+      final supabase = _SupabaseFalso(
+        respuesta: [
+          {'ruta_id': 'ruta-a'},
+          {'ruta_id': 'ruta-c'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final completadas = await supabase.repositorio.completadas();
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'GET');
+      expect(peticion.url.path, '/rest/v1/rutas_completadas');
+      // Solo el id: el mapa calcula con el conjunto, no con posiciones
+      // guardadas, y la cobertura no le hace falta.
+      expect(peticion.url.queryParameters['select'], 'ruta_id');
+      // El filtro va aunque RLS ya limite: si mañana se agrega una policy
+      // para que el administrador vea todas, su mapa no mezcla las ajenas.
+      expect(peticion.url.queryParameters['usuario_id'], 'eq.usuario-1');
+      expect(completadas, {'ruta-a', 'ruta-c'});
+    });
+
+    test('sin rutas completadas, '
+        'devuelve un conjunto vacío', () async {
+      final supabase = _SupabaseFalso(respuesta: const []);
+      addTearDown(supabase.cerrar);
+
+      final completadas = await supabase.repositorio.completadas();
+
+      expect(completadas, isA<Set<String>>());
+      expect(completadas, isEmpty);
+    });
+
+    test('un error de la base no se disfraza: la pantalla decide qué '
+        'decir', () {
+      final supabase = _SupabaseFalso(codigoPostgres: '08006');
+      addTearDown(supabase.cerrar);
+
+      expect(
+        supabase.repositorio.completadas(),
+        throwsA(
+          isA<PostgrestException>().having((e) => e.code, 'code', '08006'),
+        ),
+      );
     });
   });
 
@@ -239,8 +290,10 @@ class _SupabaseFalso {
 
   late final SupabaseClient cliente;
 
-  RutasOficialesRepository get repositorio =>
-      SupabaseRutasOficialesRepository(cliente: cliente);
+  RutasOficialesRepository get repositorio => SupabaseRutasOficialesRepository(
+    cliente: cliente,
+    usuarioActual: () => 'usuario-1',
+  );
 
   Future<http.Response> _responder(http.Request peticion) async {
     peticiones.add(peticion);

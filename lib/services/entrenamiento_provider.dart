@@ -273,14 +273,15 @@ class CierreEntrenamiento {
     // (SCRUM-96).
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
     // La XP la asignó el trigger en el mismo cierre (SCRUM-206): la
-    // progresión vuelve a leer la acumulada, las insignias que esa XP haya
-    // desbloqueado (SCRUM-193) y la posición en el mapa (SCRUM-226).
+    // progresión vuelve a leer la acumulada y las insignias que esa XP haya
+    // desbloqueado (SCRUM-193). El mapa, por si el entrenamiento completó
+    // una ruta oficial (rutas oficiales, etapas 2 y 4).
     _ref
       ..invalidate(progresionProvider)
       ..invalidate(insigniasProvider);
     // Solo si el mapa está abierto: si no, se lee al entrar a su pestaña. Sin
-    // esta guarda, invalidarlo cerrado sumaba una consulta de XP que nadie
-    // iba a ver (lo detecta cierre_entrenamiento_test).
+    // esta guarda, invalidarlo cerrado sumaba una consulta que nadie iba a
+    // ver (lo detecta cierre_entrenamiento_test).
     if (_ref.exists(mapaProgresionProvider)) {
       _ref.invalidate(mapaProgresionProvider);
     }

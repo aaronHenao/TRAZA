@@ -1,134 +1,122 @@
 import 'package:flutter/foundation.dart';
 
-import 'nivel.dart';
-import 'progresion.dart';
+import 'ruta.dart';
+import 'ruta_oficial.dart';
 
-/// Un punto del camino del mapa de progresión (SCRUM-226): el inicio o uno de
-/// los niveles que registró el administrador.
+/// En qué va el corredor con cada ruta del mapa (rutas oficiales, etapa 2).
+enum EstadoParada {
+  /// Ya la corrió completa.
+  completada,
+
+  /// La primera, en el orden del camino, que le falta.
+  siguiente,
+
+  /// Le falta y viene después de la siguiente.
+  bloqueada,
+}
+
+/// Una ruta oficial en el camino del mapa de progresión, con su estado para
+/// el corredor (rutas oficiales, etapa 2).
 @immutable
 class ParadaMapa {
-  const ParadaMapa({
-    required this.nombre,
-    required this.umbralExperiencia,
-    required this.alcanzada,
-    this.nivelId,
-  });
+  const ParadaMapa({required this.oficial, required this.estado});
 
-  /// Null en la parada inicial, que no es un nivel.
-  final String? nivelId;
-  final String nombre;
-  final int umbralExperiencia;
-  final bool alcanzada;
+  final RutaOficial oficial;
+  final EstadoParada estado;
 
-  bool get esInicio => nivelId == null;
+  Ruta get ruta => oficial.ruta;
 
   @override
   bool operator ==(Object other) =>
-      other is ParadaMapa &&
-      other.nivelId == nivelId &&
-      other.nombre == nombre &&
-      other.umbralExperiencia == umbralExperiencia &&
-      other.alcanzada == alcanzada;
+      other is ParadaMapa && other.oficial == oficial && other.estado == estado;
 
   @override
-  int get hashCode =>
-      Object.hash(nivelId, nombre, umbralExperiencia, alcanzada);
+  int get hashCode => Object.hash(oficial, estado);
 
   @override
-  String toString() =>
-      'ParadaMapa($nombre, $umbralExperiencia XP'
-      '${alcanzada ? ', alcanzada' : ''})';
+  String toString() => 'ParadaMapa(${ruta.nombre}, ${estado.name})';
 }
 
-/// El camino de niveles del corredor y en qué punto de él está (SCRUM-226).
+/// El camino de rutas oficiales del corredor y en qué punto de él va
+/// (rutas oficiales, etapa 2; antes, el camino de niveles de SCRUM-226).
 ///
-/// Solo ordena y ubica: dónde termina cada tramo y cuánto lleva recorrido lo
-/// sabe ya [Progresion] (SCRUM-178), así que se apoya en ella en vez de
-/// repetir la cuenta.
+/// Se calcula a partir de qué rutas completó, no de una posición guardada:
+/// si el administrador reordena o quita una ruta, el camino se rehace y nadie
+/// pierde lo que ya corrió.
 @immutable
 class MapaProgresion {
-  const MapaProgresion._({
-    required this.experiencia,
-    required this.paradas,
-    required this.indiceActual,
-    required this.avanceEnTramo,
-  });
+  const MapaProgresion._({required this.paradas, required this.indiceActual});
 
-  /// Ubica a quien tiene [experiencia] en el camino de [niveles], que pueden
-  /// llegar en cualquier orden.
+  /// Ubica al corredor en el camino de [oficiales], que pueden llegar en
+  /// cualquier orden. [completadas] son los ids de las rutas que completó;
+  /// las que ya no son oficiales no cuentan.
   factory MapaProgresion.calcular({
-    required int experiencia,
-    required List<Nivel> niveles,
+    required List<RutaOficial> oficiales,
+    required Set<String> completadas,
   }) {
-    final ordenados = [...niveles]
-      ..sort((a, b) => a.umbralExperiencia.compareTo(b.umbralExperiencia));
-    final progresion = Progresion.calcular(
-      experiencia: experiencia,
-      niveles: ordenados,
+    final ordenadas = [...oficiales]
+      ..sort((a, b) => a.posicion.compareTo(b.posicion));
+
+    // La siguiente es la primera que falta. Una completada después de ella
+    // (fuera de orden) se marca, pero no mueve al corredor.
+    final siguiente = ordenadas.indexWhere(
+      (oficial) => !completadas.contains(oficial.ruta.id),
     );
 
-    // La regla de cuándo se alcanza un nivel vive en Progresion: aquí solo
-    // se busca en qué parada quedó (0 = el inicio, antes del primer nivel).
-    final actual = progresion.nivelActual;
-    final indiceActual = actual == null
-        ? 0
-        : ordenados.indexWhere((nivel) => nivel.id == actual.id) + 1;
-
     final paradas = [
-      // El punto de partida: ahí está quien todavía no ha avanzado
-      // (criterio 2), y es el único si no hay niveles.
-      const ParadaMapa(nombre: 'Inicio', umbralExperiencia: 0, alcanzada: true),
-      for (final (i, nivel) in ordenados.indexed)
+      for (final (i, oficial) in ordenadas.indexed)
         ParadaMapa(
-          nivelId: nivel.id,
-          nombre: nivel.nombre,
-          umbralExperiencia: nivel.umbralExperiencia,
-          alcanzada: i + 1 <= indiceActual,
+          oficial: oficial,
+          estado: completadas.contains(oficial.ruta.id)
+              ? EstadoParada.completada
+              : (i == siguiente
+                    ? EstadoParada.siguiente
+                    : EstadoParada.bloqueada),
         ),
     ];
 
     return MapaProgresion._(
-      experiencia: experiencia,
       paradas: List.unmodifiable(paradas),
-      indiceActual: indiceActual,
-      avanceEnTramo: progresion.avance,
+      // Sin siguiente, las completó todas: el corredor queda en la última.
+      indiceActual: paradas.isEmpty
+          ? null
+          : (siguiente < 0 ? paradas.length - 1 : siguiente),
     );
   }
 
-  final int experiencia;
-
-  /// La parada inicial seguida de los niveles, de menor a mayor umbral.
+  /// Las rutas oficiales en el orden del camino.
   final List<ParadaMapa> paradas;
 
-  /// Índice en [paradas] de la última alcanzada: 0 es el punto inicial.
-  final int indiceActual;
+  /// Dónde va el corredor: la siguiente; si las completó todas, la última.
+  /// Null si no hay rutas oficiales.
+  final int? indiceActual;
 
-  /// Qué parte del tramo hacia la siguiente parada lleva, de 0 a 1. Null si
-  /// no hay siguiente: nivel máximo o sin niveles.
-  final double? avanceEnTramo;
+  bool get hayRutas => paradas.isNotEmpty;
 
-  bool get hayNiveles => paradas.length > 1;
+  int get totalCompletadas => paradas
+      .where((parada) => parada.estado == EstadoParada.completada)
+      .length;
 
-  bool get enUltimaParada => indiceActual == paradas.length - 1;
+  ParadaMapa? get siguiente {
+    for (final parada in paradas) {
+      if (parada.estado == EstadoParada.siguiente) return parada;
+    }
+    return null;
+  }
+
+  bool get caminoTerminado => hayRutas && siguiente == null;
 
   @override
   bool operator ==(Object other) =>
       other is MapaProgresion &&
-      other.experiencia == experiencia &&
       listEquals(other.paradas, paradas) &&
-      other.indiceActual == indiceActual &&
-      other.avanceEnTramo == avanceEnTramo;
+      other.indiceActual == indiceActual;
 
   @override
-  int get hashCode => Object.hash(
-    experiencia,
-    Object.hashAll(paradas),
-    indiceActual,
-    avanceEnTramo,
-  );
+  int get hashCode => Object.hash(Object.hashAll(paradas), indiceActual);
 
   @override
   String toString() =>
-      'MapaProgresion($experiencia XP, parada $indiceActual de '
-      '${paradas.length}, avance $avanceEnTramo)';
+      'MapaProgresion($totalCompletadas de ${paradas.length} completadas, '
+      'actual $indiceActual)';
 }

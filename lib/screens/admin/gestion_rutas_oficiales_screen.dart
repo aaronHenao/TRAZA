@@ -9,8 +9,6 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/ancho_contenido.dart';
 import '../../widgets/estado_vacio.dart';
-import '../../widgets/tarjeta_reto.dart';
-import '../../widgets/tarjeta_ruta.dart';
 import '../../widgets/tarjeta_ruta_explorar.dart';
 import '../../widgets/traza_card.dart';
 import '../../widgets/traza_toast.dart';
@@ -192,7 +190,7 @@ class _Fila extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _detalle(ruta),
+                  TarjetaRutaExplorar.distanciaYDificultad(ruta),
                   style: const TextStyle(fontSize: 12.5, color: AppColors.ink2),
                 ),
               ],
@@ -221,19 +219,6 @@ class _Fila extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Distancia y dificultad en una línea, con los mismos textos que Explorar
-/// cuando falta alguna: las rutas publicadas antes de la clasificación no
-/// tienen dificultad.
-String _detalle(Ruta ruta) {
-  final distancia = ruta.distanciaKm;
-  final km = distancia == null
-      ? TarjetaRuta.sinDistancia
-      : '${TarjetaReto.textoKm(distancia)} km';
-  final dificultad =
-      ruta.dificultad?.etiqueta ?? TarjetaRutaExplorar.sinDificultad;
-  return '$km · $dificultad';
 }
 
 /// Muestra el mensaje de la acción si falló. Si salió bien, la lista se
@@ -311,7 +296,7 @@ class _SelectorCandidatas extends ConsumerWidget {
                         ),
                         title: Text(ruta.nombre),
                         subtitle: Text(
-                          'Por ${ruta.autorNombre} · ${_detalle(ruta)}',
+                          'Por ${ruta.autorNombre} · ${TarjetaRutaExplorar.distanciaYDificultad(ruta)}',
                         ),
                         onTap: () => Navigator.of(context).pop(ruta),
                       ),

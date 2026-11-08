@@ -71,9 +71,9 @@ class Progresion {
   /// En qué puesto de la progresión va [nivelActual]: 1 es el primer nivel,
   /// contando de menor a mayor umbral. Cero mientras no alcance ninguno.
   ///
-  /// Es el número que el corredor lee como "Nivel 3", y el mismo que el mapa
-  /// de progresión usa como parada actual (SCRUM-226): la parada 0 es el
-  /// punto de partida, así que los dos cuentan igual y no se contradicen.
+  /// Es el número que el corredor lee como "Nivel 3". (El mapa de
+  /// progresión ya no cuenta niveles: desde las rutas oficiales, etapa 2, es
+  /// un camino de rutas.)
   final int numeroNivel;
 
   /// Si el administrador ya registró niveles.

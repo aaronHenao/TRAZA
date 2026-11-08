@@ -17,6 +17,7 @@ import 'package:traza/models/tipo_objetivo.dart';
 import 'package:traza/models/vigencia_reto.dart';
 import 'package:traza/screens/home/inicio_screen.dart';
 import 'package:traza/screens/home/mapa_progresion_screen.dart';
+import 'package:traza/screens/home/progresion_screen.dart';
 import 'package:traza/screens/rutas/detalle_ruta_screen.dart';
 import 'package:traza/screens/rutas/rutas_screen.dart';
 import 'package:traza/services/experiencia_service.dart';
@@ -223,6 +224,10 @@ void main() {
         GoRoute(
           path: MapaProgresionScreen.ruta,
           builder: (_, _) => const Scaffold(body: Text('Pantalla Mapa')),
+        ),
+        GoRoute(
+          path: ProgresionScreen.ruta,
+          builder: (_, _) => const Scaffold(body: Text('Pantalla Progresión')),
         ),
         GoRoute(
           path: BloqueRetoActivo.rutaRetos,
@@ -748,10 +753,11 @@ void main() {
     });
 
     testWidgets('cada bloque lleva a su sección', (tester) async {
-      // Las cuatro salidas de los bloques, cada una en su propia portada: con
-      // `go` no hay a dónde volver, y es así a propósito.
+      // Las cuatro salidas de los bloques, cada una en su propia portada. La
+      // tarjeta de nivel va a Tu progresión y no al mapa (rutas oficiales,
+      // etapa 2, criterio 8).
       final destinos = <String, String>{
-        'Bronce': 'Pantalla Mapa',
+        'Bronce': 'Pantalla Progresión',
         'Corre 20 km esta semana': 'Pantalla Retos',
         'Ver todas': 'Pantalla Rutas',
         'Ver todos': 'Pantalla Perfil',
@@ -802,15 +808,21 @@ void main() {
       expect(find.text('Pantalla Perfil'), findsOneWidget);
     });
 
-    testWidgets('la tarjeta de nivel abre el mapa de progresión (SCRUM-286)', (
-      tester,
-    ) async {
-      await abrirPortada(tester);
+    testWidgets('la tarjeta de nivel abre Tu progresión y no el mapa (rutas '
+        'oficiales, etapa 2, criterio 8)', (tester) async {
+      final router = await abrirPortada(tester);
 
       await tester.tap(find.byKey(TarjetaNivel.clave));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pantalla Mapa'), findsOneWidget);
+      expect(find.text('Pantalla Progresión'), findsOneWidget);
+      expect(find.text('Pantalla Mapa'), findsNothing);
+      // Con `push`, la uri de la lista sigue siendo la de la portada: lo
+      // apilado es la última coincidencia.
+      expect(
+        router.routerDelegate.currentConfiguration.last.matchedLocation,
+        ProgresionScreen.ruta,
+      );
     });
 
     testWidgets('la tarjeta de recompensas lleva al catálogo de beneficios '

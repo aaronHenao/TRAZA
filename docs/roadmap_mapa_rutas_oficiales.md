@@ -102,7 +102,7 @@ Si se crean HU en Jira, la rama y los commits llevan su ID (`feature/SCRUM-X-...
 
 **Flutter**
 
-- Un modelo nuevo para el camino de rutas, que reemplaza a `MapaProgresion` en la pantalla. La regla del marcador ("primera oficial no completada") se calcula ahí, como función pura.
+- `MapaProgresion` se reescribe para el camino de rutas, conservando su nombre (y el de `ParadaMapa`, `mapaProgresionProvider` y `CaminoProgresion`): sigue siendo el mapa de progresión, ahora medido en rutas, y así no hay que renombrar en todo el código. La regla del marcador ("primera oficial no completada") se calcula ahí, como función pura.
 - `CaminoProgresion` se adapta para dibujar paradas de ruta (estado y distancia en lugar de XP), y se reusa el dibujo del camino.
 - `mapaProgresionProvider` lee las rutas oficiales y las completadas del usuario. La invalidación que hace hoy `entrenamiento_provider.dart` al cerrar un entrenamiento se conserva.
 - `tarjeta_nivel.dart` navega a `ProgresionScreen.ruta`.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/ruta.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/traza_toast.dart';
@@ -13,6 +14,8 @@ import '../../services/permisos_provider.dart';
 import '../../widgets/requiere_permiso_ubicacion.dart';
 import '../../widgets/chips_tipo_actividad.dart';
 import '../../widgets/seccion_iniciar_entrenamiento.dart';
+import '../../widgets/tarjeta_ruta_explorar.dart';
+import '../../widgets/traza_card.dart';
 import '../../widgets/ventana_permiso_salud.dart';
 import '../onboarding/perfil_screen.dart';
 
@@ -25,7 +28,22 @@ import '../onboarding/perfil_screen.dart';
 /// actividad durante el entrenamiento de SCRUM-94 y el inicio con un solo
 /// toque de SCRUM-96.
 class ActividadScreen extends ConsumerStatefulWidget {
-  const ActividadScreen({super.key});
+  const ActividadScreen({super.key, this.ruta});
+
+  /// La ruta oficial que se va a correr, si se llegó desde "Correr esta
+  /// ruta" en su detalle (rutas oficiales, etapa 3). Null en un
+  /// entrenamiento libre.
+  final Ruta? ruta;
+
+  static const claveRutaElegida = Key('actividad-ruta-elegida');
+
+  /// Arma la pantalla con la navegación: desde "Correr esta ruta" llega la
+  /// ruta en `extra`; desde el "+" de la portada, nada. Cualquier otra cosa
+  /// en `extra` se ignora y abre un entrenamiento libre.
+  factory ActividadScreen.desdeRuta(GoRouterState estado) {
+    final extra = estado.extra;
+    return ActividadScreen(ruta: extra is Ruta ? extra : null);
+  }
 
   @override
   ConsumerState<ActividadScreen> createState() => _ActividadScreenState();
@@ -54,7 +72,9 @@ class _ActividadScreenState extends ConsumerState<ActividadScreen> {
       if (!await ofrecerPermisoSalud(context, ref)) return;
       if (!mounted) return;
 
-      final error = await ref.read(inicioEntrenamientoProvider).iniciar();
+      final error = await ref
+          .read(inicioEntrenamientoProvider)
+          .iniciar(ruta: widget.ruta);
       if (!mounted) return;
 
       // Sin entrenamiento creado la actividad no arranca: se explica por qué
@@ -139,6 +159,10 @@ class _ActividadScreenState extends ConsumerState<ActividadScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const _Cabecera(),
+              if (widget.ruta case final ruta?) ...[
+                const SizedBox(height: AppSpacing.md),
+                _RutaElegida(ruta: ruta),
+              ],
               const SizedBox(height: 24),
               const ChipsTipoActividad(),
               const SizedBox(height: 24),
@@ -155,6 +179,50 @@ class _ActividadScreenState extends ConsumerState<ActividadScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// La ruta oficial que se va a correr (rutas oficiales, etapa 3), para que
+/// el corredor sepa que este entrenamiento cuenta para su mapa.
+class _RutaElegida extends StatelessWidget {
+  const _RutaElegida({required this.ruta});
+
+  final Ruta ruta;
+
+  @override
+  Widget build(BuildContext context) {
+    return TrazaCard(
+      key: ActividadScreen.claveRutaElegida,
+      child: Row(
+        children: [
+          const Icon(Icons.route_outlined, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Vas a correr',
+                  style: TextStyle(fontSize: 12, color: AppColors.ink2),
+                ),
+                Text(
+                  ruta.nombre,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                Text(
+                  TarjetaRutaExplorar.distanciaYDificultad(ruta),
+                  style: const TextStyle(fontSize: 12, color: AppColors.ink2),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

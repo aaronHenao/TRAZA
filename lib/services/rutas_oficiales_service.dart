@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/ruta_oficial.dart';
+import '../models/verificacion_ruta.dart';
 import 'objetivos_service.dart' show SesionRequeridaException;
 import 'retos_service.dart' show SoloAdministradorException;
 import 'rutas_service.dart';
@@ -28,8 +29,9 @@ class RutaYaOficialException implements Exception {
   String toString() => 'RutaYaOficialException: la ruta ya es oficial';
 }
 
-/// La ruta que se quiso mover o quitar ya no está en el mapa: otra pestaña
-/// del administrador la quitó antes.
+/// La ruta ya no está en el mapa: otra pestaña del administrador la quitó
+/// antes de moverla o quitarla, o dejó de ser oficial antes de verificar un
+/// recorrido (etapa 4).
 class RutaNoOficialException implements Exception {
   const RutaNoOficialException();
 
@@ -37,8 +39,19 @@ class RutaNoOficialException implements Exception {
   String toString() => 'RutaNoOficialException: la ruta no es oficial';
 }
 
-/// Las rutas del mapa de progresión y su orden (rutas oficiales, etapa 1), y
-/// cuáles completó el corredor (etapa 2).
+/// La base no pudo validar el recorrido: no ha terminado, se corrió antes de
+/// que la ruta fuera oficial o fue más rápido de lo posible (etapa 4).
+class RecorridoNoValidoException implements Exception {
+  const RecorridoNoValidoException();
+
+  @override
+  String toString() =>
+      'RecorridoNoValidoException: la base no pudo validar el recorrido';
+}
+
+/// Las rutas del mapa de progresión y su orden (rutas oficiales, etapa 1),
+/// cuáles completó el corredor (etapa 2) y la verificación de un recorrido
+/// (etapa 4).
 abstract interface class RutasOficialesRepository {
   /// Las rutas oficiales en el orden del camino.
   Future<List<RutaOficial>> oficiales();
@@ -62,6 +75,13 @@ abstract interface class RutasOficialesRepository {
   /// Los ids de las rutas que completó el corredor con sesión (etapa 2).
   /// Puede traer rutas que ya no son oficiales: el mapa las ignora.
   Future<Set<String>> completadas();
+
+  /// Pide a la base que compare el recorrido del entrenamiento con su ruta
+  /// (etapa 4). Si se completó, la base misma la registra. Null si el
+  /// entrenamiento fue libre.
+  ///
+  /// Lanza [RutaNoOficialException] o [RecorridoNoValidoException].
+  Future<VerificacionRuta?> verificar(String entrenamientoId);
 }
 
 /// Agregar, mover y quitar van por funciones de la base (`0058`): cada una
@@ -84,6 +104,7 @@ class SupabaseRutasOficialesRepository implements RutasOficialesRepository {
   static const _noPublicada = '22023';
   static const _noExiste = 'TZ404';
   static const _yaOficial = 'TZ409';
+  static const _noValido = 'TZ422';
 
   final SupabaseClient? _clienteInyectado;
   final String? Function()? _usuarioActual;
@@ -138,6 +159,25 @@ class SupabaseRutasOficialesRepository implements RutasOficialesRepository {
         .select('ruta_id')
         .eq('usuario_id', _usuarioId());
     return {for (final fila in filas) fila['ruta_id'] as String};
+  }
+
+  @override
+  Future<VerificacionRuta?> verificar(String entrenamientoId) async {
+    try {
+      final filas = await _cliente.rpc(
+        'verificar_ruta_completada',
+        params: {'p_entrenamiento_id': entrenamientoId},
+      );
+      // Sin filas: el entrenamiento fue libre.
+      if (filas is! List || filas.isEmpty) return null;
+      return VerificacionRuta.desdeSupabase(
+        Map<String, dynamic>.from(filas.first as Map),
+      );
+    } on PostgrestException catch (e) {
+      if (e.code == _noExiste) throw const RutaNoOficialException();
+      if (e.code == _noValido) throw const RecorridoNoValidoException();
+      rethrow;
+    }
   }
 
   String _usuarioId() {

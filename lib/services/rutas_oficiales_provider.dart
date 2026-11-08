@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/ruta.dart';
 import '../models/ruta_oficial.dart';
+import '../models/verificacion_ruta.dart';
 import 'retos_service.dart' show SoloAdministradorException;
 import 'rutas_oficiales_service.dart';
 import 'rutas_service.dart';
@@ -27,6 +28,18 @@ final candidatasRutaOficialProvider = FutureProvider.autoDispose<List<Ruta>>((
       if (ruta.publicada && !enElMapa.contains(ruta.id)) ruta,
   ];
 });
+
+/// Si el entrenamiento completó su ruta oficial, según la base (etapa 4).
+/// Null si fue libre.
+///
+/// `autoDispose`: se vuelve a preguntar cada vez que se abre el resumen. No
+/// duplica nada: la base registra una ruta completada una sola vez.
+final verificacionRutaProvider = FutureProvider.autoDispose
+    .family<VerificacionRuta?, String>(
+      (ref, entrenamientoId) => ref
+          .watch(rutasOficialesRepositoryProvider)
+          .verificar(entrenamientoId),
+    );
 
 /// Agregar, mover y quitar rutas oficiales (etapa 1).
 final gestionRutasOficialesProvider = Provider<GestionRutasOficiales>(

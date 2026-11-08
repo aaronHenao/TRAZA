@@ -9,6 +9,7 @@ import '../summary/resumen_screen.dart';
 import '../../models/resumen_entrenamiento.dart';
 import '../../services/actividad_provider.dart';
 import '../../services/distancia_provider.dart';
+import '../../services/entrenamiento_actual_provider.dart';
 import '../../services/entrenamiento_provider.dart';
 import '../../services/recorrido_provider.dart';
 import '../../services/reloj_provider.dart';
@@ -70,6 +71,8 @@ class TrackingConActividadElegida extends ConsumerWidget {
     final distanciaMetros = ref.read(distanciaProvider).metros;
     // El mismo entrenamiento que cierra `CierreEntrenamiento`.
     final entrenamientoId = ref.read(entrenamientoActualProvider);
+    // Antes del cierre, que la suelta (rutas oficiales, etapa 3).
+    final ruta = ref.read(rutaEnCursoProvider);
     final error = await ref
         .read(cierreEntrenamientoProvider)
         .finalizar(
@@ -93,6 +96,7 @@ class TrackingConActividadElegida extends ConsumerWidget {
       duracion: duracion,
       distanciaMetros: distanciaMetros,
       puntos: recorrido.puntos,
+      nombreRuta: ruta?.nombre,
     );
     // El id va en la ruta para que el resumen sea siempre el de esta sesión
     // (SCRUM-122). `go` y no `push`: desde el resumen no se vuelve a una

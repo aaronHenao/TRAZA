@@ -2,7 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/distancia_en_vivo.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 
-/// Pruebas del formato de los datos que muestra el resumen (SCRUM-117).
+/// Pruebas del formato de los datos que muestra el resumen (SCRUM-117), y
+/// de la ruta que se corrió (rutas oficiales, etapa 3).
 void main() {
   ResumenEntrenamiento resumen({
     Duration duracion = const Duration(minutes: 32, seconds: 17),
@@ -88,6 +89,26 @@ void main() {
         resumen(fechaFin: fechaFin).subtitulo(ahora),
         'Trote · 31 dic 2025',
       );
+    });
+  });
+
+  group('la ruta que se corrió (rutas oficiales, etapa 3)', () {
+    test('sin ruta, nombreRuta es null por defecto', () {
+      expect(resumen().nombreRuta, isNull);
+    });
+
+    test('guarda el nombre de la ruta que se corrió', () {
+      final conRuta = ResumenEntrenamiento(
+        entrenamientoId: 'e-123',
+        nombreActividad: 'Trote',
+        fechaFin: DateTime(2026, 9, 13, 18, 30),
+        duracion: const Duration(minutes: 32, seconds: 17),
+        nombreRuta: 'Vuelta al estadio',
+      );
+
+      expect(conRuta.nombreRuta, 'Vuelta al estadio');
+      // El subtítulo no cambia: la ruta va aparte.
+      expect(conRuta.subtitulo(DateTime(2026, 9, 13, 20)), 'Trote · hoy');
     });
   });
 

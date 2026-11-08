@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/punto_gps.dart';
 import '../services/cronometro_provider.dart';
+import '../services/entrenamiento_actual_provider.dart';
 import '../services/mapa_provider.dart';
 import '../services/recorrido_provider.dart';
 import '../services/ubicacion_provider.dart';
@@ -28,6 +29,10 @@ class MapaRecorrido extends ConsumerStatefulWidget {
   static const double zoomInicial = 17;
 
   static const Key claveMarcador = Key('mapa-marcador');
+
+  /// La capa con el trazado de la ruta oficial que se está corriendo
+  /// (rutas oficiales, etapa 3).
+  static const Key claveGuia = Key('mapa-recorrido-guia');
 
   /// Grosor del trazo, el mismo `stroke-width` del `#trackPath` del
   /// prototipo.
@@ -87,6 +92,8 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
     if (punto == null) return const SizedBox.shrink();
 
     final tiles = ref.watch(proveedorTilesProvider);
+    // La ruta oficial que se corre, si se salió desde "Correr esta ruta".
+    final guia = ref.watch(rutaEnCursoProvider)?.trazado ?? const [];
 
     return FlutterMap(
       mapController: _controlador,
@@ -113,6 +120,24 @@ class _MapaRecorridoState extends ConsumerState<MapaRecorrido> {
             maxNativeZoom: zoomMaximoTiles.toInt(),
           ),
         ),
+        // La guía va debajo del recorrido en vivo: lo que se corre se pinta
+        // encima de lo que falta por correr.
+        if (guia.length >= 2)
+          PolylineLayer(
+            key: MapaRecorrido.claveGuia,
+            polylines: [
+              Polyline(
+                points: [
+                  for (final punto in guia)
+                    LatLng(punto.latitud, punto.longitud),
+                ],
+                color: Colors.white.withValues(alpha: 0.55),
+                strokeWidth: MapaRecorrido.grosorTrazo + 2,
+                strokeCap: StrokeCap.round,
+                strokeJoin: StrokeJoin.round,
+              ),
+            ],
+          ),
         // Con un solo punto no hay línea que dibujar; la capa lo tolera,
         // pero no vale la pena montarla.
         if (trazo.length >= 2)

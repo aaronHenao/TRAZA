@@ -8,19 +8,23 @@ import 'package:traza/services/tipos_actividad_service.dart';
 import 'package:traza/models/experiencia_ganada.dart';
 import 'package:traza/models/regla_experiencia.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/screens/summary/resumen_screen.dart';
 import 'package:traza/screens/tracking/tracking_con_actividad_elegida.dart';
 import 'package:traza/screens/tracking/tracking_screen.dart';
 import 'package:traza/services/cronometro_provider.dart';
+import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
 import 'package:traza/services/experiencia_service.dart';
 import 'package:traza/services/niveles_service.dart';
+import 'package:traza/services/rutas_oficiales_service.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
 import 'package:traza/services/ubicacion_provider.dart';
 import 'package:traza/widgets/controles_entrenamiento.dart';
+import 'package:traza/widgets/mapa_recorrido.dart';
 import 'package:traza/widgets/seccion_experiencia.dart';
 
 import '../utiles/almacen_recorrido_falso.dart';
@@ -31,6 +35,8 @@ import '../utiles/pantalla_encendida_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/reloj_falso.dart';
 import '../utiles/repositorio_puntos_gps_falso.dart';
+import '../utiles/rutas_oficiales_repository_falso.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 /// Pruebas de la parte B de SCRUM-93 y de la verificación que SCRUM-95 dejó
 /// pendiente (la pantalla del entrenamiento en curso de Aaron recibe la
@@ -39,6 +45,9 @@ import '../utiles/repositorio_puntos_gps_falso.dart';
 ///
 /// La pantalla se monta con los mismos falsos que usan las pruebas de Aaron
 /// (`test/screens/tracking_screen_test.dart`), para no tocar el GPS real.
+///
+/// En rutas oficiales, etapa 3, la ruta que se está corriendo se ve como guía
+/// en el mapa y el resumen dice cuál fue.
 void main() {
   testWidgets('con una actividad elegida, la pantalla del entrenamiento la '
       'recibe y la muestra', (tester) async {
@@ -223,6 +232,116 @@ void main() {
       },
     );
   });
+
+  group('correr una ruta oficial (rutas oficiales, etapa 3)', () {
+    final estadio = rutaDePrueba(
+      id: 'ruta-estadio',
+      nombre: 'Vuelta al estadio',
+      estado: EstadoRuta.publicada,
+      trazado: const [
+        PuntoRuta(latitud: 6.2300, longitud: -75.6100),
+        PuntoRuta(latitud: 6.2330, longitud: -75.6120),
+      ],
+    );
+
+    ResumenEntrenamiento? resumenMostrado(WidgetTester tester) =>
+        tester.widget<ResumenScreen>(find.byType(ResumenScreen)).resumen;
+
+    testWidgets('durante el entrenamiento, el mapa muestra la ruta en curso '
+        'como guía', (tester) async {
+      final entorno = await _montar(
+        tester,
+        catalogo: _catalogo,
+        elegir: 'Correr',
+      );
+      entorno.container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+
+      // El mapa se dibuja con la primera posición.
+      await entorno.registrarPunto(tester);
+
+      expect(find.byKey(MapaRecorrido.claveGuia), findsOneWidget);
+
+      entorno.detenerCronometro();
+    });
+
+    testWidgets('con una ruta en curso, el resumen dice qué ruta se corrió', (
+      tester,
+    ) async {
+      final entorno = await _montar(
+        tester,
+        catalogo: _catalogo,
+        elegir: 'Trote',
+      );
+      entorno.container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+
+      await _tocarFinalizar(tester);
+
+      expect(find.byType(ResumenScreen), findsOneWidget);
+      // Se leyó antes de cerrar: el cierre la deja en null.
+      expect(resumenMostrado(tester)?.nombreRuta, 'Vuelta al estadio');
+      expect(find.text('Ruta: Vuelta al estadio'), findsOneWidget);
+      expect(entorno.container.read(rutaEnCursoProvider), isNull);
+      // Y le pregunta a la base si la completó (etapa 4).
+      final rutasOficiales =
+          entorno.container.read(rutasOficialesRepositoryProvider)
+              as RutasOficialesRepositorioFalso;
+      expect(rutasOficiales.verificados, ['e-123']);
+    });
+
+    testWidgets('sin ruta en curso, el resumen no habla de ninguna ruta', (
+      tester,
+    ) async {
+      await _montar(tester, catalogo: _catalogo, elegir: 'Trote');
+
+      await _tocarFinalizar(tester);
+
+      expect(find.byType(ResumenScreen), findsOneWidget);
+      expect(resumenMostrado(tester)?.nombreRuta, isNull);
+      expect(find.textContaining('Ruta:'), findsNothing);
+    });
+
+    testWidgets('si el cierre falla, la ruta sigue en curso y al reintentar '
+        'el resumen la nombra', (tester) async {
+      final entorno = await _montar(
+        tester,
+        catalogo: _catalogo,
+        elegir: 'Correr',
+      );
+      entorno.container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+      entorno.entrenamientos.fallar = true;
+
+      await _tocarFinalizar(tester);
+
+      expect(find.byType(TrackingScreen), findsOneWidget);
+      expect(entorno.container.read(rutaEnCursoProvider)?.id, 'ruta-estadio');
+
+      entorno.entrenamientos.fallar = false;
+      await _tocarFinalizar(tester);
+
+      expect(find.text('Ruta: Vuelta al estadio'), findsOneWidget);
+      expect(entorno.container.read(rutaEnCursoProvider), isNull);
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('al descartar, la ruta deja de estar en curso', (tester) async {
+      final entorno = await _montar(
+        tester,
+        catalogo: _catalogo,
+        elegir: 'Correr',
+      );
+      entorno.container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('Descartar'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(entorno.ubicacion, '/inicio');
+      expect(entorno.container.read(rutaEnCursoProvider), isNull);
+    });
+  });
 }
 
 const _catalogo = [
@@ -268,7 +387,7 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   }
 
   @override
-  Future<String> crear({required String tipoActividadId}) =>
+  Future<String> crear({required String tipoActividadId, String? rutaId}) =>
       throw UnimplementedError(
         'La pantalla arranca con el entrenamiento ya '
         'creado (SCRUM-99)',
@@ -374,6 +493,11 @@ Future<_Entorno> _montar(
       ),
       // Sin niveles creados: el resumen no muestra nivel (SCRUM-198).
       nivelesRepositoryProvider.overrideWithValue(NivelesFalso()),
+      // El resumen de una ruta oficial le pregunta a la base si se completó
+      // (rutas oficiales, etapa 4): nunca al Supabase real.
+      rutasOficialesRepositoryProvider.overrideWithValue(
+        RutasOficialesRepositorioFalso(),
+      ),
       tiposActividadRepositoryProvider.overrideWithValue(
         _CatalogoFalso(catalogo),
       ),

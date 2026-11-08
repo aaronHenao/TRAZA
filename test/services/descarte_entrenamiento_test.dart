@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/services/entrenamiento_actual_provider.dart';
@@ -12,9 +13,13 @@ import 'package:traza/services/ubicacion_provider.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
 import '../utiles/reloj_falso.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 /// Pruebas del descarte del entrenamiento (SCRUM-96): la fila queda
 /// `cancelado` aunque la red falle en el momento de descartar.
+///
+/// En rutas oficiales, etapa 3, descartar también suelta la ruta que se
+/// estaba corriendo.
 void main() {
   late _EntrenamientosFalso repositorio;
   late FuenteUbicacionFalsa gps;
@@ -133,6 +138,51 @@ void main() {
     },
   );
 
+  group('ruta en curso (rutas oficiales, etapa 3)', () {
+    final estadio = rutaDePrueba(
+      id: 'ruta-estadio',
+      nombre: 'Vuelta al estadio',
+      estado: EstadoRuta.publicada,
+    );
+
+    Ruta? rutaEnCurso() => container.read(rutaEnCursoProvider);
+
+    test('al descartar, la ruta en curso vuelve a null', () async {
+      await iniciar();
+      container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+
+      await descartar();
+
+      expect(rutaEnCurso(), isNull);
+    });
+
+    test(
+      'aunque no haya red para cerrar la fila, la ruta en curso se suelta',
+      () async {
+        await iniciar();
+        container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+        repositorio.fallosSeguidos = 99;
+
+        await descartar();
+
+        expect(pendientes(), hasLength(1));
+        expect(rutaEnCurso(), isNull);
+      },
+    );
+
+    test(
+      'sin entrenamiento creado, descartar también suelta la ruta',
+      () async {
+        container.read(rutaEnCursoProvider.notifier).fijar(estadio);
+
+        await descartar();
+
+        expect(repositorio.intentos, 0);
+        expect(rutaEnCurso(), isNull);
+      },
+    );
+  });
+
   test(
     'dos descartes fallidos no se duplican en la lista de pendientes',
     () async {
@@ -168,7 +218,10 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   int intentos = 0;
 
   @override
-  Future<String> crear({required String tipoActividadId}) async {
+  Future<String> crear({
+    required String tipoActividadId,
+    String? rutaId,
+  }) async {
     creados.add(tipoActividadId);
     return 'entrenamiento-${creados.length}';
   }

@@ -5,18 +5,20 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/models/dificultad.dart';
+import 'package:traza/models/verificacion_ruta.dart';
 import 'package:traza/services/retos_service.dart'
     show SoloAdministradorException;
 import 'package:traza/services/rutas_oficiales_service.dart';
 
 /// Pruebas del repositorio real de rutas oficiales (rutas oficiales, etapas
-/// 1 y 2).
+/// 1, 2 y 4).
 ///
 /// No hay base de datos: un cliente HTTP falso intercepta lo que el
 /// repositorio le manda a PostgREST. Que la base reacomode las posiciones y
 /// niegue los cambios a quien no es administrador lo prueba el script de
 /// `0058_rutas_oficiales.sql`; que cada corredor vea solo sus rutas
-/// completadas, el de `0059_rutas_completadas.sql`.
+/// completadas, el de `0059_rutas_completadas.sql`; cuándo un recorrido
+/// completa la ruta, el de `verificar_ruta_completada`.
 void main() {
   Map<String, Object?> filaRuta(String id, String nombre, {String? dif}) => {
     'id': id,
@@ -269,6 +271,98 @@ void main() {
         ),
       );
     });
+  });
+
+  group('verificar el recorrido (etapa 4)', () {
+    test('se lo pide a verificar_ruta_completada, solo con el entrenamiento: '
+        'el usuario lo toma la base de la sesión', () async {
+      final supabase = _SupabaseFalso(
+        respuesta: [
+          {'cobertura': 0.72, 'necesaria': 0.9, 'completada': false},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.verificar('e-1');
+
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/rpc/verificar_ruta_completada');
+      expect(jsonDecode(peticion.body), {'p_entrenamiento_id': 'e-1'});
+    });
+
+    test('devuelve la cobertura, el umbral y si se completó tal como los '
+        'decidió la base (criterios 2 y 3)', () async {
+      final supabase = _SupabaseFalso(
+        respuesta: [
+          {'cobertura': 0.95, 'necesaria': 0.9, 'completada': true},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final verificacion = await supabase.repositorio.verificar('e-1');
+
+      expect(
+        verificacion,
+        const VerificacionRuta(
+          cobertura: 0.95,
+          necesaria: 0.9,
+          completada: true,
+        ),
+      );
+    });
+
+    test('los numeric que llegan como texto se leen igual', () async {
+      final supabase = _SupabaseFalso(
+        respuesta: [
+          {'cobertura': '0.72', 'necesaria': '0.90', 'completada': false},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final verificacion = await supabase.repositorio.verificar('e-1');
+
+      expect(verificacion?.cobertura, 0.72);
+      expect(verificacion?.necesaria, 0.9);
+      expect(verificacion?.completada, isFalse);
+    });
+
+    test('sin filas, el entrenamiento no tiene ruta: devuelve null', () async {
+      final supabase = _SupabaseFalso(respuesta: const []);
+      addTearDown(supabase.cerrar);
+
+      expect(await supabase.repositorio.verificar('e-1'), isNull);
+    });
+
+    for (final (codigo, causa, excepcion) in [
+      ('TZ404', 'la ruta ya no es oficial', isA<RutaNoOficialException>()),
+      ('TZ422', 'el recorrido no es válido', isA<RecorridoNoValidoException>()),
+    ]) {
+      test('si la base dice que $causa ($codigo), lo dice con su '
+          'excepción', () {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(supabase.repositorio.verificar('e-1'), throwsA(excepcion));
+      });
+    }
+
+    for (final (codigo, causa) in [
+      ('42501', 'el entrenamiento es de otro o no existe'),
+      ('08006', 'se cayó la conexión'),
+    ]) {
+      test('si $causa ($codigo), el error no se disfraza', () {
+        final supabase = _SupabaseFalso(codigoPostgres: codigo);
+        addTearDown(supabase.cerrar);
+
+        expect(
+          supabase.repositorio.verificar('e-1'),
+          throwsA(
+            isA<PostgrestException>().having((e) => e.code, 'code', codigo),
+          ),
+        );
+      });
+    }
   });
 }
 

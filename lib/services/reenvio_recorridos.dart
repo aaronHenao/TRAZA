@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'almacen_recorrido.dart';
+import 'mapa_progresion_provider.dart';
 import 'recorrido_provider.dart' show repositorioPuntosGpsProvider;
+import 'rutas_oficiales_service.dart';
 
 /// Sube lo que quedó sin enviar de recorridos anteriores (SCRUM-292).
 ///
@@ -49,9 +51,32 @@ class ReenvioRecorridos {
 
     var subidos = 0;
     for (final entrenamientoId in pendientes) {
-      if (await _subir(entrenamientoId)) subidos++;
+      if (await _subir(entrenamientoId)) {
+        subidos++;
+        await _verificarRuta(entrenamientoId);
+      }
     }
     return subidos;
+  }
+
+  /// Con el recorrido entero en la base, si se corría una ruta oficial, la
+  /// base vuelve a medir si se completó (rutas oficiales, etapa 4): al
+  /// cerrar faltaban estos puntos. Si falla, el recorrido sigue contando
+  /// como subido; el resumen lo vuelve a preguntar al abrirse.
+  Future<void> _verificarRuta(String entrenamientoId) async {
+    try {
+      final verificacion = await _ref
+          .read(rutasOficialesRepositoryProvider)
+          .verificar(entrenamientoId);
+      // Si la completó y el mapa está abierto, que avance. Cerrado, se lee
+      // al entrar a su pestaña.
+      if ((verificacion?.completada ?? false) &&
+          _ref.exists(mapaProgresionProvider)) {
+        _ref.invalidate(mapaProgresionProvider);
+      }
+    } catch (error) {
+      debugPrint('No se pudo verificar la ruta de $entrenamientoId: $error');
+    }
   }
 
   Future<bool> _subir(String entrenamientoId) async {

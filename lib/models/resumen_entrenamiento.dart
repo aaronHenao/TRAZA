@@ -17,6 +17,7 @@ class ResumenEntrenamiento {
     this.distanciaMetros,
     this.puntos = const [],
     this.cortes = const [],
+    this.nombreRuta,
   });
 
   /// Lo que se muestra cuando un dato no existe, por ejemplo la distancia de
@@ -44,6 +45,10 @@ class ResumenEntrenamiento {
   /// Índices de [puntos] donde empieza un tramo tras una pausa (BUG-005),
   /// como en `Recorrido.cortes`.
   final List<int> cortes;
+
+  /// La ruta oficial que se corrió, o null en un entrenamiento libre
+  /// (rutas oficiales, etapa 3).
+  final String? nombreRuta;
 
   /// Si este es el resumen del entrenamiento [entrenamientoId] que pide la
   /// navegación (SCRUM-122). Sin sesión ambos son null y también coinciden.

@@ -224,7 +224,9 @@ final _navegacion = GoRouter(
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(
       path: '/actividad',
-      builder: (context, state) => const ActividadScreen(),
+      // Desde "Correr esta ruta" llega la ruta oficial elegida (rutas
+      // oficiales, etapa 3); desde el "+" de la portada, nada.
+      builder: (context, state) => ActividadScreen.desdeRuta(state),
     ),
     // Catálogo de retos que el corredor puede intentar (SCRUM-135).
     GoRoute(

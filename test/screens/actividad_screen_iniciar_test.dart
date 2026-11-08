@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:traza/models/estado_permisos.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/models/tipo_actividad.dart';
 import 'package:traza/screens/home/actividad_screen.dart';
 import 'package:traza/services/actividad_provider.dart';
@@ -20,12 +21,17 @@ import 'package:traza/widgets/requiere_permiso_ubicacion.dart';
 import 'package:traza/widgets/ventana_permiso_salud.dart';
 
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 class _MockPermisosService extends Mock implements PermisosService {}
 
 /// Pruebas del inicio del entrenamiento desde la pantalla de inicio: el toque
 /// que arranca la actividad (SCRUM-96), los permisos que hacen falta antes
 /// (SCRUM-97) y lo que se le dice al usuario cuando no se puede (SCRUM-100).
+///
+/// En rutas oficiales, etapa 3, la pantalla también puede llegar con la ruta
+/// que el corredor eligió en el detalle: la muestra y el entrenamiento nace
+/// asociado a ella, con el mismo flujo de permisos de siempre.
 void main() {
   late _MockPermisosService permisos;
   late _EntrenamientosFalso entrenamientos;
@@ -54,7 +60,16 @@ void main() {
     when(() => permisos.solicitarUbicacion()).thenAnswer((_) async => estado);
   }
 
-  Future<void> abrirInicio(WidgetTester tester) async {
+  /// Abre la pantalla de inicio del entrenamiento. Con [ruta], como la abre
+  /// "Correr esta ruta" desde el detalle (rutas oficiales, etapa 3).
+  ///
+  /// La ruta viaja en `extra`, por [ActividadScreen.desdeRuta], que es lo
+  /// mismo que hace `main.dart`. [extra] permite mandar otra cosa.
+  Future<void> abrirInicio(
+    WidgetTester tester, {
+    Ruta? ruta,
+    Object? extra,
+  }) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
@@ -77,8 +92,12 @@ void main() {
 
     final router = GoRouter(
       initialLocation: '/actividad',
+      initialExtra: extra ?? ruta,
       routes: [
-        GoRoute(path: '/actividad', builder: (_, _) => const ActividadScreen()),
+        GoRoute(
+          path: '/actividad',
+          builder: (_, state) => ActividadScreen.desdeRuta(state),
+        ),
         GoRoute(
           path: '/tracking',
           builder: (_, _) =>
@@ -378,6 +397,153 @@ void main() {
     });
   });
 
+  group('correr una ruta oficial (rutas oficiales, etapa 3)', () {
+    final estadio = rutaDePrueba(
+      id: 'ruta-estadio',
+      nombre: 'Vuelta al estadio',
+      estado: EstadoRuta.publicada,
+      trazado: const [
+        PuntoRuta(latitud: 6.2442, longitud: -75.5812),
+        PuntoRuta(latitud: 6.2450, longitud: -75.5800),
+      ],
+    );
+
+    final tarjetaRuta = find.byKey(ActividadScreen.claveRutaElegida);
+
+    Finder enLaTarjeta(String texto) =>
+        find.descendant(of: tarjetaRuta, matching: find.textContaining(texto));
+
+    testWidgets('con una ruta, la muestra en una tarjeta: "Vas a correr" y su '
+        'nombre', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      await abrirInicio(tester, ruta: estadio);
+
+      expect(tarjetaRuta, findsOneWidget);
+      expect(enLaTarjeta('Vas a correr'), findsOneWidget);
+      expect(enLaTarjeta('Vuelta al estadio'), findsOneWidget);
+      // El resto de la pantalla no cambia: se elige la actividad igual.
+      expect(
+        find.widgetWithText(FilledButton, 'Iniciar actividad'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('si la navegación trae otra cosa en extra, no falla: abre '
+        'como un entrenamiento libre', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      await abrirInicio(tester, extra: 'no es una ruta');
+
+      expect(tester.takeException(), isNull);
+      expect(tarjetaRuta, findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Iniciar actividad'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sin ruta no hay tarjeta de ruta elegida', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      await abrirInicio(tester);
+
+      expect(tarjetaRuta, findsNothing);
+      expect(find.textContaining('Vas a correr'), findsNothing);
+    });
+
+    testWidgets('al iniciar, el entrenamiento se crea asociado a la ruta y con '
+        'la actividad de los chips', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      await abrirInicio(tester, ruta: estadio);
+      container
+          .read(actividadSeleccionadaProvider.notifier)
+          .seleccionar(const TipoActividad(id: 'id-trote', nombre: 'Trote'));
+      await tester.pumpAndSettle();
+
+      await tocarIniciar(tester);
+
+      expect(entrenamientos.creados, ['id-trote']);
+      expect(entrenamientos.rutas, ['ruta-estadio']);
+      expect(estaEnElEntrenamiento(tester), isTrue);
+      // La ruta queda en curso para que el tracking la dibuje como guía.
+      expect(container.read(rutaEnCursoProvider)?.id, 'ruta-estadio');
+      expect(container.read(rutaEnCursoProvider)?.trazado, estadio.trazado);
+    });
+
+    testWidgets('sin ruta, el entrenamiento se crea sin rutaId, como hasta '
+        'ahora', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      await abrirInicio(tester);
+
+      await tocarIniciar(tester);
+
+      expect(entrenamientos.creados, ['id-correr']);
+      expect(entrenamientos.rutas, [null]);
+      expect(container.read(rutaEnCursoProvider), isNull);
+    });
+
+    testWidgets('con ruta, si falta el permiso de ubicación lo pide antes de '
+        'crear nada, igual que sin ruta', (tester) async {
+      ubicacionEsta(EstadoPermiso.denegado);
+      alPedirUbicacionResponde(EstadoPermiso.concedido);
+      await abrirInicio(tester, ruta: estadio);
+
+      await tocarIniciar(tester);
+
+      verify(() => permisos.solicitarUbicacion()).called(1);
+      expect(entrenamientos.rutas, ['ruta-estadio']);
+      expect(estaEnElEntrenamiento(tester), isTrue);
+    });
+
+    testWidgets('con ruta, si niegan la ubicación no crea el entrenamiento ni '
+        'deja la ruta en curso', (tester) async {
+      ubicacionEsta(EstadoPermiso.denegado);
+      alPedirUbicacionResponde(EstadoPermiso.denegado);
+      await abrirInicio(tester, ruta: estadio);
+
+      await tocarIniciar(tester);
+
+      expect(entrenamientos.creados, isEmpty);
+      expect(find.text(RequierePermisoUbicacion.mensaje), findsOneWidget);
+      expect(container.read(rutaEnCursoProvider), isNull);
+    });
+
+    testWidgets('con ruta, sin el permiso de salud ofrece la ventana antes de '
+        'crear el entrenamiento, igual que sin ruta', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      when(
+        () => permisos.estadoSalud(),
+      ).thenAnswer((_) async => EstadoPermiso.denegado);
+      await abrirInicio(tester, ruta: estadio);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Iniciar actividad'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text(VentanaPermisoSalud.titulo), findsOneWidget);
+      expect(entrenamientos.creados, isEmpty);
+
+      await tester.tap(find.text(VentanaPermisoSalud.continuarSin));
+      await tester.pumpAndSettle();
+
+      expect(entrenamientos.rutas, ['ruta-estadio']);
+      expect(estaEnElEntrenamiento(tester), isTrue);
+    });
+
+    testWidgets('con ruta, si el entrenamiento no se puede crear lo avisa y '
+        'no deja la ruta en curso', (tester) async {
+      ubicacionEsta(EstadoPermiso.concedido);
+      entrenamientos.error = StateError('sin red');
+      await abrirInicio(tester, ruta: estadio);
+
+      await tocarIniciar(tester);
+
+      expect(find.text(InicioEntrenamiento.noSePudo), findsOneWidget);
+      expect(estaEnElEntrenamiento(tester), isFalse);
+      expect(container.read(rutaEnCursoProvider), isNull);
+      // La ruta sigue elegida: se puede volver a intentar.
+      expect(tarjetaRuta, findsOneWidget);
+    });
+  });
+
   group('cuando el entrenamiento no se puede crear (SCRUM-100)', () {
     setUp(() => ubicacionEsta(EstadoPermiso.concedido));
 
@@ -424,13 +590,21 @@ void main() {
 class _EntrenamientosFalso implements EntrenamientoRepository {
   final creados = <String>[];
 
+  /// `ruta_id` de cada entrenamiento creado, en el mismo orden que
+  /// [creados]: null si se creó sin ruta (rutas oficiales, etapa 3).
+  final rutas = <String?>[];
+
   Object? error;
 
   @override
-  Future<String> crear({required String tipoActividadId}) async {
+  Future<String> crear({
+    required String tipoActividadId,
+    String? rutaId,
+  }) async {
     final error = this.error;
     if (error != null) throw error;
     creados.add(tipoActividadId);
+    rutas.add(rutaId);
     return 'entrenamiento-${creados.length}';
   }
 

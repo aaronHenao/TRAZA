@@ -27,7 +27,7 @@ import '../utiles/reloj_falso.dart';
 
 /// Pruebas de la pantalla de resumen: su diseño (SCRUM-117), que muestre solo
 /// la sesión que indica la navegación (SCRUM-122) y de dónde salen sus datos
-/// (SCRUM-118).
+/// (SCRUM-118). Desde rutas oficiales, etapa 3, también qué ruta se corrió.
 void main() {
   final resumen = ResumenEntrenamiento(
     entrenamientoId: 'e-123',
@@ -492,6 +492,43 @@ void main() {
     });
   });
 
+  group('la ruta que se corrió (rutas oficiales, etapa 3)', () {
+    final conRuta = ResumenEntrenamiento(
+      entrenamientoId: 'e-123',
+      nombreActividad: 'Trote',
+      fechaFin: DateTime(2026, 1, 1, 8, 32, 17),
+      duracion: const Duration(minutes: 32, seconds: 17),
+      distanciaMetros: 5230.5,
+      nombreRuta: 'Vuelta al estadio',
+    );
+
+    testWidgets('con ruta, la cabecera dice "Ruta: <nombre>"', (tester) async {
+      await _montar(tester, resumen: conRuta);
+
+      final ruta = find.text('Ruta: Vuelta al estadio');
+      expect(ruta, findsOneWidget);
+      // En la cabecera: debajo del título y antes de las métricas.
+      final titulo = find.text('¡Entrenamiento completado!');
+      expect(
+        tester.getTopLeft(ruta).dy,
+        greaterThan(tester.getTopLeft(titulo).dy),
+      );
+      expect(
+        tester.getTopLeft(ruta).dy,
+        lessThan(tester.getTopLeft(find.text('Tiempo')).dy),
+      );
+      // Lo demás de la cabecera sigue igual.
+      expect(find.text('Trote · hoy'), findsOneWidget);
+    });
+
+    testWidgets('sin ruta no muestra nada de eso', (tester) async {
+      await _montar(tester, resumen: resumen);
+
+      expect(find.textContaining('Ruta:'), findsNothing);
+      expect(find.text('Trote · hoy'), findsOneWidget);
+    });
+  });
+
   group('ruta del resumen', () {
     test('lleva el id del entrenamiento', () {
       expect(ResumenScreen.rutaPara('e-123'), '/resumen/e-123');
@@ -523,7 +560,7 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   final Completer<void>? espera;
 
   @override
-  Future<String> crear({required String tipoActividadId}) =>
+  Future<String> crear({required String tipoActividadId, String? rutaId}) =>
       throw UnimplementedError('El resumen no crea entrenamientos');
 
   @override

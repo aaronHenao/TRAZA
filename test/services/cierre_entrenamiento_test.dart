@@ -32,6 +32,9 @@ import '../utiles/rutas_repository_falso.dart';
 ///
 /// La XP la asigna el trigger de la base en el mismo cierre; lo que le toca a
 /// la app es volver a leer la acumulada para que la progresión la refleje.
+///
+/// En rutas oficiales, etapa 3, el cierre también suelta la ruta que se
+/// estaba corriendo, salvo que no se haya podido guardar.
 void main() {
   late _EntrenamientosFalso entrenamientos;
   late ExperienciaFalsa experiencia;
@@ -182,6 +185,54 @@ void main() {
     });
   });
 
+  group('ruta en curso (rutas oficiales, etapa 3)', () {
+    final estadio = rutaDePrueba(
+      id: 'ruta-estadio',
+      nombre: 'Vuelta al estadio',
+      estado: EstadoRuta.publicada,
+    );
+
+    Ruta? rutaEnCurso() => container.read(rutaEnCursoProvider);
+
+    setUp(() => container.read(rutaEnCursoProvider.notifier).fijar(estadio));
+
+    test('al finalizar con éxito, la ruta en curso vuelve a null', () async {
+      expect(rutaEnCurso()?.id, 'ruta-estadio');
+
+      expect(await finalizar(), isNull);
+
+      expect(rutaEnCurso(), isNull);
+    });
+
+    test(
+      'si el cierre falla, la ruta en curso se conserva para reintentar',
+      () async {
+        entrenamientos.fallar = true;
+
+        expect(await finalizar(), isNotNull);
+
+        expect(rutaEnCurso()?.id, 'ruta-estadio');
+      },
+    );
+
+    test(
+      'si los puntos no se guardaron, la ruta en curso se conserva',
+      () async {
+        final error = await container
+            .read(cierreEntrenamientoProvider)
+            .finalizar(
+              duracion: const Duration(minutes: 30),
+              recorrido: const Recorrido(
+                sincronizacion: EstadoSincronizacion.fallida,
+              ),
+            );
+
+        expect(error, isNotNull);
+        expect(rutaEnCurso()?.id, 'ruta-estadio');
+      },
+    );
+  });
+
   group('insignias (SCRUM-193)', () {
     test('al finalizar, las insignias se vuelven a leer', () async {
       final antes = await container.read(insigniasProvider.future);
@@ -276,7 +327,7 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   }
 
   @override
-  Future<String> crear({required String tipoActividadId}) =>
+  Future<String> crear({required String tipoActividadId, String? rutaId}) =>
       throw UnimplementedError();
 
   @override

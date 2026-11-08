@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/recorrido.dart';
 import '../models/resumen_entrenamiento.dart';
+import '../models/ruta.dart';
 import 'actividad_provider.dart';
 import 'almacen_recorrido.dart';
 import 'entrenamiento_actual_provider.dart';
@@ -52,7 +53,10 @@ class InicioEntrenamiento {
   /// Devuelve null si el entrenamiento quedó creado y la actividad puede
   /// arrancar, o el mensaje para el usuario si no se pudo (SCRUM-100). En ese
   /// caso no queda nada a medias: sin id, no hay entrenamiento en curso.
-  Future<String?> iniciar() async {
+  ///
+  /// Con [ruta], el entrenamiento queda asociado a esa ruta oficial y ella
+  /// pasa a estar en curso (rutas oficiales, etapa 3).
+  Future<String?> iniciar({Ruta? ruta}) async {
     // Sin configuración no hay tipo de actividad con id, y `tipo_actividad_id`
     // es obligatorio (ver ConfiguracionInicio.para).
     final configuracion = _ref.read(configuracionInicioProvider);
@@ -73,8 +77,19 @@ class InicioEntrenamiento {
 
       final entrenamientoId = await _ref
           .read(entrenamientoRepositoryProvider)
-          .crear(tipoActividadId: configuracion.tipoActividadId);
+          .crear(
+            tipoActividadId: configuracion.tipoActividadId,
+            rutaId: ruta?.id,
+          );
       _ref.read(entrenamientoEnCursoProvider.notifier).fijar(entrenamientoId);
+      // Sin ruta se limpia: una que hubiera quedado de antes no puede pasar
+      // a este entrenamiento.
+      final rutaEnCurso = _ref.read(rutaEnCursoProvider.notifier);
+      if (ruta == null) {
+        rutaEnCurso.limpiar();
+      } else {
+        rutaEnCurso.fijar(ruta);
+      }
       return null;
     } on SesionRequeridaException {
       return sinSesion;
@@ -145,6 +160,7 @@ class DescarteEntrenamiento {
     // pantalla no debe quedarse esperando a la red.
     _ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
+    _ref.read(rutaEnCursoProvider.notifier).limpiar();
 
     if (entrenamientoId == null) return;
 
@@ -270,8 +286,9 @@ class CierreEntrenamiento {
 
     _ref.read(actividadIniciadaProvider.notifier).marcarTerminada();
     // Ya no hay entrenamiento en curso: el siguiente empieza con el suyo
-    // (SCRUM-96).
+    // (SCRUM-96), y sin ruta mientras no la elija (etapa 3).
     _ref.read(entrenamientoEnCursoProvider.notifier).limpiar();
+    _ref.read(rutaEnCursoProvider.notifier).limpiar();
     // La XP la asignó el trigger en el mismo cierre (SCRUM-206): la
     // progresión vuelve a leer la acumulada y las insignias que esa XP haya
     // desbloqueado (SCRUM-193). El mapa, por si el entrenamiento completó

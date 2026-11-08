@@ -13,6 +13,7 @@ import '../../widgets/controles_entrenamiento.dart';
 import '../../widgets/cronometro_entrenamiento.dart';
 import '../../widgets/estadisticas_entrenamiento.dart';
 import '../../widgets/mapa_entrenamiento.dart';
+import '../../widgets/traza_toast.dart';
 
 /// Pantalla del entrenamiento en curso (SCRUM-102).
 ///
@@ -100,7 +101,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     _mostrarAviso(
       sincronizado
           ? 'Entrenamiento finalizado · ${estado.tiempoFormateado}'
-          : 'Entrenamiento finalizado · no se pudo guardar el recorrido',
+          : 'Finalizado · no se pudo guardar el recorrido',
     );
   }
 
@@ -150,7 +151,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
           // botones de pausar y finalizar.
           margin: const EdgeInsets.fromLTRB(20, 0, 20, 150),
           shape: const StadiumBorder(),
-          duration: const Duration(milliseconds: 2400),
+          // Lo mismo que el resto de avisos: con 2,4 s fijos, "Actividad en
+          // pausa" se iba antes de que el corredor mirara la pantalla.
+          showCloseIcon: true,
+          closeIconColor: Colors.white,
+          duration: duracionDeToast(mensaje),
         ),
       );
   }

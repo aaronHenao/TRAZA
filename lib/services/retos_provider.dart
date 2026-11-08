@@ -237,7 +237,7 @@ class ActivacionReto {
 
   static const sinSesion = 'Inicia sesión para activar retos.';
   static const yaActivado = 'Ya tienes este reto activo.';
-  static const noSePudo = 'No pudimos activar el reto. Inténtalo de nuevo.';
+  static const noSePudo = 'No pudimos activar el reto';
 
   Future<ResultadoActivacion> activar(Reto reto) async {
     try {
@@ -284,11 +284,8 @@ class EdicionReto {
 
   static const sinSesion = 'Inicia sesión para editar retos.';
   static const soloAdministrador = 'Solo el administrador puede editar retos.';
-  static const noSePudo =
-      'No se pudieron guardar los cambios. Inténtalo de '
-      'nuevo.';
-  static const datosRechazados =
-      'Revisa los datos del reto: la base no los aceptó.';
+  static const noSePudo = 'No se pudieron guardar los cambios';
+  static const datosRechazados = 'Revisa los datos del reto';
 
   /// Lo que se le dice al administrador cuando la meta que escribió no queda
   /// por encima de lo que ya corrió alguien.
@@ -385,10 +382,8 @@ class RetiradaReto {
 
   static const sinSesion = 'Inicia sesión para retirar retos.';
   static const soloAdministrador = 'Solo el administrador puede retirar retos.';
-  static const corredoresEnJuego =
-      'Hay corredores que todavía pueden completarlo. Podrás retirarlo '
-      'cuando se acabe su plazo.';
-  static const noSePudo = 'No se pudo retirar el reto. Inténtalo de nuevo.';
+  static const corredoresEnJuego = 'No se puede retirar: aún hay corredores';
+  static const noSePudo = 'No se pudo retirar el reto';
 
   /// A quién afecta retirar [reto], para decirlo antes de preguntar
   /// (SCRUM-156).
@@ -433,9 +428,8 @@ class CreacionReto {
 
   static const sinSesion = 'Inicia sesión para crear retos.';
   static const soloAdministrador = 'Solo el administrador puede crear retos.';
-  static const noSePudo = 'No se pudo crear el reto. Inténtalo de nuevo.';
-  static const datosRechazados =
-      'Revisa los datos del reto: la base no los aceptó.';
+  static const noSePudo = 'No se pudo crear el reto';
+  static const datosRechazados = 'Revisa los datos del reto';
 
   Future<ResultadoCreacionReto> crear(BorradorReto borrador) async {
     // La vigencia depende de cuándo se crea el reto, así que el reloj se lee

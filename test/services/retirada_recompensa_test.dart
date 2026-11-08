@@ -178,12 +178,9 @@ void main() {
       );
       expect(
         RetiradaRecompensa.soloAdministrador,
-        'Solo el administrador puede eliminar recompensas.',
+        'Solo el administrador elimina recompensas',
       );
-      expect(
-        RetiradaRecompensa.noSePudo,
-        'No se pudo eliminar la recompensa. Inténtalo de nuevo.',
-      );
+      expect(RetiradaRecompensa.noSePudo, 'No se pudo eliminar la recompensa');
     });
   });
 }

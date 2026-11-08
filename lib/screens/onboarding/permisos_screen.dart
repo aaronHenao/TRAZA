@@ -86,7 +86,7 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
       case EstadoPermiso.noDisponible:
         mostrarToast(
           context,
-          'Sin ubicación no podrás registrar tus recorridos',
+          'Sin ubicación no podrás registrar recorridos',
           separacionInferior: 90,
         );
       case EstadoPermiso.bloqueado:
@@ -126,7 +126,7 @@ class _PermisosScreenState extends ConsumerState<PermisosScreen> {
     if (!esAndroid) {
       mostrarToast(
         context,
-        'Este dispositivo no permite compartir datos de salud',
+        'Tu dispositivo no comparte datos de salud',
         separacionInferior: 90,
       );
       return;

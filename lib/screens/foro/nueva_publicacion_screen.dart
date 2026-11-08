@@ -31,11 +31,9 @@ class NuevaPublicacionScreen extends ConsumerStatefulWidget {
   static const clavePublicar = Key('publicacion-publicar');
 
   static const publicada = 'Publicación creada';
-  static const enRevision =
-      'Publicación en revisión. Saldrá en el foro al aprobarse.';
+  static const enRevision = 'Publicación enviada a revisión';
   static const editada = 'Publicación actualizada';
-  static const edicionEnRevision =
-      'Cambios en revisión. Mientras, se ve la versión anterior.';
+  static const edicionEnRevision = 'Cambios enviados a revisión';
   static const sinCambios = 'No hay cambios para guardar';
 
   static const claveConfirmarEdicion = Key('publicacion-confirmar-edicion');

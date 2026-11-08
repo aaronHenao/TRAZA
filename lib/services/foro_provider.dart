@@ -200,9 +200,8 @@ class CreacionPublicacion {
   final Ref _ref;
 
   static const sinSesion = 'Inicia sesión para publicar en el foro.';
-  static const noSePudo = 'No se pudo publicar. Inténtalo de nuevo.';
-  static const datosRechazados =
-      'No se pudo guardar así. Revisa el título y el contenido.';
+  static const noSePudo = 'No se pudo publicar';
+  static const datosRechazados = 'Revisa el título y el contenido';
 
   Future<ResultadoPublicacion> publicar(BorradorPublicacion borrador) async {
     final nueva = borrador.aNuevaPublicacion();
@@ -299,11 +298,10 @@ class ComentarioPublicacion {
 
   final Ref _ref;
 
-  static const noDisponible = 'La publicación ya no se encuentra disponible.';
+  static const noDisponible = 'Esta publicación ya no está disponible';
   static const sinSesion = 'Inicia sesión para comentar.';
-  static const noSePudo =
-      'No se pudo enviar el comentario. Inténtalo de nuevo.';
-  static const enRevision = 'Comentario en revisión. Se verá al aprobarse.';
+  static const noSePudo = 'No se pudo enviar el comentario';
+  static const enRevision = 'Comentario enviado a revisión';
 
   Future<ResultadoComentario> comentar(
     String publicacionId,
@@ -396,11 +394,9 @@ class EdicionPublicacion {
 
   final Ref _ref;
 
-  static const noDisponible = 'La publicación ya no se encuentra disponible.';
+  static const noDisponible = ComentarioPublicacion.noDisponible;
   static const sinSesion = 'Inicia sesión para editar tu publicación.';
-  static const noSePudo =
-      'No se pudieron guardar los cambios. Inténtalo de '
-      'nuevo.';
+  static const noSePudo = 'No se pudieron guardar los cambios';
   static const datosRechazados = CreacionPublicacion.datosRechazados;
   static const yaEnRevision = 'Ya tienes una edición en revisión.';
 
@@ -507,10 +503,8 @@ class EdicionComentario {
   final Ref _ref;
 
   static const noDisponible = ComentarioPublicacion.noDisponible;
-  static const noSePudo =
-      'No se pudieron guardar los cambios. Inténtalo de nuevo.';
-  static const yaEnRevision =
-      'Ya tienes una edición de este comentario en revisión.';
+  static const noSePudo = EdicionPublicacion.noSePudo;
+  static const yaEnRevision = 'Ya hay una edición en revisión';
 
   Future<ResultadoEdicionComentario> editar(
     ComentarioForo comentario,
@@ -591,7 +585,7 @@ class DecisionModeracion {
 
   static const sinMotivo = 'Escribe el motivo: es lo que leerá el autor.';
   static const yaResuelta = 'Esta moderación ya fue resuelta.';
-  static const noSePudo = 'No se pudo guardar la decisión. Inténtalo de nuevo.';
+  static const noSePudo = 'No se pudo guardar la decisión';
 
   Future<ResultadoDecision> decidir(
     ModeracionForo moderacion, {
@@ -833,11 +827,11 @@ class ReportePublicacion {
   final Ref _ref;
 
   /// Criterio 2: se confirma sin decir nada que identifique a nadie.
-  static const recibido = 'Reporte enviado. El autor no sabrá que fuiste tú.';
-  static const duplicado = 'Ya reportaste esta publicación. Está en revisión.';
+  static const recibido = 'Reporte enviado. Es anónimo.';
+  static const duplicado = 'Ya la reportaste. Está en revisión.';
   static const sinDetalle = 'Cuéntanos por qué la reportas.';
-  static const noDisponible = 'Esta publicación ya no está disponible.';
-  static const noSePudo = 'No se pudo enviar el reporte. Inténtalo de nuevo.';
+  static const noDisponible = ComentarioPublicacion.noDisponible;
+  static const noSePudo = 'No se pudo enviar el reporte';
   static const sinSesion = 'Inicia sesión para reportar.';
 
   Future<ResultadoReporte> reportar(
@@ -930,8 +924,7 @@ class RetiroPublicacion {
   static const yaRetirada = 'Esta publicación ya fue retirada.';
   static const noPermitido = 'Solo el administrador retira publicaciones.';
   static const noExiste = 'Esta publicación ya no existe.';
-  static const noSePudo =
-      'No se pudo retirar la publicación. Inténtalo de nuevo.';
+  static const noSePudo = 'No se pudo retirar la publicación';
   static const sinSesion = 'Inicia sesión para moderar el foro.';
 
   Future<ResultadoRetiro> retirar(String publicacionId, String? motivo) async {

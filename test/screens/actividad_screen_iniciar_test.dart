@@ -388,10 +388,7 @@ void main() {
       await tocarIniciar(tester);
 
       expect(estaEnElEntrenamiento(tester), isFalse);
-      expect(
-        find.text('No se pudo iniciar el entrenamiento. Inténtalo de nuevo.'),
-        findsOneWidget,
-      );
+      expect(find.text('No se pudo iniciar el entrenamiento'), findsOneWidget);
       expect(container.read(actividadIniciadaProvider), isFalse);
     });
 

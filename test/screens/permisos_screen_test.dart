@@ -169,7 +169,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('Sin ubicación no podrás registrar tus recorridos'),
+        find.text('Sin ubicación no podrás registrar recorridos'),
         findsOneWidget,
       );
       expect(find.text('Permitir ubicación'), findsOneWidget);

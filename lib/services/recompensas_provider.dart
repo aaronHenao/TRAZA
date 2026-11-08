@@ -62,11 +62,9 @@ class CreacionRecompensa {
   final Ref _ref;
 
   static const sinSesion = 'Inicia sesión para crear recompensas.';
-  static const soloAdministrador =
-      'Solo el administrador puede crear recompensas.';
-  static const noSePudo = 'No se pudo crear la recompensa. Inténtalo de nuevo.';
-  static const datosRechazados =
-      'Revisa los datos de la recompensa: la base no los aceptó.';
+  static const soloAdministrador = 'Solo el administrador crea recompensas';
+  static const noSePudo = 'No se pudo crear la recompensa';
+  static const datosRechazados = 'Revisa los datos de la recompensa';
 
   Future<ResultadoCreacionRecompensa> crear(BorradorRecompensa borrador) async {
     final nueva = borrador.aNuevaRecompensa();
@@ -136,10 +134,8 @@ class CambioPuntosRecompensa {
   final Ref _ref;
 
   static const sinSesion = 'Inicia sesión para cambiar los puntos.';
-  static const soloAdministrador =
-      'Solo el administrador puede cambiar los puntos.';
-  static const noSePudo =
-      'No se pudieron cambiar los puntos. Inténtalo de nuevo.';
+  static const soloAdministrador = 'Solo el administrador cambia los puntos';
+  static const noSePudo = 'No se pudieron cambiar los puntos';
   static const datosRechazados = 'La cantidad de puntos no es válida.';
 
   Future<ResultadoCambioPuntos> cambiar(
@@ -202,10 +198,8 @@ class RetiradaRecompensa {
   final Ref _ref;
 
   static const sinSesion = 'Inicia sesión para eliminar recompensas.';
-  static const soloAdministrador =
-      'Solo el administrador puede eliminar recompensas.';
-  static const noSePudo =
-      'No se pudo eliminar la recompensa. Inténtalo de nuevo.';
+  static const soloAdministrador = 'Solo el administrador elimina recompensas';
+  static const noSePudo = 'No se pudo eliminar la recompensa';
 
   Future<ResultadoRetiradaRecompensa> retirar(Recompensa recompensa) async {
     try {

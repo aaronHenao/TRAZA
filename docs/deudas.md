@@ -62,12 +62,12 @@ Trabajo que quedó hecho en código pero no se puede terminar o probar del todo 
 
 ## SCRUM-226: mapa de progresión
 
-**Qué quedó hecho:** pestaña **Progreso** en la barra inferior (`MapaProgresionScreen`, ruta `/progreso`) con el camino de niveles y el marcador "Tú". Sin niveles, muestra solo el punto inicial y un aviso.
+**Qué quedó hecho:** pestaña **Progreso** en la barra inferior (`MapaProgresionScreen`, ruta `/progreso`). Desde las rutas oficiales (etapa 2) ya no es el camino de niveles: es el camino de rutas oficiales que arma el administrador, con cada una completada, siguiente o bloqueada y el marcador "Tú" en la siguiente. Los niveles y la XP siguen en Tu progresión (`/progresion`), a donde ahora lleva la tarjeta de nivel de Inicio.
 
 **Qué falta:**
 
-- **Unificar con Tu progresión.** El equipo decidió dejar el mapa como pantalla aparte por ahora. Hoy conviven `/progreso` (mapa, en la barra) y `/progresion` (Tu progresión, desde Inicio), con nombres muy parecidos. Si se unen, la sección de insignias y la barra de avance de `ProgresionScreen` pasarían debajo del mapa.
 - **Diseño.** El prototipo no tiene pantalla de mapa; se usó el estilo de las tarjetas existentes. Validarlo con el equipo.
+- **Completar rutas.** Hasta la etapa 4 del [roadmap](roadmap_mapa_rutas_oficiales.md) nadie completa una ruta: `rutas_completadas` (`0059`) está vacía y todas salen "Siguiente" o "Bloqueada".
 
 ## SCRUM-192: la XP sale solo de los retos
 
@@ -180,7 +180,7 @@ Con esto, y los chips de SCRUM-266, la dificultad funciona de punta a punta: la 
 - **Pendiente y desnivel.** La HU los nombra, pero la app no guarda altitud (`0001`: "puntos_gps SIN altitud, a petición explícita"). Acordado con el equipo: el experto clasifica con la distancia y el mapa. Para usarlos haría falta guardar la altitud al entrenar o pedírsela a un servicio de elevación al guardar la ruta; con ellos, `preparar_ruta` podría exigirlos para "datos suficientes" y el detalle mostrarlos.
 - **Completar los datos.** Una ruta en `datos_incompletos` se queda así: no hay de dónde sacar la distancia que le falta, y el índice de `0031` no deja volver a publicar ese entrenamiento (solo las rechazadas se pueden mandar de nuevo). Si se resuelve la distancia, haría falta una función que la recalcule y la pase a `en_revision`.
 - **Los scripts de verificación de 0045 y 0047** describen el flujo de antes (el experto clasifica desde `en_revision`): después de `0048` fallan a propósito. El que vale es el de `0048`.
-- **Tocar el aviso.** La bandeja de notificaciones no abre la ruta. El autor llega a confirmarla por "Ver mi ruta" en la pantalla de publicar de ese entrenamiento.
+- ~~**Tocar el aviso.**~~ Resuelto: tocar cualquier aviso de una ruta abre su detalle, que es donde está el botón de confirmar la publicación. Antes el aviso decía "confírmala para publicarla" y no llevaba a ninguna parte, así que el autor tenía que buscar su ruta por el historial.
 
 ## SCRUM-321: validar la publicación de rutas (administrador y Runner Experto)
 
@@ -347,3 +347,35 @@ tracking: finalizar con una pausa registrada y comprobar que el
 `ResumenEntrenamiento` que viaja en el `extra` de la ruta lleva los cortes. Una
 prueba solo del modelo no lo habría cazado nunca, porque el defecto está en lo
 que la pantalla decide pasar, no en cómo se dibuja.
+
+## Rutas oficiales, etapa 1: el administrador arma el mapa
+
+**Qué quedó hecho** (`0058_rutas_oficiales.sql`, `GestionRutasOficialesScreen`): el módulo **Mapa de rutas oficiales** del panel del administrador agrega rutas publicadas al camino, las sube, las baja y las quita. Las posiciones las mantiene la base, siempre `1..n`. El plan de las demás etapas está en [docs/roadmap_mapa_rutas_oficiales.md](roadmap_mapa_rutas_oficiales.md).
+
+**Qué falta:**
+
+- **El criterio 6 ("nadie que no sea administrador, aunque llame a la base") depende de `es_admin()`, que hoy se puede burlar.** Ver RNF-14: un corredor puede ponerse `rol = 'admin'`. Además, el arreglo que se anotó ahí (`revoke update (rol) on perfiles ...`) **no funciona**: en Postgres, revocar una columna no tiene efecto mientras el rol tenga `update` sobre la tabla entera, y Supabase se lo da a `authenticated`. Lo que sí funciona es un trigger `before insert or update on perfiles` que conserve `rol` cuando quien escribe es `authenticated` o `anon`, o bien `revoke update on perfiles` + `grant update (<columnas editables>)`.
+- **Las candidatas son las 100 publicadas más recientes**, porque reusan `RutasRepository.publicadas()` (`limite = 100`). Si algún día hay más, las antiguas no se pueden agregar desde el selector. Se arregla con una búsqueda en el selector (ya existe `buscar()`).
+- **La guarda `SoloAdministrador` de `/admin/rutas-oficiales` en `main.dart` no tiene prueba.** Las rutas de niveles y recompensas tienen el mismo hueco. El patrón para probarla existe: sacar el `GoRoute` a una variable pública, como `rutasRevision` (`lib/screens/rutas/rutas_revision.dart`), y probarla como `test/screens/revision_rutas_acceso_test.dart`.
+- **Para la etapa 2:** hoy una ruta publicada no puede dejar de estarlo, así que el embed `ruta:rutas(...)` siempre la trae. Si algún día se pudiera retirar, el corredor recibiría `ruta: null` y `RutaOficial.desdeSupabase` tumbaría la lista. Para entonces: `rutas!inner` en la consulta, o quitarla del mapa al retirarla.
+
+## Rutas oficiales, etapa 3: correr una ruta oficial
+
+**Qué quedó hecho** (`0060_entrenar_una_ruta.sql`): en el detalle de la ruta oficial que le toca, el corredor tiene **Correr esta ruta**. La actividad muestra "Vas a correr", el entrenamiento se crea con su `ruta_id`, el tracking dibuja el trazado como guía y el resumen dice "Ruta: <nombre>" (también al abrirlo desde el historial).
+
+**Qué falta:**
+
+- **Nadie completa todavía una ruta.** Correrla entera no cambia el mapa hasta la etapa 4, que valida los puntos en la base.
+- **El detalle de cualquier ruta consulta el mapa del corredor** (rutas oficiales y completadas) para saber si ofrecer "Correr esta ruta": dos consultas más por detalle. Las pruebas viejas del detalle no sustituyen `rutasOficialesRepositoryProvider` y pasan porque ese provider cae en error sin Supabase; si se toca el detalle, conviene darles el doble.
+
+## Rutas oficiales, etapa 4: validar el recorrido
+
+**Qué quedó hecho** (`0061_verificar_ruta_completada.sql`): la base compara los puntos GPS con el trazado (40 m, 90 %) con las horas del servidor, sin saltos imposibles y con un tope de puntos, y registra la ruta completada. El resumen muestra "¡Completaste…!" o "Cubriste el X %…", y el mapa avanza. El reenvío de puntos (SCRUM-292) vuelve a verificar cuando sube lo que faltaba.
+
+**Qué falta:**
+
+- **Puntos fabricados (límite conocido).** Con la publishable key y su sesión, un script puede inventar puntos creíbles sobre el trazado y esperar el tiempo real de la carrera. Las reglas lo encarecen, no lo impiden. Va a *Límites conocidos* del README.
+- **El registro depende de que se abra el resumen.** La ruta queda completada cuando `SeccionRutaOficial` (o el reenvío) llama a la función. Si esa llamada falla y el corredor se va, se registra al reabrir el resumen desde el historial o al tocar Reintentar.
+- **Cada apertura del resumen vuelve a calcular la cobertura.** Es barato (CTE materializados, 20 000 puntos como mucho), pero se podría devolver lo ya guardado en `rutas_completadas` para ese entrenamiento.
+- **Entrenamientos terminados antes de `0061`** no tienen `finalizado_en`: su ruta no se puede validar (TZ422).
+- **Medición real pendiente.** Se midió en una réplica local de Postgres (0.1–0.3 s con 20 000 puntos). Falta medirlo en el Supabase compartido con una carrera de una hora.

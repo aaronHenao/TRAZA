@@ -13,6 +13,7 @@ import '../../theme/traza_theme.dart';
 import '../../widgets/mapa_trayecto.dart';
 import '../rutas/publicar_ruta_screen.dart';
 import '../../widgets/seccion_experiencia.dart';
+import '../../widgets/seccion_ruta_oficial.dart';
 import '../../widgets/seccion_salud.dart';
 import '../../widgets/traza_top_bar.dart';
 import '../../widgets/trazado_recorrido.dart';
@@ -162,7 +163,10 @@ class _ContenidoResumen extends ConsumerWidget {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        _Cabecera(subtitulo: resumen.subtitulo(ref.read(relojProvider)())),
+        _Cabecera(
+          subtitulo: resumen.subtitulo(ref.read(relojProvider)()),
+          nombreRuta: resumen.nombreRuta,
+        ),
         Padding(
           // `.summary-body`: 20 px y 18 px entre bloques.
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -194,6 +198,13 @@ class _ContenidoResumen extends ConsumerWidget {
                   resumen: resumen,
                   recienFinalizado: recienFinalizado,
                 ),
+              // Si se corría una ruta oficial, si se completó (rutas
+              // oficiales, etapa 4).
+              if ((entrenamientoId, resumen.nombreRuta) case (
+                final id?,
+                final ruta?,
+              ))
+                SeccionRutaOficial(entrenamientoId: id, nombreRuta: ruta),
               const SizedBox(height: 18),
               _Recorrido(puntos: resumen.puntos, cortes: resumen.cortes),
               // Publicar el recorrido como ruta de la comunidad (SCRUM-241).
@@ -227,9 +238,12 @@ class _ContenidoResumen extends ConsumerWidget {
 
 /// `.summary-hero`: check en círculo, título y actividad con la fecha.
 class _Cabecera extends StatelessWidget {
-  const _Cabecera({required this.subtitulo});
+  const _Cabecera({required this.subtitulo, this.nombreRuta});
 
   final String subtitulo;
+
+  /// La ruta oficial que se corrió (rutas oficiales, etapa 3).
+  final String? nombreRuta;
 
   @override
   Widget build(BuildContext context) {
@@ -268,6 +282,18 @@ class _Cabecera extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 13, color: AppColors.ink2),
           ),
+          if (nombreRuta case final ruta?) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Ruta: $ruta',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
         ],
       ),
     );

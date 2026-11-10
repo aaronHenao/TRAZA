@@ -1,0 +1,164 @@
+import 'dart:async';
+
+import 'package:traza/models/ruta.dart';
+import 'package:traza/models/ruta_oficial.dart';
+import 'package:traza/models/verificacion_ruta.dart';
+import 'package:traza/services/rutas_oficiales_service.dart';
+
+/// Repositorio de rutas oficiales en memoria (rutas oficiales, etapa 1):
+/// anota lo que le piden y reacomoda el camino como lo hacen las funciones
+/// de `0058_rutas_oficiales.sql`, sin huecos ni posiciones repetidas.
+///
+/// También dice qué rutas completó el corredor (etapa 2), como la tabla
+/// `rutas_completadas` con RLS: solo las propias, y contesta lo que la
+/// prueba programe a la verificación de un recorrido (etapa 4).
+class RutasOficialesRepositorioFalso implements RutasOficialesRepository {
+  RutasOficialesRepositorioFalso({
+    List<Ruta> oficiales = const [],
+    List<Ruta> rutas = const [],
+    Set<String> completadasPorMi = const {},
+    Map<String, VerificacionRuta> verificaciones = const {},
+    this.verificacion,
+  }) : enOrden = [...oficiales],
+       rutas = [...rutas],
+       completadasPorMi = {...completadasPorMi},
+       verificaciones = {...verificaciones};
+
+  /// Las rutas oficiales en el orden del camino: la primera es la posición 1.
+  final List<Ruta> enOrden;
+
+  /// Lo que hay en la tabla `rutas`: de aquí sale la ruta que se agrega.
+  final List<Ruta> rutas;
+
+  /// Lo que lanza `oficiales`, si algo.
+  Object? errorAlListar;
+
+  /// Lo que lanzan `agregar`, `mover` y `quitar` antes de tocar nada, si
+  /// algo. Va aparte de [errorAlListar] para que un cambio pueda fallar sin
+  /// que falle la lista que se vuelve a pedir después.
+  Object? errorAlCambiar;
+
+  /// Cuántas veces se pidió la lista.
+  var consultas = 0;
+
+  /// Los ids de las rutas que completó el corredor con sesión (etapa 2).
+  /// Como en la tabla, puede traer rutas que ya no son oficiales.
+  Set<String> completadasPorMi;
+
+  /// Lo que lanza `completadas`, si algo. Va aparte de [errorAlListar] para
+  /// que pueda fallar una lectura del mapa sin la otra.
+  Object? errorAlLeerCompletadas;
+
+  /// Cuántas veces se pidieron las completadas.
+  var consultasCompletadas = 0;
+
+  /// El id de cada ruta que se pidió agregar, aunque la base lo rechazara.
+  final agregadas = <String>[];
+
+  /// Cada movimiento que llegó: qué ruta y a qué posición.
+  final movimientos = <(String, int)>[];
+
+  /// El id de cada ruta que se pidió quitar. Vacío si nadie confirmó.
+  final quitadas = <String>[];
+
+  /// Lo que contesta `verificar` para cada entrenamiento (etapa 4).
+  final Map<String, VerificacionRuta> verificaciones;
+
+  /// Lo que contesta `verificar` para un entrenamiento que no está en
+  /// [verificaciones]. Null, como la base con un entrenamiento sin ruta.
+  VerificacionRuta? verificacion;
+
+  /// Lo que lanza `verificar`, si algo. Va aparte de los demás errores para
+  /// que pueda fallar la verificación sin que falle el mapa.
+  Object? errorAlVerificar;
+
+  /// Si no es null, `verificar` no contesta hasta que se complete: es el
+  /// rato en que la base está comparando el recorrido.
+  Completer<void>? esperaVerificar;
+
+  /// El id de cada entrenamiento que se pidió verificar, aunque fallara.
+  final verificados = <String>[];
+
+  /// Los ids de las oficiales, en orden.
+  List<String> get ids => [for (final ruta in enOrden) ruta.id];
+
+  @override
+  Future<List<RutaOficial>> oficiales() async {
+    consultas++;
+    final error = errorAlListar;
+    if (error != null) throw error;
+
+    return [
+      for (final (i, ruta) in enOrden.indexed)
+        RutaOficial(posicion: i + 1, ruta: ruta),
+    ];
+  }
+
+  /// Una copia: lo que la prueba cambie después no altera lo ya leído.
+  @override
+  Future<Set<String>> completadas() async {
+    consultasCompletadas++;
+    final error = errorAlLeerCompletadas;
+    if (error != null) throw error;
+
+    return {...completadasPorMi};
+  }
+
+  /// Como `agregar_ruta_oficial`: la ruta tiene que existir y estar
+  /// publicada, no puede ser ya oficial, y queda al final.
+  @override
+  Future<void> agregar(String rutaId) async {
+    agregadas.add(rutaId);
+    _lanzarSiHayError();
+
+    final ruta = rutas.where((r) => r.id == rutaId).firstOrNull;
+    // Una que no existe (TZ404) tampoco está publicada.
+    if (ruta == null || !ruta.publicada) {
+      throw const RutaNoPublicadaException();
+    }
+    if (ids.contains(rutaId)) throw const RutaYaOficialException();
+    enOrden.add(ruta);
+  }
+
+  /// Como `mover_ruta_oficial`: una posición fuera del camino se ajusta a la
+  /// primera o a la última, y las demás se corren.
+  @override
+  Future<void> mover(String rutaId, int posicion) async {
+    movimientos.add((rutaId, posicion));
+    _lanzarSiHayError();
+
+    final i = ids.indexOf(rutaId);
+    // La base responde TZ404: otra pestaña ya la quitó del mapa.
+    if (i < 0) throw const RutaNoOficialException();
+    final ruta = enOrden.removeAt(i);
+    enOrden.insert(posicion.clamp(1, enOrden.length + 1) - 1, ruta);
+  }
+
+  /// Como `quitar_ruta_oficial`: sale del camino y las de atrás suben una.
+  @override
+  Future<void> quitar(String rutaId) async {
+    quitadas.add(rutaId);
+    _lanzarSiHayError();
+
+    if (!ids.contains(rutaId)) throw const RutaNoOficialException();
+    enOrden.removeWhere((ruta) => ruta.id == rutaId);
+  }
+
+  /// Como `verificar_ruta_completada`: anota el pedido, espera si la prueba
+  /// lo indica y contesta lo programado. No toca [completadasPorMi]: si la
+  /// prueba quiere que la base haya registrado la ruta, la agrega ella.
+  @override
+  Future<VerificacionRuta?> verificar(String entrenamientoId) async {
+    verificados.add(entrenamientoId);
+    await esperaVerificar?.future;
+    final error = errorAlVerificar;
+    if (error != null) throw error;
+
+    return verificaciones[entrenamientoId] ?? verificacion;
+  }
+
+  void _lanzarSiHayError() {
+    final error = errorAlCambiar;
+    if (error != null) throw error;
+  }
+}

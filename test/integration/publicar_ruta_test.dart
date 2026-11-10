@@ -269,7 +269,7 @@ void main() {
 /// El resumen llega por `extra`, así que no se consulta nada.
 class _EntrenamientosFalso implements EntrenamientoRepository {
   @override
-  Future<String> crear({required String tipoActividadId}) =>
+  Future<String> crear({required String tipoActividadId, String? rutaId}) =>
       throw UnimplementedError();
 
   @override

@@ -5,14 +5,19 @@ import 'package:go_router/go_router.dart';
 import 'package:traza/screens/admin/gestion_niveles_screen.dart';
 import 'package:traza/screens/admin/gestion_recompensas_screen.dart';
 import 'package:traza/screens/admin/gestion_retos_screen.dart';
+import 'package:traza/screens/admin/gestion_rutas_oficiales_screen.dart';
 import 'package:traza/screens/admin/panel_admin_screen.dart';
 import 'package:traza/services/niveles_service.dart';
 import 'package:traza/services/recompensas_service.dart';
 import 'package:traza/services/retos_service.dart';
+import 'package:traza/services/rutas_oficiales_service.dart';
+import 'package:traza/services/rutas_service.dart';
 
 import '../utiles/niveles_falso.dart';
 import '../utiles/recompensas_repository_falso.dart';
 import '../utiles/retos_repository_falso.dart';
+import '../utiles/rutas_oficiales_repository_falso.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 class _RetosVacio extends RetosRepositorioFalso {}
 
@@ -93,6 +98,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PanelAdminScreen), findsOneWidget);
   });
+
+  testWidgets('ofrece el mapa de rutas oficiales: lleva a su gestión en '
+      '/admin/rutas-oficiales y se vuelve (rutas oficiales, etapa 1, '
+      'criterio 1)', (tester) async {
+    await _montar(tester);
+
+    expect(GestionRutasOficialesScreen.ruta, '/admin/rutas-oficiales');
+    final acceso = find.byKey(PanelAdminScreen.claveRutasOficiales);
+    // Es la última tarjeta: en una pantalla baja puede no estar construida.
+    await tester.scrollUntilVisible(
+      acceso,
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: acceso,
+        matching: find.text('Mapa de rutas oficiales'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(acceso);
+    await tester.pumpAndSettle();
+    expect(find.byType(GestionRutasOficialesScreen), findsOneWidget);
+    expect(find.text('Administrador'), findsNothing);
+
+    await tester.tap(find.byTooltip('Volver'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PanelAdminScreen), findsOneWidget);
+  });
 }
 
 /// Abre el panel con las gestiones reales colgando de él.
@@ -118,6 +155,10 @@ Future<void> _montar(WidgetTester tester) async {
         path: GestionRecompensasScreen.ruta,
         builder: (_, _) => const GestionRecompensasScreen(),
       ),
+      GoRoute(
+        path: GestionRutasOficialesScreen.ruta,
+        builder: (_, _) => const GestionRutasOficialesScreen(),
+      ),
     ],
   );
   addTearDown(router.dispose);
@@ -130,6 +171,10 @@ Future<void> _montar(WidgetTester tester) async {
         recompensasRepositoryProvider.overrideWithValue(
           RecompensasRepositorioFalso(),
         ),
+        rutasOficialesRepositoryProvider.overrideWithValue(
+          RutasOficialesRepositorioFalso(),
+        ),
+        rutasRepositoryProvider.overrideWithValue(RutasRepositorioFalso()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

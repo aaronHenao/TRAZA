@@ -64,9 +64,8 @@ class CreacionNivel {
 
   static const sinSesion = 'Inicia sesión para crear niveles.';
   static const soloAdministrador = 'Solo el administrador puede crear niveles.';
-  static const noSePudo = 'No se pudo crear el nivel. Inténtalo de nuevo.';
-  static const datosRechazados =
-      'Revisa los datos del nivel: la base no los aceptó.';
+  static const noSePudo = 'No se pudo crear el nivel';
+  static const datosRechazados = 'Revisa los datos del nivel';
   static const nombreOcupado = 'Ya existe un nivel con ese nombre.';
   static const umbralOcupado = 'Ese umbral ya lo usa otro nivel.';
 

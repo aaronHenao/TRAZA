@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/ruta.dart';
+
 /// El entrenamiento que está en curso, mientras dura la actividad.
 ///
 /// Lo fija el flujo de inicio al crear la fila en `entrenamientos`
@@ -30,4 +32,27 @@ final entrenamientoEnCursoProvider =
 /// sustituyen en sus pruebas con `overrideWithValue`.
 final entrenamientoActualProvider = Provider<String?>(
   (ref) => ref.watch(entrenamientoEnCursoProvider),
+);
+
+/// La ruta oficial que se corre en el entrenamiento en curso, o null en un
+/// entrenamiento libre (rutas oficiales, etapa 3).
+///
+/// La fija el inicio cuando el corredor sale desde "Correr esta ruta" y se
+/// suelta al terminar o descartar la actividad. Con ella el mapa del
+/// tracking dibuja la guía y el resumen dice qué ruta se corrió.
+///
+/// Regla: se limpia en todo lugar donde se limpie
+/// [entrenamientoEnCursoProvider]. Si no, una salida nueva dejaría la ruta
+/// pegada al siguiente entrenamiento.
+class RutaEnCursoNotifier extends Notifier<Ruta?> {
+  @override
+  Ruta? build() => null;
+
+  void fijar(Ruta ruta) => state = ruta;
+
+  void limpiar() => state = null;
+}
+
+final rutaEnCursoProvider = NotifierProvider<RutaEnCursoNotifier, Ruta?>(
+  RutaEnCursoNotifier.new,
 );

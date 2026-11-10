@@ -31,8 +31,10 @@ abstract interface class EntrenamientoRepository {
   /// pasa a ser el dueño de los puntos GPS que se registren.
   ///
   /// La fila nace `en_curso`; la cierra [finalizar] al terminar la actividad.
+  /// [rutaId] es la ruta oficial que se va a correr, si el corredor salió
+  /// desde "Correr esta ruta" (rutas oficiales, etapa 3).
   /// Lanza [SesionRequeridaException] si no hay sesión abierta.
-  Future<String> crear({required String tipoActividadId});
+  Future<String> crear({required String tipoActividadId, String? rutaId});
 
   /// Cierra el entrenamiento [entrenamientoId] (SCRUM-121): guarda cuándo
   /// terminó, cuánto duró y la distancia recorrida, y lo deja `finalizado`.
@@ -85,7 +87,10 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
   SupabaseClient get _cliente => _clienteInyectado ?? Supabase.instance.client;
 
   @override
-  Future<String> crear({required String tipoActividadId}) async {
+  Future<String> crear({
+    required String tipoActividadId,
+    String? rutaId,
+  }) async {
     // `fecha_inicio` la pone la base con su `default now()`: es la hora del
     // servidor, que no depende de que el reloj del teléfono esté en hora.
     final fila = await _cliente
@@ -94,6 +99,8 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
           'usuario_id': _usuarioId(),
           'tipo_actividad_id': tipoActividadId,
           'estado': 'en_curso',
+          // Solo si hay ruta: el entrenamiento libre se crea igual que antes.
+          'ruta_id': ?rutaId,
         })
         // El id lo genera la base; sin pedirlo de vuelta no habría con qué
         // guardar los puntos ni cerrar el entrenamiento.
@@ -177,6 +184,9 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
         .select(
           'id,fecha_fin,duracion_segundos,distancia_total_m,'
           'tipos_actividad(nombre),'
+          // La ruta oficial que se corrió (etapa 3). Con la clave nombrada:
+          // hay dos relaciones entre entrenamientos y rutas (0060).
+          'rutas!entrenamientos_ruta_id_fkey(nombre),'
           'puntos_gps(latitud,longitud,capturado_en,orden_secuencia,tramo)',
         )
         .eq('id', entrenamientoId)
@@ -201,6 +211,7 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
     if (id is! String || fechaFin is! String || duracion is! num) return null;
 
     final tipo = fila['tipos_actividad'];
+    final ruta = fila['rutas'];
     final puntos = fila['puntos_gps'];
     final filasPuntos = puntos is List
         ? puntos.cast<Map<String, dynamic>>()
@@ -214,6 +225,9 @@ class SupabaseEntrenamientoRepository implements EntrenamientoRepository {
       fechaFin: DateTime.parse(fechaFin),
       duracion: Duration(seconds: duracion.toInt()),
       distanciaMetros: _comoDouble(fila['distancia_total_m']),
+      nombreRuta: ruta is Map && ruta['nombre'] is String
+          ? ruta['nombre'] as String
+          : null,
       puntos: [
         for (final punto in filasPuntos)
           PuntoGps(

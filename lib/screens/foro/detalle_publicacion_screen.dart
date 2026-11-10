@@ -59,8 +59,7 @@ class DetallePublicacionScreen extends ConsumerWidget {
     'comentario-confirmar-edicion',
   );
   static const comentarioEditado = 'Comentario actualizado';
-  static const comentarioEnRevision =
-      'Cambio en revisión. Mientras, se ve el texto anterior.';
+  static const comentarioEnRevision = 'Cambio enviado a revisión';
 
   static const noDisponible = 'Esta publicación ya no se encuentra disponible';
 

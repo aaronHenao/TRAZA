@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
+import 'package:traza/models/ruta.dart';
 import 'package:traza/services/actividad_provider.dart';
 import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_provider.dart';
@@ -14,7 +15,11 @@ import 'package:traza/services/ubicacion_provider.dart';
 /// Pruebas del inicio del entrenamiento (SCRUM-99): crear la fila de
 /// `entrenamientos` con la actividad elegida y dejar su id como el
 /// entrenamiento en curso, para que los puntos GPS tengan dueño.
+///
+/// En rutas oficiales, etapa 3, el entrenamiento puede nacer asociado a la
+/// ruta que el corredor eligió en el detalle, y esa ruta queda en curso.
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/rutas_repository_falso.dart';
 
 void main() {
   late _EntrenamientosFalso repositorio;
@@ -191,6 +196,122 @@ void main() {
     });
   });
 
+  group('correr una ruta oficial (rutas oficiales, etapa 3)', () {
+    Ruta? rutaEnCurso() => container.read(rutaEnCursoProvider);
+
+    test('con ruta, el entrenamiento se crea asociado a ella y con la '
+        'actividad elegida en los chips', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      container
+          .read(actividadSeleccionadaProvider.notifier)
+          .seleccionar(const TipoActividad(id: 'id-trote', nombre: 'Trote'));
+
+      final error = await container
+          .read(inicioEntrenamientoProvider)
+          .iniciar(ruta: _estadio);
+
+      expect(error, isNull);
+      expect(repositorio.creados, ['id-trote']);
+      expect(repositorio.rutas, ['ruta-estadio']);
+      expect(enCurso(), 'entrenamiento-1');
+    });
+
+    test(
+      'sin ruta, el entrenamiento se crea sin rutaId, como hasta ahora',
+      () async {
+        container = crearContainer();
+        await cargarCatalogo();
+
+        await iniciar();
+
+        expect(repositorio.creados, ['id-correr']);
+        expect(repositorio.rutas, [null]);
+      },
+    );
+
+    test(
+      'si se crea con ruta, la ruta queda en curso con su trazado',
+      () async {
+        container = crearContainer();
+        await cargarCatalogo();
+        expect(rutaEnCurso(), isNull);
+
+        await container
+            .read(inicioEntrenamientoProvider)
+            .iniciar(ruta: _estadio);
+
+        expect(rutaEnCurso()?.id, 'ruta-estadio');
+        // El trazado es lo que el tracking dibuja como guía.
+        expect(rutaEnCurso()?.trazado, _estadio.trazado);
+      },
+    );
+
+    test('si se crea sin ruta, no queda ninguna en curso aunque hubiera una '
+        'de antes', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      container.read(rutaEnCursoProvider.notifier).fijar(_estadio);
+
+      final error = await iniciar();
+
+      expect(error, isNull);
+      expect(rutaEnCurso(), isNull);
+    });
+
+    test('si la base falla, no toca la ruta en curso', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      repositorio.error = StateError('sin red');
+
+      final error = await container
+          .read(inicioEntrenamientoProvider)
+          .iniciar(ruta: _estadio);
+
+      expect(error, InicioEntrenamiento.noSePudo);
+      expect(rutaEnCurso(), isNull);
+    });
+
+    test('si falla, conserva la ruta en curso que ya había', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      container.read(rutaEnCursoProvider.notifier).fijar(_nutibara);
+      repositorio.error = StateError('sin red');
+
+      await container.read(inicioEntrenamientoProvider).iniciar(ruta: _estadio);
+
+      expect(rutaEnCurso()?.id, 'ruta-nutibara');
+    });
+
+    test('con la ubicación del teléfono apagada no crea nada ni deja la ruta '
+        'en curso', () async {
+      container = crearContainer();
+      await cargarCatalogo();
+      gps.servicio = false;
+
+      final error = await container
+          .read(inicioEntrenamientoProvider)
+          .iniciar(ruta: _estadio);
+
+      expect(error, InicioEntrenamiento.ubicacionApagada);
+      expect(repositorio.creados, isEmpty);
+      expect(rutaEnCurso(), isNull);
+    });
+
+    test('sin sesión no crea nada ni deja la ruta en curso', () async {
+      container = crearContainer(catalogo: TipoActividad.catalogoLocal);
+      await cargarCatalogo();
+
+      final error = await container
+          .read(inicioEntrenamientoProvider)
+          .iniciar(ruta: _estadio);
+
+      expect(error, InicioEntrenamiento.sinSesion);
+      expect(repositorio.creados, isEmpty);
+      expect(rutaEnCurso(), isNull);
+    });
+  });
+
   group('entrenamiento en curso', () {
     test('empieza sin ninguno', () {
       container = crearContainer();
@@ -210,20 +331,46 @@ void main() {
   });
 }
 
+/// Una ruta oficial, completa: con el trazado que el detalle carga antes de
+/// ofrecer correrla (rutas oficiales, etapa 3).
+final _estadio = rutaDePrueba(
+  id: 'ruta-estadio',
+  nombre: 'Vuelta al estadio',
+  estado: EstadoRuta.publicada,
+  trazado: const [
+    PuntoRuta(latitud: 6.2442, longitud: -75.5812),
+    PuntoRuta(latitud: 6.2450, longitud: -75.5800),
+  ],
+);
+
+final _nutibara = rutaDePrueba(
+  id: 'ruta-nutibara',
+  nombre: 'Cerro Nutibara',
+  estado: EstadoRuta.publicada,
+);
+
 /// Entrenamientos en memoria: anota cada creación y, si la prueba lo indica,
 /// falla.
 class _EntrenamientosFalso implements EntrenamientoRepository {
   /// `tipo_actividad_id` de cada entrenamiento creado, en orden.
   final creados = <String>[];
 
+  /// `ruta_id` de cada entrenamiento creado, en el mismo orden que
+  /// [creados]: null si se creó sin ruta (rutas oficiales, etapa 3).
+  final rutas = <String?>[];
+
   /// Si no es null, `crear` lo lanza.
   Object? error;
 
   @override
-  Future<String> crear({required String tipoActividadId}) async {
+  Future<String> crear({
+    required String tipoActividadId,
+    String? rutaId,
+  }) async {
     final error = this.error;
     if (error != null) throw error;
     creados.add(tipoActividadId);
+    rutas.add(rutaId);
     return 'entrenamiento-${creados.length}';
   }
 

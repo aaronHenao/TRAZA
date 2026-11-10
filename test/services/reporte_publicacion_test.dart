@@ -56,10 +56,7 @@ void main() {
 
   test('la confirmación le dice que el autor no sabrá quién lo envió '
       '(criterio 2 de SCRUM-369)', () {
-    expect(
-      ReportePublicacion.recibido,
-      'Reporte enviado. El autor no sabrá que fuiste tú.',
-    );
+    expect(ReportePublicacion.recibido, 'Reporte enviado. Es anónimo.');
   });
 
   test('un motivo que no es "Otro" no exige detalle', () async {
@@ -79,7 +76,7 @@ void main() {
       expect(delUsuario().single.motivo, MotivoReporte.acoso);
       expect(
         ReportePublicacion.duplicado,
-        'Ya reportaste esta publicación. Está en revisión.',
+        'Ya la reportaste. Está en revisión.',
       );
     });
 

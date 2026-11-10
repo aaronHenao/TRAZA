@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/dificultad.dart';
+import '../../models/mapa_progresion.dart';
 import '../../models/punto_gps.dart';
 import '../../models/ruta.dart';
 import '../../services/foro_service.dart' show usuarioActualProvider;
+import '../../services/mapa_progresion_provider.dart';
 import '../../services/reloj_provider.dart';
 import '../../services/roles_service.dart';
 import '../../services/revision_clasificacion_provider.dart';
@@ -29,8 +31,9 @@ import 'revision_rutas_screen.dart' show decidirRevisionRuta;
 /// El detalle de una ruta de la comunidad (SCRUM-240).
 ///
 /// Enseña por dónde va, de quién es y cuánto mide. La distancia se ve aquí,
-/// sin empezar nada: no hay acción de iniciar la ruta —eso es de otra
-/// historia— y el criterio 2 pide justo que no haga falta.
+/// sin empezar nada (criterio 2). Solo una ruta oficial que es la siguiente
+/// del mapa del corredor ofrece "Correr esta ruta" (rutas oficiales,
+/// etapa 3).
 ///
 /// Del "Detalle de ruta" del prototipo quedan fuera el desnivel y el tiempo
 /// estimado: el primero necesitaría la altitud, que no se guarda a propósito
@@ -65,7 +68,17 @@ class DetalleRutaScreen extends ConsumerWidget {
   /// (SCRUM-264, criterio 5 de HU-35).
   static String revisadaPorExperto(DateTime en, DateTime ahora) =>
       'Revisada por un Runner Experto · ${fechaRelativa(en, ahora)}';
-  static const sinRevisar = 'Todavía no la revisa un Runner Experto.';
+
+  /// Que la revisión de 0054 todavía no ha pasado.
+  ///
+  /// No dice «todavía no la revisa un Runner Experto» porque justo encima
+  /// pone que la dificultad la asignó uno: leídas seguidas se contradicen.
+  /// Son dos actos distintos —asignarla (`clasificar_ruta`, 0048) y
+  /// confirmarla o corregirla con la ruta ya publicada
+  /// (`revisiones_clasificacion`, 0054)—, así que el texto habla de
+  /// confirmar, que es lo que falta.
+  static const sinRevisar =
+      'Un Runner Experto todavía no ha confirmado su dificultad.';
   static const sinDificultadAsignada =
       'Todavía no tiene una dificultad asignada.';
 
@@ -85,6 +98,9 @@ class DetalleRutaScreen extends ConsumerWidget {
 
   // El experto también rechaza, con motivo (SCRUM-321).
   static const claveRechazar = Key('detalle-ruta-rechazar');
+
+  /// Salir a correr la ruta (rutas oficiales, etapa 3).
+  static const claveCorrer = Key('detalle-ruta-correr');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -140,6 +156,70 @@ class DetalleRutaScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Si la ruta es oficial, qué puede hacer con ella el corredor según su mapa
+/// (rutas oficiales, etapa 3): correrla si es la siguiente, o saber por qué
+/// no. Una ruta que no es oficial, o un mapa que no cargó, no muestra nada.
+class _CorrerRuta extends ConsumerWidget {
+  const _CorrerRuta({required this.ruta});
+
+  /// La ruta cargada, con su trazado: es la que se lleva al entrenamiento
+  /// para dibujar la guía.
+  final Ruta ruta;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mapa = ref.watch(mapaProgresionProvider).valueOrNull;
+    final parada = mapa?.paradas
+        .where((parada) => parada.ruta.id == ruta.id)
+        .firstOrNull;
+    if (parada == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: switch (parada.estado) {
+        // `push`: desde la actividad, "atrás" vuelve a esta ruta.
+        EstadoParada.siguiente => FilledButton.icon(
+          key: DetalleRutaScreen.claveCorrer,
+          onPressed: () => context.push('/actividad', extra: ruta),
+          icon: const Icon(Icons.directions_run, size: 18),
+          label: const Text('Correr esta ruta'),
+        ),
+        EstadoParada.completada => const _NotaDelMapa(
+          icono: Icons.check_circle,
+          texto: 'Ya completaste esta ruta',
+        ),
+        EstadoParada.bloqueada => const _NotaDelMapa(
+          icono: Icons.lock_outline,
+          texto: 'Completa antes las rutas anteriores del mapa',
+        ),
+      },
+    );
+  }
+}
+
+class _NotaDelMapa extends StatelessWidget {
+  const _NotaDelMapa({required this.icono, required this.texto});
+
+  final IconData icono;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icono, size: 18, color: AppColors.ink2),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            texto,
+            style: const TextStyle(fontSize: 13, color: AppColors.ink2),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -220,6 +300,8 @@ class _Contenido extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         _Dificultad(ruta: ruta, ahora: ahora),
         _RevisarClasificacion(rutaId: ruta.id),
+        // Con la vista previa no: sin trazado no habría guía que seguir.
+        if (!cargandoTrazado) _CorrerRuta(ruta: ruta),
         if (usuario == ruta.autorId && _EstadoDelAutor.aplicaA(ruta)) ...[
           const SizedBox(height: AppSpacing.md),
           _EstadoDelAutor(
@@ -422,6 +504,11 @@ class _EstadoDelAutorState extends ConsumerState<_EstadoDelAutor> {
 /// agrega nada. La revisión se pregunta aparte de la ruta (0054): mientras
 /// llega, o si no se pudo saber, no se dice ni que sí ni que no. Se lee de
 /// una vez con el lector de pantalla.
+///
+/// De la revisión solo se habla si la ruta está publicada: 0054 exige que lo
+/// esté para poder revisarla, así que antes no es que esté pendiente, es que
+/// todavía no puede pasar. Decírselo al autor mientras espera confirmar su
+/// publicación le anuncia como pendiente algo que no depende de él.
 class _Dificultad extends ConsumerWidget {
   const _Dificultad({required this.ruta, required this.ahora});
 
@@ -431,8 +518,9 @@ class _Dificultad extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dificultad = ruta.dificultad;
-    // Sin dificultad no hay revisión que preguntar.
-    final revision = dificultad == null
+    // Sin dificultad, o sin publicar, no hay revisión que preguntar: con
+    // `revision` en null la tarjeta no dice ni que sí ni que no.
+    final revision = dificultad == null || !ruta.publicada
         ? null
         : ref.watch(clasificacionRevisadaEnProvider(ruta.id));
     const detalle = TextStyle(fontSize: 12.5, color: AppColors.ink2);

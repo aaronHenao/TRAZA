@@ -164,10 +164,7 @@ void main() {
         false,
         'Cruza una autopista',
       ));
-      expect(
-        find.text('Rechazada. Le avisamos al autor el motivo.'),
-        findsOneWidget,
-      );
+      expect(find.text('Rechazada. Le avisamos al autor.'), findsOneWidget);
       expect(find.byKey(TarjetaRevisionRuta.claveDe('nueva')), findsNothing);
       // No pasa a la etapa del experto.
       expect(

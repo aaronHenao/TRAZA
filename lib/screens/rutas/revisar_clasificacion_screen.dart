@@ -81,8 +81,7 @@ class RevisarClasificacionScreen extends ConsumerWidget {
   static String confirmada(Dificultad dificultad) =>
       'Confirmaste la ruta como ${dificultad.etiqueta.toLowerCase()}.';
   static const yaNoPuedes = 'Ya no puedes revisar esta ruta.';
-  static const noSeConfirmo =
-      'No pudimos confirmar la dificultad. Inténtalo de nuevo.';
+  static const noSeConfirmo = 'No pudimos confirmar la dificultad';
 
   /// Elegir otra dificultad (SCRUM-263).
   static const elegirOtra = 'Elegir otra dificultad';
@@ -95,8 +94,7 @@ class RevisarClasificacionScreen extends ConsumerWidget {
       'Guardar como ${dificultad.etiqueta.toLowerCase()}';
   static String corregida(Dificultad dificultad) =>
       'La ruta quedó clasificada como ${dificultad.etiqueta.toLowerCase()}.';
-  static const noSeCorrigio =
-      'No pudimos guardar la dificultad. Inténtalo de nuevo.';
+  static const noSeCorrigio = 'No pudimos guardar la dificultad';
 
   static const sinPermisoTitulo = 'No puedes revisar esta clasificación';
   static const sinPermisoDetalle =

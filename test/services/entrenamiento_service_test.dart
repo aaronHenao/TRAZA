@@ -59,6 +59,72 @@ void main() {
     },
   );
 
+  group('crear con una ruta (rutas oficiales, etapa 3)', () {
+    test('con ruta, el insert manda ruta_id además de lo de siempre', () async {
+      final supabase = _SupabaseFalso(
+        filasActualizadas: [
+          {'id': 'e-nuevo'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final id = await supabase.repositorio.crear(
+        tipoActividadId: 'id-correr',
+        rutaId: 'ruta-estadio',
+      );
+
+      expect(id, 'e-nuevo');
+      final peticion = supabase.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.url.path, '/rest/v1/entrenamientos');
+      expect(jsonDecode(peticion.body), {
+        'usuario_id': 'usuario-1',
+        'tipo_actividad_id': 'id-correr',
+        'estado': 'en_curso',
+        'ruta_id': 'ruta-estadio',
+      });
+    });
+
+    test('sin ruta, el cuerpo del insert es el mismo de hoy: no manda '
+        'ruta_id', () async {
+      final supabase = _SupabaseFalso(
+        filasActualizadas: [
+          {'id': 'e-nuevo'},
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      await supabase.repositorio.crear(
+        tipoActividadId: 'id-correr',
+        rutaId: null,
+      );
+
+      final cuerpo = jsonDecode(supabase.peticiones.single.body) as Map;
+      // Ni siquiera como null: sin la clave, el insert es idéntico al de
+      // antes de la etapa 3.
+      expect(cuerpo.containsKey('ruta_id'), isFalse);
+      expect(cuerpo, {
+        'usuario_id': 'usuario-1',
+        'tipo_actividad_id': 'id-correr',
+        'estado': 'en_curso',
+      });
+    });
+
+    test('con ruta y sin sesión tampoco intenta crear nada', () async {
+      final supabase = _SupabaseFalso(usuarioActual: null);
+      addTearDown(supabase.cerrar);
+
+      await expectLater(
+        supabase.repositorio.crear(
+          tipoActividadId: 'id-correr',
+          rutaId: 'ruta-estadio',
+        ),
+        throwsA(isA<SesionRequeridaException>()),
+      );
+      expect(supabase.peticiones, isEmpty);
+    });
+  });
+
   test('sin sesión no intenta crear el entrenamiento', () async {
     final supabase = _SupabaseFalso(usuarioActual: null);
     addTearDown(supabase.cerrar);
@@ -206,6 +272,12 @@ void main() {
       expect(parametros['select'], contains('tipos_actividad(nombre)'));
       expect(parametros['select'], contains('puntos_gps('));
       expect(parametros['select'], contains('tramo'));
+      // Con la clave nombrada: hay dos relaciones entre entrenamientos y
+      // rutas (0060), y sin ella PostgREST no sabe cuál usar.
+      expect(
+        parametros['select'],
+        contains('rutas!entrenamientos_ruta_id_fkey(nombre)'),
+      );
       expect(parametros['puntos_gps.order'], 'orden_secuencia.asc.nullslast');
 
       expect(resumen, isNotNull);
@@ -218,6 +290,25 @@ void main() {
       expect(resumen.puntos.first.capturadoEn, DateTime.utc(2026, 1, 1, 13));
       // Filas sin `tramo` (anteriores a la migración 0007): un solo tramo.
       expect(resumen.cortes, isEmpty);
+      // Un entrenamiento libre no tiene ruta.
+      expect(resumen.nombreRuta, isNull);
+    });
+
+    test('el resumen guardado de una ruta oficial dice qué ruta se corrió '
+        '(rutas oficiales, etapa 3)', () async {
+      final supabase = _SupabaseFalso(
+        filasLeidas: [
+          {
+            ..._filaGuardada,
+            'rutas': {'nombre': 'Vuelta al estadio'},
+          },
+        ],
+      );
+      addTearDown(supabase.cerrar);
+
+      final resumen = await supabase.repositorio.cargarFinalizado('e-123');
+
+      expect(resumen!.nombreRuta, 'Vuelta al estadio');
     });
 
     test('reconstruye dónde empieza cada tramo con la columna tramo '

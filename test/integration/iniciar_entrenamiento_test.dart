@@ -299,7 +299,10 @@ class _EntrenamientosFalso implements EntrenamientoRepository {
   final cancelados = <String>[];
 
   @override
-  Future<String> crear({required String tipoActividadId}) async {
+  Future<String> crear({
+    required String tipoActividadId,
+    String? rutaId,
+  }) async {
     creados.add(tipoActividadId);
     return 'entrenamiento-${creados.length}';
   }

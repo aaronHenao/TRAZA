@@ -9,6 +9,7 @@ import 'screens/admin/formulario_reto_screen.dart';
 import 'screens/admin/gestion_niveles_screen.dart';
 import 'screens/admin/gestion_recompensas_screen.dart';
 import 'screens/admin/gestion_retos_screen.dart';
+import 'screens/admin/gestion_rutas_oficiales_screen.dart';
 import 'screens/admin/moderacion_foro_screen.dart';
 import 'screens/auth/rutas_auth.dart';
 import 'screens/foro/detalle_publicacion_screen.dart';
@@ -181,6 +182,13 @@ final _navegacion = GoRouter(
         ),
       ],
     ),
+    // El camino de rutas oficiales del mapa (rutas oficiales, etapa 1), tras
+    // SoloAdministrador. La barrera de verdad son las funciones de 0058.
+    GoRoute(
+      path: GestionRutasOficialesScreen.ruta,
+      builder: (context, state) =>
+          const SoloAdministrador(hijo: GestionRutasOficialesScreen()),
+    ),
     // El catálogo de recompensas del corredor (SCRUM-374). Se abre con
     // `push` desde la portada.
     GoRoute(
@@ -219,7 +227,9 @@ final _navegacion = GoRouter(
     // Elegir el tipo de actividad y arrancar el entrenamiento (SCRUM-39).
     GoRoute(
       path: '/actividad',
-      builder: (context, state) => const ActividadScreen(),
+      // Desde "Correr esta ruta" llega la ruta oficial elegida (rutas
+      // oficiales, etapa 3); desde el "+" de la portada, nada.
+      builder: (context, state) => ActividadScreen.desdeRuta(state),
     ),
     // Catálogo de retos que el corredor puede intentar (SCRUM-135).
     GoRoute(

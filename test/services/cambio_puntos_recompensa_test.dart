@@ -224,11 +224,11 @@ void main() {
       );
       expect(
         CambioPuntosRecompensa.soloAdministrador,
-        'Solo el administrador puede cambiar los puntos.',
+        'Solo el administrador cambia los puntos',
       );
       expect(
         CambioPuntosRecompensa.noSePudo,
-        'No se pudieron cambiar los puntos. Inténtalo de nuevo.',
+        'No se pudieron cambiar los puntos',
       );
       expect(
         CambioPuntosRecompensa.datosRechazados,

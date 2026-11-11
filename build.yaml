@@ -1,0 +1,10 @@
+# Opciones de build_runner para el código que genera Drift (Desarrollo Móvil).
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # Las fechas como texto ISO-8601: así conservan los milisegundos
+          # (por defecto Drift las guarda en segundos y los pierde), y la
+          # hora de captura de cada punto tiene que llegar igual a Supabase.
+          store_date_time_values_as_text: true

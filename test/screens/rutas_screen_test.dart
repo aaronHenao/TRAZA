@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:traza/models/dificultad.dart';
 import 'package:traza/models/estado_permisos.dart';
@@ -24,6 +25,7 @@ import 'package:traza/services/filtros_rutas_provider.dart';
 import 'package:traza/services/mapa_provider.dart';
 import 'package:traza/services/permisos_service.dart';
 import 'package:traza/services/permisos_usuario_service.dart';
+import 'package:traza/services/preferencias_explorar.dart';
 import 'package:traza/services/reloj_provider.dart';
 import 'package:traza/services/rutas_service.dart';
 import 'package:traza/services/ubicacion_provider.dart';
@@ -37,6 +39,7 @@ import 'package:traza/widgets/tarjeta_ruta_explorar.dart';
 
 import '../utiles/buscador_de_zonas_falso.dart';
 import '../utiles/fuente_ubicacion_falsa.dart';
+import '../utiles/preferencias_explorar_falsa.dart';
 import '../utiles/proveedor_tiles_falso.dart';
 import '../utiles/rutas_repository_falso.dart';
 
@@ -147,6 +150,7 @@ void main() {
     EstadoPermiso ubicacion = EstadoPermiso.concedido,
     Future<EstadoPermiso>? permisoPendiente,
     RutasRepositorioFalso? rutas,
+    PreferenciasExplorar? preferencias,
     bool esperar = true,
     Size tamano = const Size(390, 844),
     double escalaTexto = 1,
@@ -191,6 +195,10 @@ void main() {
           proveedorTilesProvider.overrideWithValue(ProveedorTilesFalso()),
           // Ni la búsqueda por zona le pregunta a Nominatim (SCRUM-255).
           buscadorDeZonasProvider.overrideWithValue(zonas),
+          // Los filtros guardados en el teléfono (preferencias de Explorar,
+          // Desarrollo Móvil). Sin ellos, los de memoria: sin filtros.
+          if (preferencias != null)
+            preferenciasExplorarProvider.overrideWithValue(preferencias),
         ],
         child: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(escalaTexto)),
@@ -3271,4 +3279,242 @@ void main() {
       });
     },
   );
+
+  group('los filtros guardados en el teléfono (preferencias de Explorar, '
+      'Desarrollo Móvil)', () {
+    // Solo la fácil de 7,5 km cumple «facil» y «de5a10» a la vez: las otras
+    // fallan por la distancia, por la dificultad o por no tener.
+    final facilMedia = rutaDePrueba(
+      id: 'facil-media',
+      nombre: 'Vuelta al lago',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 7.5,
+      dificultad: Dificultad.facil,
+    );
+    final facilCorta = rutaDePrueba(
+      id: 'facil-corta',
+      nombre: 'Vuelta al parque',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 3.2,
+      dificultad: Dificultad.facil,
+    );
+    final moderadaMedia = rutaDePrueba(
+      id: 'moderada-media',
+      nombre: 'Subida al Volador',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 6,
+      dificultad: Dificultad.moderada,
+    );
+    final sinClasificar = rutaDePrueba(
+      id: 'sin-clasificar',
+      nombre: 'Vuelta a la manzana',
+      estado: EstadoRuta.publicada,
+      distanciaKm: 8,
+    );
+    final todas = [facilMedia, facilCorta, moderadaMedia, sinClasificar];
+    final idsDeTodas = [for (final ruta in todas) ruta.id];
+
+    // Alta para que la lista construya todas las tarjetas.
+    const alta = Size(390, 2600);
+
+    setUp(() {
+      repositorio = RutasRepositorioFalso(rutas: todas)
+        ..rutasCercanas = [
+          for (final (i, ruta) in todas.indexed)
+            RutaCercana(ruta: ruta, distanciaKm: 0.5 + i),
+        ];
+    });
+
+    List<String> enPantalla(WidgetTester tester) => [
+      for (final tarjeta in tester.widgetList<TarjetaRutaExplorar>(
+        find.byType(TarjetaRutaExplorar),
+      ))
+        tarjeta.ruta.id,
+    ];
+
+    /// «Todas» y las tres dificultades, en el orden de la fila.
+    List<bool> dificultadesActivas(WidgetTester tester) => [
+      for (final opcion in <Dificultad?>[null, ...Dificultad.values])
+        tester
+            .widget<ChipFiltro>(find.byKey(RutasScreen.claveDificultad(opcion)))
+            .activo,
+    ];
+
+    List<bool> rangosActivos(WidgetTester tester) => [
+      for (final rango in RangoDistancia.values)
+        tester
+            .widget<ChipFiltro>(find.byKey(RutasScreen.claveRango(rango)))
+            .activo,
+    ];
+
+    /// Las preferencias del teléfono de verdad, con [guardado] ya en él, como
+    /// al abrir la app.
+    Future<PreferenciasExplorarCompartidas> telefonoCon(
+      Map<String, Object> guardado,
+    ) async {
+      SharedPreferences.setMockInitialValues(guardado);
+      return PreferenciasExplorarCompartidas(
+        await SharedPreferences.getInstance(),
+      );
+    }
+
+    testWidgets('con «facil» y «de5a10» guardados, al abrir Explorar salen '
+        'elegidos y la lista ya filtrada (criterio 2)', (tester) async {
+      final preferencias = await telefonoCon({
+        'explorar.dificultad': 'facil',
+        'explorar.distancia': 'de5a10',
+      });
+
+      await montar(tester, preferencias: preferencias, tamano: alta);
+
+      expect(dificultadesActivas(tester), [false, true, false, false]);
+      expect(rangosActivos(tester), [false, true, false, false]);
+      expect(enPantalla(tester), ['facil-media']);
+      // Abrir no borra lo guardado.
+      expect(preferencias.dificultad(), Dificultad.facil);
+      expect(preferencias.distancia(), RangoDistancia.de5a10);
+    });
+
+    testWidgets('elegir una dificultad y un rango los guarda en el teléfono '
+        '(criterio 1)', (tester) async {
+      final preferencias = PreferenciasExplorarFalsa();
+      await montar(tester, preferencias: preferencias, tamano: alta);
+
+      await elegirDificultad(tester, Dificultad.moderada);
+      expect(preferencias.dificultadGuardada, Dificultad.moderada);
+
+      await tocarChip(tester, RutasScreen.claveRango(RangoDistancia.de5a10));
+      expect(preferencias.distanciaGuardada, RangoDistancia.de5a10);
+      expect(preferencias.dificultadGuardada, Dificultad.moderada);
+    });
+
+    testWidgets('al salir de Explorar y volver, lo elegido sigue elegido y la '
+        'lista filtrada (criterio 2)', (tester) async {
+      final preferencias = PreferenciasExplorarFalsa();
+      final router = await montar(
+        tester,
+        preferencias: preferencias,
+        tamano: alta,
+      );
+      await elegirDificultad(tester, Dificultad.facil);
+      await tocarChip(tester, RutasScreen.claveRango(RangoDistancia.de5a10));
+
+      await tester.tap(find.text('Perfil'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RutasScreen), findsNothing);
+
+      router.go(RutasScreen.ruta);
+      await tester.pumpAndSettle();
+
+      expect(dificultadesActivas(tester), [false, true, false, false]);
+      expect(rangosActivos(tester), [false, true, false, false]);
+      expect(enPantalla(tester), ['facil-media']);
+    });
+
+    testWidgets('tocar el rango elegido lo quita y lo borra de lo guardado, '
+        'sin tocar la dificultad (criterio 3)', (tester) async {
+      final preferencias = PreferenciasExplorarFalsa(
+        dificultadGuardada: Dificultad.facil,
+        distanciaGuardada: RangoDistancia.de5a10,
+      );
+      await montar(tester, preferencias: preferencias, tamano: alta);
+      expect(rangosActivos(tester), [false, true, false, false]);
+
+      await tocarChip(tester, RutasScreen.claveRango(RangoDistancia.de5a10));
+
+      expect(rangosActivos(tester), [false, false, false, false]);
+      expect(preferencias.distanciaGuardada, isNull);
+      expect(preferencias.dificultadGuardada, Dificultad.facil);
+      expect(enPantalla(tester), ['facil-media', 'facil-corta']);
+    });
+
+    testWidgets('tocar la dificultad elegida la quita y la borra de lo '
+        'guardado (criterio 3)', (tester) async {
+      final preferencias = PreferenciasExplorarFalsa(
+        dificultadGuardada: Dificultad.facil,
+      );
+      await montar(tester, preferencias: preferencias, tamano: alta);
+      expect(dificultadesActivas(tester), [false, true, false, false]);
+
+      await elegirDificultad(tester, Dificultad.facil);
+
+      expect(dificultadesActivas(tester), [true, false, false, false]);
+      expect(preferencias.dificultadGuardada, isNull);
+      expect(enPantalla(tester), idsDeTodas);
+    });
+
+    testWidgets('«Todas» borra la dificultad guardada (criterio 3)', (
+      tester,
+    ) async {
+      final preferencias = PreferenciasExplorarFalsa(
+        dificultadGuardada: Dificultad.moderada,
+      );
+      await montar(tester, preferencias: preferencias, tamano: alta);
+      expect(dificultadesActivas(tester), [false, false, true, false]);
+
+      await elegirDificultad(tester, null);
+
+      expect(dificultadesActivas(tester), [true, false, false, false]);
+      expect(preferencias.dificultadGuardada, isNull);
+    });
+
+    testWidgets('el botón de quitar los filtros los borra de lo guardado '
+        '(criterio 3)', (tester) async {
+      // Ninguna fácil mide más de 20 km.
+      final preferencias = PreferenciasExplorarFalsa(
+        dificultadGuardada: Dificultad.facil,
+        distanciaGuardada: RangoDistancia.masDe20,
+      );
+      await montar(tester, preferencias: preferencias, tamano: alta);
+      expect(find.byKey(RutasScreen.claveQuitarFiltros), findsOneWidget);
+
+      await tester.tap(find.byKey(RutasScreen.claveQuitarFiltros));
+      await tester.pumpAndSettle();
+
+      expect(preferencias.dificultadGuardada, isNull);
+      expect(preferencias.distanciaGuardada, isNull);
+      expect(dificultadesActivas(tester), [true, false, false, false]);
+      expect(rangosActivos(tester), [false, false, false, false]);
+      expect(enPantalla(tester), idsDeTodas);
+    });
+
+    testWidgets('si lo guardado no se reconoce, Explorar empieza sin filtros '
+        'y nada falla (criterio 4)', (tester) async {
+      final preferencias = await telefonoCon({
+        'explorar.dificultad': 'extrema',
+        'explorar.distancia': 42,
+      });
+
+      await montar(tester, preferencias: preferencias, tamano: alta);
+
+      expect(tester.takeException(), isNull);
+      expect(dificultadesActivas(tester), [true, false, false, false]);
+      expect(rangosActivos(tester), [false, false, false, false]);
+      expect(enPantalla(tester), idsDeTodas);
+    });
+
+    testWidgets('si solo uno no se reconoce, ese empieza vacío y el otro sí '
+        'filtra (criterio 4)', (tester) async {
+      final preferencias = await telefonoCon({
+        'explorar.dificultad': 'facil',
+        'explorar.distancia': 'de20a40',
+      });
+
+      await montar(tester, preferencias: preferencias, tamano: alta);
+
+      expect(tester.takeException(), isNull);
+      expect(dificultadesActivas(tester), [false, true, false, false]);
+      expect(rangosActivos(tester), [false, false, false, false]);
+      expect(enPantalla(tester), ['facil-media', 'facil-corta']);
+    });
+
+    testWidgets('sin preferencias del teléfono, Explorar empieza sin filtros, '
+        'como antes (criterio 5)', (tester) async {
+      await montar(tester, tamano: alta);
+
+      expect(dificultadesActivas(tester), [true, false, false, false]);
+      expect(rangosActivos(tester), [false, false, false, false]);
+      expect(enPantalla(tester), idsDeTodas);
+    });
+  });
 }

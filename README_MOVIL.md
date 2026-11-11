@@ -210,21 +210,22 @@ Las demás tablas son de la gamificación (`retos`, `retos_usuario`, `experienci
 
 ## Operación local-first y sincronización
 
-**Lo que funciona hoy (SCRUM-292).** Un entrenamiento en curso no pierde su recorrido aunque se caiga la red:
+**Lo que funciona hoy (SCRUM-292 y Drift).** Un entrenamiento en curso no pierde su recorrido aunque se caiga la red:
 
-- Cada punto GPS se escribe en el teléfono apenas se captura, en un archivo JSONL por entrenamiento dentro de la carpeta de documentos de la app (`AlmacenRecorridoEnArchivos`, `lib/services/almacen_recorrido.dart`). El orden y el tramo de cada punto se fijan al capturarlo.
+- Cada punto GPS se escribe en el teléfono apenas se captura, en una base SQLite local con Drift (`lib/services/base_local.dart`, `AlmacenRecorridoDrift`). El orden y el tramo de cada punto se fijan al capturarlo.
+- Cada recorrido guardado lleva su identidad estable (el id del entrenamiento en Supabase), el uid de la cuenta dueña, la fecha de su última actualización y su estado de sincronización: si queda algo por subir (`pendiente_sync`), el motivo del último fallo (`ultimo_error`, un texto fijo) y si la base lo rechazó.
 - Los puntos suben a Supabase por lotes, y solo se borran del teléfono cuando la base los aceptó.
 - Reintentar no duplica: `puntos_gps` tiene un índice único por entrenamiento y número de orden (`0053`), y el envío usa `on conflict do nothing`.
-- Lo que no alcanzó a subir se reenvía al abrir la app con sesión (`ReenvioRecorridos`). Si la base lo rechaza porque el entrenamiento ya no existe o no es de esa cuenta, se descarta en vez de reintentarlo para siempre.
+- Lo que no alcanzó a subir se reenvía al abrir la app con sesión (`ReenvioRecorridos`), y solo lo de esa cuenta: lo de otra cuenta del mismo teléfono se queda hasta que vuelva. Si la base lo rechaza porque el entrenamiento ya no existe o no es de esa cuenta, se anota el motivo, deja de reintentarse y queda para que la persona lo descarte.
+- Lo que hubiera quedado en los archivos JSONL de versiones anteriores se pasa a la base local la primera vez que se abre la app.
 - Descartar un entrenamiento también borra sus puntos del teléfono.
+- Los filtros de Explorar rutas (dificultad y distancia) se recuerdan con SharedPreferences (`lib/services/preferencias_explorar.dart`).
 
 Iniciar y finalizar un entrenamiento sí necesitan conexión. Al iniciar se crea su fila en `entrenamientos`, y si finalizar falla, la app lo avisa y el botón "Finalizar" se puede volver a tocar.
 
 **Pendiente:**
 
-- Guardar en Drift (SQLite) la operación que se registra sin conexión, con identidad estable, uid del dueño, fecha de actualización y estado de sincronización.
-- Mostrar en pantalla el estado de sincronización, aparte del estado del negocio.
-- Guardar al menos una preferencia sencilla en SharedPreferences.
+- Mostrar en pantalla el estado de sincronización, aparte del estado del negocio. Los datos ya están: `recorridosLocalesProvider` emite los recorridos de la cuenta con su estado.
 
 ## Privacidad: datos, finalidad y acceso
 
@@ -267,8 +268,7 @@ Las cuentas por rol, una ruta en cada uno de los seis estados y cómo reproducir
 
 - La base es Supabase y no Firebase. Falta la respuesta del docente.
 - Crashlytics solo está configurado en Android. Como no recibe el mensaje del error, a veces hay que reproducirlo para diagnosticarlo.
-- Todavía no hay Drift, ni una preferencia en SharedPreferences, ni un indicador del estado de sincronización. Sin red, lo que se conserva son los puntos del recorrido en curso; iniciar y finalizar necesitan conexión.
-- Al cambiar de cuenta en el mismo teléfono, los puntos que la cuenta anterior no alcanzó a subir se descartan en el siguiente arranque. No se suben con la otra cuenta, pero se pierden.
+- Todavía no hay un indicador del estado de sincronización en pantalla. Sin red, lo que se conserva son los puntos del recorrido en curso; iniciar y finalizar necesitan conexión.
 - La policy de update de `perfiles` no protege la columna `rol` (ver RNF-14 en [docs/deudas.md](docs/deudas.md)). Falta una migración que impida cambiarla desde el cliente.
 - La sesión de Supabase, con sus tokens de acceso y de refresco, la guarda `supabase_flutter` en SharedPreferences, que es su almacenamiento por defecto.
 - Las rutas publicadas antes de que existiera la clasificación no tienen dificultad, y las publicadas antes de RNF-04 conservan sus extremos exactos.

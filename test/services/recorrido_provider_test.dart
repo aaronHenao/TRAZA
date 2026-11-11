@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:traza/models/recorrido.dart';
+import 'package:traza/models/recorrido_local.dart';
 import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/cronometro_provider.dart';
 import 'package:traza/services/recorrido_provider.dart';
@@ -397,6 +399,84 @@ void main() {
 
       expect(recorrido().puntos, hasLength(3), reason: 'el trazo sí se ve');
       expect(almacen.guardados, isEmpty);
+    });
+  });
+
+  group('criterio 4 (Drift, Desarrollo Móvil): si el envío falla, se anota '
+      'el motivo sin borrar nada', () {
+    test('si el envío falla, anota motivoSinEnviar en el recorrido y conserva '
+        'los puntos', () async {
+      await montar();
+      await emitir(6.2311, -75.6105);
+      await emitir(6.2312, -75.6106);
+      repositorio.fallar = true;
+
+      expect(await sincronizar(), isFalse);
+
+      expect(almacen.errores, [
+        (
+          entrenamientoId: entrenamientoId,
+          motivo: RecorridoLocal.motivoSinEnviar,
+          rechazado: false,
+        ),
+      ]);
+      expect(almacen.olvidados, isEmpty);
+      expect(await almacen.pendientes(entrenamientoId), hasLength(2));
+    });
+
+    // Durante la actividad todo fallo se anota como "sin enviar": quien
+    // decide si es un rechazo (y deja de reintentarlo) es el reenvío al
+    // abrir la app, con el recorrido ya cerrado.
+    test('aunque la base lo niegue, anota el texto fijo de "sin enviar", no '
+        'el rechazo ni el error crudo', () async {
+      await montar();
+      await emitir(6.2311, -75.6105);
+      repositorio
+        ..fallar = true
+        ..error = const PostgrestException(
+          message:
+              'new row violates row-level security policy for table '
+              '"puntos_gps"',
+          code: '42501',
+        );
+
+      await sincronizar();
+
+      expect(almacen.errores.single.motivo, RecorridoLocal.motivoSinEnviar);
+      expect(almacen.errores.single.motivo, isNot(contains('puntos_gps')));
+    });
+
+    test('un lote que falla durante la actividad también anota el '
+        'motivo', () async {
+      await montar();
+      repositorio.fallar = true;
+
+      await correr(RecorridoNotifier.puntosPorLote);
+
+      expect(almacen.errores.single.motivo, RecorridoLocal.motivoSinEnviar);
+      expect(almacen.errores.single.entrenamientoId, entrenamientoId);
+    });
+
+    test('si el envío sale bien no anota ningún error', () async {
+      await montar();
+      await emitir(6.2311, -75.6105);
+
+      expect(await sincronizar(), isTrue);
+
+      expect(almacen.errores, isEmpty);
+    });
+
+    test('si ni siquiera se puede anotar el motivo, sincronizar devuelve '
+        'false sin reventar', () async {
+      await montar();
+      await emitir(6.2311, -75.6105);
+      repositorio.fallar = true;
+      almacen.errorAlRegistrar = Exception('disco lleno');
+
+      expect(await sincronizar(), isFalse);
+
+      expect(recorrido().sincronizacion, EstadoSincronizacion.fallida);
+      expect(await almacen.pendientes(entrenamientoId), hasLength(1));
     });
   });
 }

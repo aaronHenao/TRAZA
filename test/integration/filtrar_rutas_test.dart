@@ -513,19 +513,33 @@ void main() {
       expect(base.consultasCercanas, 1);
     });
 
-    testWidgets('al salir de la sección se olvidan: al volver empieza sin '
-        'filtros', (tester) async {
+    // Antes se olvidaban al salir de la sección. Desde las preferencias de
+    // Explorar (Desarrollo Móvil) se recuerdan: al volver siguen elegidos y
+    // la lista sale filtrada igual.
+    testWidgets('al salir de la sección y volver, los filtros siguen '
+        'elegidos', (tester) async {
+      // Fácil y de 10 a 20 km: solo Santa Elena. Sin la dificultad saldría
+      // también Guatapé, así que la lista prueba que se recordaron las dos.
       await abrirRutas(tester);
       await elegirDificultad(tester, Dificultad.facil);
-      await tocarRango(tester, RangoDistancia.menosDe5);
+      await tocarRango(tester, RangoDistancia.de10a20);
+      expect(enPantalla(tester), ['Subida a Santa Elena']);
 
       await tester.tap(find.text(SeccionPrincipal.inicio.etiqueta));
       await tester.pumpAndSettle();
       await tester.tap(find.text(SeccionPrincipal.rutas.etiqueta));
       await tester.pumpAndSettle();
 
-      expect(elegidos(tester), isEmpty);
-      expect(enPantalla(tester), nombres);
+      expect(elegidos(tester), [RangoDistancia.de10a20]);
+      expect(
+        tester
+            .widget<ChipFiltro>(
+              find.byKey(RutasScreen.claveDificultad(Dificultad.facil)),
+            )
+            .activo,
+        isTrue,
+      );
+      expect(enPantalla(tester), ['Subida a Santa Elena']);
       // Al entrar de nuevo se consulta otra vez, como siempre (SCRUM-246).
       expect(base.consultasCercanas, 2);
     });

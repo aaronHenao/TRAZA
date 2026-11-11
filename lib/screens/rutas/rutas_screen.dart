@@ -759,8 +759,8 @@ class _SinRutasConFiltrosState extends ConsumerState<_SinRutasConFiltros>
   String get anuncio => '${widget.titulo}. ${widget.detalle}';
 
   void _quitarFiltros() {
-    ref.read(rangoDistanciaProvider.notifier).state = null;
-    ref.read(dificultadRutasProvider.notifier).state = null;
+    ref.read(rangoDistanciaProvider.notifier).elegir(null);
+    ref.read(dificultadRutasProvider.notifier).elegir(null);
   }
 
   @override
@@ -860,8 +860,9 @@ class _FiltroDificultad extends ConsumerWidget {
             activo: dificultad == elegida,
             onTap: () {
               _cerrarTeclado();
-              ref.read(dificultadRutasProvider.notifier).state =
-                  dificultad == elegida ? null : dificultad;
+              ref
+                  .read(dificultadRutasProvider.notifier)
+                  .elegir(dificultad == elegida ? null : dificultad);
             },
           ),
       ],
@@ -894,9 +895,9 @@ class _FiltroDistancia extends ConsumerWidget {
             activo: rango == elegido,
             onTap: () {
               _cerrarTeclado();
-              ref.read(rangoDistanciaProvider.notifier).state = rango == elegido
-                  ? null
-                  : rango;
+              ref
+                  .read(rangoDistanciaProvider.notifier)
+                  .elegir(rango == elegido ? null : rango);
             },
           ),
       ],

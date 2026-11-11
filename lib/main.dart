@@ -37,6 +37,7 @@ import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
 import 'services/auth_service.dart';
+import 'services/preferencias_explorar.dart';
 import 'services/reporte_errores.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
@@ -54,7 +55,15 @@ Future<void> main() async {
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
   );
-  runApp(const ProviderScope(child: TrazaApp()));
+  // Se cargan una vez al arrancar, así Explorar abre ya con sus filtros
+  // (preferencias de Explorar, Desarrollo Móvil).
+  final preferencias = await PreferenciasExplorarCompartidas.cargar();
+  runApp(
+    ProviderScope(
+      overrides: [preferenciasExplorarProvider.overrideWithValue(preferencias)],
+      child: const TrazaApp(),
+    ),
+  );
 }
 
 /// Pantalla con la que abre la app. Por defecto, el login.

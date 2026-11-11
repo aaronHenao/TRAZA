@@ -9,6 +9,7 @@ import '../models/estado_cronometro.dart';
 import '../models/punto_gps.dart';
 import '../models/punto_pendiente.dart';
 import '../models/recorrido.dart';
+import '../models/recorrido_local.dart';
 import 'almacen_recorrido.dart';
 import 'calculadora_distancia.dart';
 import 'criterio_movimiento.dart';
@@ -148,7 +149,8 @@ class RecorridoNotifier extends AutoDisposeNotifier<Recorrido> {
             .read(almacenRecorridoProvider)
             .anadir(entrenamientoId, pendiente);
       } catch (error) {
-        debugPrint('No se pudo guardar el punto en disco: $error');
+        // Solo el tipo: el error de SQLite trae la fila, con su ubicación.
+        debugPrint('No se pudo guardar el punto: ${error.runtimeType}');
         return;
       }
       _sinEnviar++;
@@ -244,6 +246,18 @@ class RecorridoNotifier extends AutoDisposeNotifier<Recorrido> {
       return true;
     } catch (error) {
       debugPrint('No se pudo enviar el recorrido: $error');
+      // Se anota un texto fijo para la pantalla de sincronización (Drift,
+      // Desarrollo Móvil); si ni eso se puede, se sigue igual.
+      try {
+        await almacen.registrarError(
+          entrenamientoId,
+          RecorridoLocal.motivoSinEnviar,
+        );
+      } catch (error) {
+        debugPrint(
+          'No se pudo anotar el motivo del recorrido: ${error.runtimeType}',
+        );
+      }
       _actualizar(EstadoSincronizacion.fallida);
       return false;
     } finally {

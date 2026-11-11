@@ -7,6 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/punto_pendiente.dart';
+import '../models/recorrido_local.dart';
+import 'almacen_recorrido_drift.dart';
+import 'base_local.dart';
+// `usuarioActualProvider` vive en el foro porque fue el primero que lo
+// necesitó; como en rutas_service y notificaciones_service, se reusa en vez
+// de crear otro.
+import 'foro_service.dart' show usuarioActualProvider;
 
 /// Dónde esperan los puntos del recorrido hasta que la base los acepta
 /// (SCRUM-292).
@@ -35,16 +42,48 @@ abstract interface class AlmacenRecorrido {
   Future<void> olvidar(String entrenamientoId);
 
   /// Los entrenamientos con puntos sin enviar, para reintentarlos
-  /// (criterio del reenvío al abrir la app).
+  /// (criterio del reenvío al abrir la app). Desde Drift, solo los de la
+  /// cuenta con sesión y nunca los rechazados.
   Future<List<String>> conPendientes();
+
+  /// Anota por qué no se pudo enviar el recorrido, sin borrar nada.
+  /// [rechazado]: la base no lo acepta, así que ya no se reintenta solo.
+  /// No hace nada si el recorrido no existe (Drift, Desarrollo Móvil).
+  Future<void> registrarError(
+    String entrenamientoId,
+    String motivo, {
+    bool rechazado = false,
+  });
+
+  /// Los recorridos de la cuenta con sesión y en qué va su sincronización,
+  /// del más reciente al más viejo. Vuelve a emitir con cada cambio.
+  Stream<List<RecorridoLocal>> recorridosDeLaCuenta();
 }
 
-/// Almacén real. Las pruebas lo sustituyen por uno en memoria.
+/// Almacén real: SQLite con Drift (Desarrollo Móvil). La primera vez trae lo
+/// que quedara en los archivos JSONL de antes. Las pruebas lo sustituyen
+/// por uno en memoria.
 final almacenRecorridoProvider = Provider<AlmacenRecorrido>(
-  (ref) => AlmacenRecorridoEnArchivos(),
+  (ref) => AlmacenRecorridoDrift(
+    ref.watch(baseLocalProvider),
+    usuarioActual: ref.watch(usuarioActualProvider),
+    archivosViejos: AlmacenRecorridoEnArchivos(),
+  ),
 );
 
+/// Los recorridos del teléfono de la cuenta con sesión y en qué va su
+/// sincronización (Drift, Desarrollo Móvil). Lo leerá la pantalla de
+/// sincronización; al cambiar de cuenta hay que invalidarlo
+/// (docs/deudas.md).
+final recorridosLocalesProvider =
+    StreamProvider.autoDispose<List<RecorridoLocal>>(
+      (ref) => ref.watch(almacenRecorridoProvider).recorridosDeLaCuenta(),
+    );
+
 /// Un archivo por entrenamiento, una línea por punto (JSONL).
+///
+/// Desde Drift ya no es el almacén de la app: queda solo para leer lo que
+/// quedara en el teléfono y llevarlo a la base local.
 ///
 /// Se eligió añadir al final en vez de reescribir un documento entero
 /// porque se escribe una vez por punto: añadir una línea no depende de lo
@@ -149,6 +188,17 @@ class AlmacenRecorridoEnArchivos implements AlmacenRecorrido {
       return ids;
     });
   }
+
+  /// Los archivos no guardan estado de sincronización.
+  @override
+  Future<void> registrarError(
+    String entrenamientoId,
+    String motivo, {
+    bool rechazado = false,
+  }) async {}
+
+  @override
+  Stream<List<RecorridoLocal>> recorridosDeLaCuenta() => Stream.value(const []);
 
   /// El último orden que la base ya tiene, o -1 si no hay nada enviado.
   Future<int> _hastaDondeEnviado(String entrenamientoId) async {

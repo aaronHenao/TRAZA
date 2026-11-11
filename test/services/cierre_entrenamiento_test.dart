@@ -6,6 +6,7 @@ import 'package:traza/models/recorrido.dart';
 import 'package:traza/models/resumen_entrenamiento.dart';
 import 'package:traza/models/reto_del_usuario.dart';
 import 'package:traza/models/ruta.dart';
+import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/entrenamiento_actual_provider.dart';
 import 'package:traza/services/entrenamiento_provider.dart';
 import 'package:traza/services/entrenamiento_service.dart';
@@ -20,6 +21,7 @@ import 'package:traza/services/retos_provider.dart';
 import 'package:traza/services/retos_service.dart';
 import 'package:traza/services/rutas_oficiales_service.dart';
 
+import '../utiles/almacen_recorrido_falso.dart';
 import '../utiles/experiencia_falsa.dart';
 import '../utiles/insignias_falsas.dart';
 import '../utiles/niveles_falso.dart';
@@ -67,6 +69,9 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
+        // Desde Drift el almacén real abre SQLite en el disco del teléfono,
+        // que en las pruebas no existe (Drift, Desarrollo Móvil).
+        almacenRecorridoProvider.overrideWithValue(AlmacenRecorridoFalso()),
         entrenamientoActualProvider.overrideWithValue('e-1'),
         entrenamientoRepositoryProvider.overrideWithValue(entrenamientos),
         experienciaRepositoryProvider.overrideWithValue(experiencia),

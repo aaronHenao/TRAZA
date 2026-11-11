@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/recorrido_local.dart';
 import 'almacen_recorrido.dart';
 import 'mapa_progresion_provider.dart';
 import 'recorrido_provider.dart' show repositorioPuntosGpsProvider;
@@ -34,10 +35,12 @@ class ReenvioRecorridos {
   /// Intenta subir todos los recorridos pendientes. Devuelve cuántos
   /// quedaron completos.
   ///
-  /// Lo que falle por red se queda en disco y se reintenta en el próximo
-  /// arranque. Lo que falle porque ya no tiene sentido —el entrenamiento
-  /// no existe o no es de este usuario— se borra: reintentarlo cada vez no
-  /// lo va a arreglar.
+  /// Lo que falle por red se queda en el teléfono con `motivoSinEnviar` y se
+  /// reintenta en el próximo arranque. Lo que la base rechaza —el
+  /// entrenamiento no existe o no es de esta cuenta— se anota con
+  /// `motivoRechazado`, queda `rechazado` y no se reintenta solo: lo decide
+  /// la persona desde la pantalla de sincronización (Drift, Desarrollo
+  /// Móvil).
   Future<int> reintentar() async {
     final almacen = _ref.read(almacenRecorridoProvider);
 
@@ -97,26 +100,42 @@ class ReenvioRecorridos {
       return true;
     } on PostgrestException catch (error) {
       if (error.code == _rlsDenegado || error.code == _sinReferencia) {
+        // Reintentarlo no lo va a arreglar, pero tampoco se borra: se anota
+        // por qué, y la persona decide desde la pantalla de sincronización
+        // (Drift, Desarrollo Móvil).
         debugPrint(
-          'El recorrido $entrenamientoId ya no se puede subir (${error.code}): '
-          'se descarta',
+          'La base rechazó el recorrido $entrenamientoId (${error.code})',
         );
-        await _olvidarSinFallar(entrenamientoId);
+        await _anotar(
+          entrenamientoId,
+          RecorridoLocal.motivoRechazado,
+          rechazado: true,
+        );
         return false;
       }
       debugPrint('No se pudo subir el recorrido $entrenamientoId: $error');
+      await _anotar(entrenamientoId, RecorridoLocal.motivoSinEnviar);
       return false;
     } catch (error) {
       debugPrint('No se pudo subir el recorrido $entrenamientoId: $error');
+      await _anotar(entrenamientoId, RecorridoLocal.motivoSinEnviar);
       return false;
     }
   }
 
-  Future<void> _olvidarSinFallar(String entrenamientoId) async {
+  /// El motivo es un texto fijo, nunca el error crudo: puede traer datos de
+  /// la fila. Si ni eso se puede guardar, el recorrido sigue igual.
+  Future<void> _anotar(
+    String entrenamientoId,
+    String motivo, {
+    bool rechazado = false,
+  }) async {
     try {
-      await _ref.read(almacenRecorridoProvider).olvidar(entrenamientoId);
+      await _ref
+          .read(almacenRecorridoProvider)
+          .registrarError(entrenamientoId, motivo, rechazado: rechazado);
     } catch (error) {
-      debugPrint('No se pudo borrar el recorrido descartado: $error');
+      debugPrint('No se pudo anotar el motivo del recorrido: $error');
     }
   }
 }

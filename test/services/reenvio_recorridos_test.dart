@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:traza/models/recorrido_local.dart';
 import 'package:traza/models/verificacion_ruta.dart';
 import 'package:traza/services/almacen_recorrido.dart';
 import 'package:traza/services/mapa_progresion_provider.dart';
@@ -22,6 +23,10 @@ import '../utiles/rutas_oficiales_repository_falso.dart';
 /// Desde rutas oficiales, etapa 4, al terminar de subir un recorrido se
 /// vuelve a pedir la verificación de su ruta: con puntos que faltaban, la
 /// del resumen pudo dar una cobertura baja.
+///
+/// Desde Drift (Desarrollo Móvil), lo que la base rechaza ya no se borra: se
+/// anota el motivo y se deja de reintentar, para que la pantalla de
+/// sincronización pueda mostrarlo.
 void main() {
   late AlmacenRecorridoFalso almacen;
   late RepositorioPuntosGpsFalso repositorio;
@@ -113,40 +118,187 @@ void main() {
     },
   );
 
-  test('un entrenamiento que ya no existe se descarta en vez de reintentarlo '
-      'siempre', () async {
-    dejarPendiente('ent-borrado', 5);
-    repositorio.fallar = true;
-    // 23503: la clave foránea no encuentra el entrenamiento.
-    repositorio.error = const PostgrestException(
-      message: 'insert or update violates foreign key constraint',
-      code: '23503',
-    );
-
-    expect(await reintentar(), 0);
-
-    expect(almacen.olvidados, ['ent-borrado']);
-    expect(await almacen.conPendientes(), isEmpty);
-  });
-
-  test('un recorrido de otro usuario se descarta igual', () async {
-    dejarPendiente('ent-ajeno', 5);
-    repositorio.fallar = true;
-    // 42501: la policy no deja escribir en ese entrenamiento.
-    repositorio.error = const PostgrestException(
-      message: 'new row violates row-level security policy',
-      code: '42501',
-    );
-
-    await reintentar();
-
-    expect(almacen.olvidados, ['ent-ajeno']);
-  });
-
   test('si no se puede ni mirar el disco, no revienta la portada', () async {
     almacen.error = Exception('disco no disponible');
 
     expect(await reintentar(), 0);
+  });
+
+  group('criterio 4 (Drift, Desarrollo Móvil): si no se pudo enviar, se '
+      'anota el motivo sin borrar nada', () {
+    // Antes, lo rechazado (42501/23503) se borraba del disco. Ahora se
+    // conserva con su motivo y se deja de reintentar solo.
+    test('ante un 23503 (el entrenamiento ya no existe) anota motivoRechazado '
+        'como rechazado y no borra los puntos', () async {
+      dejarPendiente('ent-borrado', 5);
+      repositorio.fallar = true;
+      // 23503: la clave foránea no encuentra el entrenamiento.
+      repositorio.error = const PostgrestException(
+        message: 'insert or update violates foreign key constraint',
+        code: '23503',
+      );
+
+      expect(await reintentar(), 0);
+
+      expect(almacen.errores, [
+        (
+          entrenamientoId: 'ent-borrado',
+          motivo: RecorridoLocal.motivoRechazado,
+          rechazado: true,
+        ),
+      ]);
+      expect(almacen.olvidados, isEmpty);
+      expect(await almacen.pendientes('ent-borrado'), hasLength(5));
+    });
+
+    test('ante un 42501 (es de otra cuenta) anota motivoRechazado como '
+        'rechazado y no borra los puntos', () async {
+      dejarPendiente('ent-ajeno', 5);
+      repositorio.fallar = true;
+      // 42501: la policy no deja escribir en ese entrenamiento.
+      repositorio.error = const PostgrestException(
+        message: 'new row violates row-level security policy',
+        code: '42501',
+      );
+
+      await reintentar();
+
+      expect(almacen.errores, [
+        (
+          entrenamientoId: 'ent-ajeno',
+          motivo: RecorridoLocal.motivoRechazado,
+          rechazado: true,
+        ),
+      ]);
+      expect(almacen.olvidados, isEmpty);
+      expect(await almacen.pendientes('ent-ajeno'), hasLength(5));
+    });
+
+    test('un recorrido rechazado ya no se reintenta solo en el próximo '
+        'arranque', () async {
+      dejarPendiente('ent-borrado', 5);
+      repositorio
+        ..fallar = true
+        ..error = const PostgrestException(
+          message: 'insert or update violates foreign key constraint',
+          code: '23503',
+        );
+      await reintentar();
+      repositorio.fallar = false;
+
+      // El siguiente arranque.
+      expect(await container.refresh(reenvioRecorridosProvider.future), 0);
+
+      expect(repositorio.intentos, 1);
+    });
+
+    test('ante cualquier otro error anota motivoSinEnviar, sin marcarlo '
+        'rechazado ni borrar nada', () async {
+      dejarPendiente('ent-1', 5);
+      repositorio.fallar = true;
+
+      expect(await reintentar(), 0);
+
+      expect(almacen.errores, [
+        (
+          entrenamientoId: 'ent-1',
+          motivo: RecorridoLocal.motivoSinEnviar,
+          rechazado: false,
+        ),
+      ]);
+      expect(almacen.olvidados, isEmpty);
+      expect(await almacen.pendientes('ent-1'), hasLength(5));
+    });
+
+    test('un error de la base con otro código no cuenta como '
+        'rechazo', () async {
+      dejarPendiente('ent-1', 5);
+      repositorio
+        ..fallar = true
+        // 57014: la consulta tardó demasiado. Reintentarlo puede salir bien.
+        ..error = const PostgrestException(
+          message: 'canceling statement due to statement timeout',
+          code: '57014',
+        );
+
+      await reintentar();
+
+      expect(almacen.errores.single.motivo, RecorridoLocal.motivoSinEnviar);
+      expect(almacen.errores.single.rechazado, isFalse);
+    });
+
+    test('lo que falló por otra causa se reintenta en el próximo arranque y '
+        'sube', () async {
+      dejarPendiente('ent-1', 5);
+      repositorio.fallar = true;
+      await reintentar();
+      repositorio.fallar = false;
+
+      // El siguiente arranque, ya con red.
+      expect(await container.refresh(reenvioRecorridosProvider.future), 1);
+
+      expect(repositorio.puntosDe('ent-1'), hasLength(5));
+    });
+
+    for (final (causa, error, motivo) in [
+      (
+        'la base lo rechaza',
+        const PostgrestException(
+          message:
+              'new row violates row-level security policy for table '
+              '"puntos_gps"',
+          code: '42501',
+        ),
+        RecorridoLocal.motivoRechazado,
+      ),
+      (
+        'se cae la red',
+        StateError('SocketException: Failed host lookup "puntos_gps"'),
+        RecorridoLocal.motivoSinEnviar,
+      ),
+    ]) {
+      test('si $causa, el motivo anotado es el texto fijo, nunca el error '
+          'crudo', () async {
+        dejarPendiente('ent-1', 5);
+        repositorio
+          ..fallar = true
+          ..error = error;
+
+        await reintentar();
+
+        final anotado = almacen.errores.single.motivo;
+        expect(anotado, motivo);
+        expect(anotado, isNot(contains('puntos_gps')));
+      });
+    }
+
+    test('si ni siquiera se puede anotar el motivo, no revienta la '
+        'portada', () async {
+      dejarPendiente('ent-1', 5);
+      repositorio.fallar = true;
+      almacen.errorAlRegistrar = Exception('disco lleno');
+
+      expect(await reintentar(), 0);
+
+      expect(await almacen.pendientes('ent-1'), hasLength(5));
+    });
+
+    test('si ni siquiera se puede anotar el rechazo, no revienta la portada '
+        'ni borra nada', () async {
+      dejarPendiente('ent-borrado', 5);
+      repositorio
+        ..fallar = true
+        ..error = const PostgrestException(
+          message: 'insert or update violates foreign key constraint',
+          code: '23503',
+        );
+      almacen.errorAlRegistrar = Exception('disco lleno');
+
+      expect(await reintentar(), 0);
+
+      expect(almacen.olvidados, isEmpty);
+      expect(await almacen.pendientes('ent-borrado'), hasLength(5));
+    });
   });
 
   group('verificar la ruta al terminar de subir (rutas oficiales, etapa 4, '
@@ -249,7 +401,7 @@ void main() {
       expect(rutasOficiales.verificados, isEmpty);
     });
 
-    test('un recorrido que se descarta (ya no existe o es de otro) no se '
+    test('un recorrido rechazado (ya no existe o es de otro) no se '
         'verifica', () async {
       dejarPendiente('ent-borrado', 5);
       repositorio
@@ -261,7 +413,8 @@ void main() {
 
       expect(await reintentar(), 0);
 
-      expect(almacen.olvidados, ['ent-borrado']);
+      // Desde Drift (Desarrollo Móvil) lo rechazado ya no se borra.
+      expect(almacen.olvidados, isEmpty);
       expect(rutasOficiales.verificados, isEmpty);
     });
 

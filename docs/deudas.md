@@ -379,3 +379,16 @@ que la pantalla decide pasar, no en cómo se dibuja.
 - **Cada apertura del resumen vuelve a calcular la cobertura.** Es barato (CTE materializados, 20 000 puntos como mucho), pero se podría devolver lo ya guardado en `rutas_completadas` para ese entrenamiento.
 - **Entrenamientos terminados antes de `0061`** no tienen `finalizado_en`: su ruta no se puede validar (TZ422).
 - **Medición real pendiente.** Se midió en una réplica local de Postgres (0.1–0.3 s con 20 000 puntos). Falta medirlo en el Supabase compartido con una carrera de una hora.
+
+## Drift (Desarrollo Móvil): los recorridos sin enviar en SQLite
+
+**Qué quedó hecho:** los puntos del recorrido offline viven en una base SQLite con Drift (`lib/services/base_local.dart`, `AlmacenRecorridoDrift`), con id estable, uid del dueño, fecha de actualización, `pendiente_sync`, `ultimo_error` y `rechazado`. El reenvío filtra por cuenta y ya no borra lo rechazado: lo anota. `recorridosLocalesProvider` emite los recorridos de la cuenta para la pantalla de sincronización.
+
+**Qué falta:**
+
+- **La pantalla de sincronización** (tarea de Emmanuel) se monta sobre `recorridosLocalesProvider`. Al cerrar sesión o cambiar de cuenta hay que invalidarlo (o el almacén): el provider lee la cuenta al suscribirse, y no hay un provider del estado de la sesión que lo reconstruya solo. "Descartar" es `almacenRecorridoProvider.olvidar(id)` y "reintentar", `reenvioRecorridosProvider`.
+- **Recorridos importados sin dueño.** Los archivos JSONL no guardaban la cuenta, así que lo importado queda con `usuario_id` null. Se sigue intentando subir con cada cuenta (la base decide de quién es), nunca se marca rechazado por eso y no aparece en la lista de ninguna cuenta. Uno cuyo entrenamiento ya no existe se reintenta en cada arranque sin éxito; son pocos y solo de la migración.
+- **Retirar `AlmacenRecorridoEnArchivos`** (y quizá `path_provider`) cuando ningún teléfono tenga ya recorridos en archivos: hoy solo se usa para importarlos.
+- **`usuarioActualProvider` vive en `foro_service.dart`** y ya lo usan cinco servicios. Debería estar en un archivo de sesión.
+- **Copia de seguridad de Android.** El manifiesto no excluye nada de la copia automática, así que `traza_local.sqlite` (ubicación de recorridos sin enviar) entra en ella, como entraban los JSONL. Si se quiere evitar: `data_extraction_rules`.
+- **CI:** `sqlite3` 3.x consigue SQLite al compilar con *build hooks* (descarga verificada desde GitHub). Confirmar en el primer PR que `flutter test` corre en Ubuntu.

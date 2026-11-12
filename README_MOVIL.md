@@ -23,7 +23,7 @@ Alrededor de ese proceso, la app tiene retos, niveles, insignias, recompensas, u
 | Administrador | `perfiles.rol = 'admin'` | Lo asigna el equipo desde el SQL Editor de Supabase. | Hace la primera revisión de las rutas, en la que aprueba o rechaza con un motivo. Gestiona retos, niveles y recompensas, y modera el foro. |
 | Runner Experto | Una fila en `roles_usuario` con `rol = 'experto'` | Un trigger lo otorga a quien supera el décimo nivel, tiene 150 000 de XP y 6 meses de cuenta (`0012`). Para las pruebas lo asigna el equipo en el SQL Editor. | Es un corredor con un rol más. Hace la segunda revisión: aprueba asignando la dificultad o rechaza con un motivo. Con la ruta ya publicada, revisa una vez la clasificación que él mismo hizo (HU-35). |
 
-La interfaz muestra solo las acciones de cada rol, y las pantallas restringidas van detrás de `SoloAdministrador` y `SoloExperto`. Además, la base aplica Row Level Security en cada tabla, y los cambios de estado pasan por funciones `security definer` que validan el rol, como `decidir_revision_ruta` y `clasificar_ruta`. Cómo asignar los roles de prueba está en [docs/datos_de_prueba.md](docs/datos_de_prueba.md).
+La interfaz muestra solo las acciones de cada rol, y las pantallas restringidas van detrás de `SoloAdministrador` y `SoloExperto`. Además, la base aplica Row Level Security en cada tabla, y los cambios de estado pasan por funciones `security definer` que validan el rol, como `decidir_revision_ruta` y `clasificar_ruta`. Nadie puede darse un rol desde el cliente: el trigger de `0062_rol_protegido.sql` deja fijo `perfiles.rol` en toda escritura que llegue por la API, y un perfil nuevo siempre nace `usuario`. Cómo asignar los roles de prueba está en [docs/datos_de_prueba.md](docs/datos_de_prueba.md).
 
 ## El camino de una ruta
 
@@ -113,7 +113,7 @@ El client ID web de `lib/google_config.dart` es el que Supabase tiene configurad
 
 ## Configuración del backend: Supabase en lugar de Firebase
 
-Los lineamientos piden Firebase Authentication y Firestore. TRAZA usa Supabase desde el primer sprint porque el proceso necesita una base relacional: las reglas del negocio dependen de llaves foráneas, restricciones e integridad entre tablas, y Firestore, al ser NoSQL, no las ofrece. El equipo se lo consultó al docente y la respuesta está pendiente.
+Los lineamientos piden Firebase Authentication y Firestore. TRAZA usa Supabase desde el primer sprint porque el proceso necesita una base relacional: las reglas del negocio dependen de llaves foráneas, restricciones e integridad entre tablas, y Firestore, al ser NoSQL, no las ofrece. El equipo se lo consultó al docente y él aprobó usar Supabase.
 
 | Lo que piden los lineamientos | En TRAZA |
 |---|---|
@@ -223,9 +223,14 @@ Las demás tablas son de la gamificación (`retos`, `retos_usuario`, `experienci
 
 Iniciar y finalizar un entrenamiento sí necesitan conexión. Al iniciar se crea su fila en `entrenamientos`, y si finalizar falla, la app lo avisa y el botón "Finalizar" se puede volver a tocar.
 
-**Pendiente:**
+**Estado de sincronización en pantalla.** Lo que quedó sin subir se ve aparte del estado del negocio:
 
-- Mostrar en pantalla el estado de sincronización, aparte del estado del negocio. Los datos ya están: `recorridosLocalesProvider` emite los recorridos de la cuenta con su estado.
+- En la portada aparece una tarjeta solo cuando hay recorridos sin subir, con cuántos son y si la base rechazó alguno (`AvisoSincronizacion`, `lib/widgets/aviso_sincronizacion.dart`).
+- La tarjeta abre **Sincronización** (`/sincronizacion`, `lib/screens/sincronizacion/sincronizacion_screen.dart`). Cada fila dice que el entrenamiento ya está guardado, que es el estado del negocio, y en qué va la subida de su recorrido, que es el de la sincronización: *Pendiente de subir*, *No se pudo subir* o *Rechazado por la base*. También muestra cuántos puntos faltan y el motivo del último fallo.
+- **Reintentar ahora** vuelve a correr el reenvío para lo pendiente y lo fallido, y avisa cuántos recorridos subieron. Lo que vuelva a fallar se queda con su motivo.
+- Lo rechazado no se reintenta, porque la base lo volvería a rechazar. Se puede **Descartar**, con confirmación, y eso borra sus puntos del teléfono sin tocar el entrenamiento en Supabase.
+- No se muestra lo que ya subió ni el entrenamiento en curso, que sube por lotes mientras se corre.
+- La lista es la de la cuenta con sesión (`recorridosLocalesProvider`), así que otra cuenta del mismo teléfono no ve lo ajeno.
 
 ## Privacidad: datos, finalidad y acceso
 
@@ -234,7 +239,7 @@ Iniciar y finalizar un entrenamiento sí necesitan conexión. Al iniciar se crea
 | Correo y contraseña | Iniciar sesión. Los maneja Supabase Auth; la contraseña no pasa por las tablas de la app. | Ningún otro usuario. |
 | Nombre | Identificar al autor de las rutas y de lo que se escribe en el foro. | El usuario en su perfil. Los demás lo ven en lo que él publica. |
 | Peso, altura, fecha de nacimiento y género (opcionales) | Completar el perfil. | Solo el usuario. |
-| Ubicación GPS | Durante un entrenamiento, dibujar el recorrido y calcular la distancia y el ritmo, con la notificación del servicio a la vista. En Explorar rutas, ordenar las rutas por cercanía: esa posición se manda a la consulta y no se guarda. La app no pide ubicación en segundo plano. | Solo el usuario, mientras no publique el recorrido como ruta. |
+| Ubicación GPS | Durante un entrenamiento, dibujar el recorrido y calcular la distancia y el ritmo; el rastreo corre en un servicio en primer plano mientras la actividad está en curso. En Explorar rutas, ordenar las rutas por cercanía: esa posición se manda a la consulta y no se guarda. La app no pide ubicación en segundo plano. | Solo el usuario, mientras no publique el recorrido como ruta. |
 | Rutas publicadas | Compartir el recorrido: nombre, trazado sin los 200 m de cada extremo (salvo que el autor elija lo contrario), distancia y dificultad. | Todos los usuarios, una vez publicada. Mientras se revisa, el autor y el revisor de cada etapa. |
 | Frecuencia cardiaca, calorías y pasos (Health Connect, opcional) | Mostrarlos en el resumen del entrenamiento. Se leen del teléfono y no se guardan en la base: solo se guarda si el usuario dio el permiso. | Solo el usuario. |
 | Publicaciones y comentarios del foro | Conversar con la comunidad. Antes de publicarse, el texto de los corredores se envía a NVIDIA (Nemotron Content Safety) para moderarlo. | La comunidad cuando se aprueba. El administrador ve también lo retenido y lo rechazado. |
@@ -266,10 +271,9 @@ Las cuentas por rol, una ruta en cada uno de los seis estados y cómo reproducir
 
 ## Límites conocidos
 
-- La base es Supabase y no Firebase. Falta la respuesta del docente.
 - Crashlytics solo está configurado en Android. Como no recibe el mensaje del error, a veces hay que reproducirlo para diagnosticarlo.
-- Todavía no hay un indicador del estado de sincronización en pantalla. Sin red, lo que se conserva son los puntos del recorrido en curso; iniciar y finalizar necesitan conexión.
-- La policy de update de `perfiles` no protege la columna `rol` (ver RNF-14 en [docs/deudas.md](docs/deudas.md)). Falta una migración que impida cambiarla desde el cliente.
+- Sin red, lo que se conserva son los puntos del recorrido en curso; iniciar y finalizar un entrenamiento necesitan conexión.
+- La app no pide el permiso de notificaciones. En Android 13 o superior, la notificación del rastreo solo se ve si el usuario las activa en los ajustes; el rastreo funciona igual.
 - La sesión de Supabase, con sus tokens de acceso y de refresco, la guarda `supabase_flutter` en SharedPreferences, que es su almacenamiento por defecto.
 - Las rutas publicadas antes de que existiera la clasificación no tienen dificultad, y las publicadas antes de RNF-04 conservan sus extremos exactos.
 - No hay desnivel: los puntos GPS no guardan altitud.
@@ -299,6 +303,7 @@ lib/
 │   ├── recompensas/               # catálogo del corredor
 │   ├── retos/                     # retos y su historial
 │   ├── rutas/                     # explorar, detalle, publicar, revisión y clasificación
+│   ├── sincronizacion/            # lo que quedó en el teléfono sin subir
 │   ├── summary/                   # resumen del entrenamiento
 │   └── tracking/                  # cronómetro + mapa + distancia en vivo
 ├── theme/                         # colores, tipografía, tema y logos
@@ -306,7 +311,7 @@ lib/
 └── widgets/                       # componentes reutilizables
 
 supabase/
-├── migrations/                    # historial versionado del esquema, en orden (0001 a 0056)
+├── migrations/                    # historial versionado del esquema, en orden (0001 a 0062)
 ├── functions/moderar-foro/        # Edge Function de moderación del foro con IA
 └── templates/                     # correos de confirmación y de recuperar contraseña
 

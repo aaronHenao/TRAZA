@@ -11,6 +11,7 @@ import '../../services/reenvio_recorridos.dart';
 import '../../services/reloj_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/aviso_sincronizacion.dart';
 import '../../widgets/bloque_reto_activo.dart';
 import '../../widgets/carrusel_rutas_cercanas.dart';
 import '../../widgets/indicadores_semana.dart';
@@ -78,6 +79,9 @@ class InicioScreen extends ConsumerWidget {
             children: const [
               _Saludo(),
               SizedBox(height: AppSpacing.lg),
+              // Lo que quedó sin subir, si queda algo (Drift, Desarrollo
+              // Móvil). Sin pendientes no ocupa lugar.
+              AvisoSincronizacion(),
               // El nivel primero, como en el prototipo (SCRUM-286).
               TarjetaNivel(),
               SizedBox(height: AppSpacing.md),

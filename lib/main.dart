@@ -33,6 +33,7 @@ import 'screens/recompensas/catalogo_recompensas_screen.dart';
 import 'screens/retos/detalle_reto_screen.dart';
 import 'screens/retos/historial_retos_screen.dart';
 import 'screens/retos/retos_screen.dart';
+import 'screens/sincronizacion/sincronizacion_screen.dart';
 import 'models/reto.dart';
 import 'screens/summary/resumen_screen.dart';
 import 'screens/tracking/tracking_con_actividad_elegida.dart';
@@ -309,6 +310,12 @@ final _navegacion = GoRouter(
     GoRoute(
       path: NotificacionesScreen.ruta,
       builder: (context, state) => const NotificacionesScreen(),
+    ),
+    // Lo que quedó en el teléfono sin subir (Drift, Desarrollo Móvil). Se
+    // abre con `push` desde el aviso de la portada.
+    GoRoute(
+      path: SincronizacionScreen.ruta,
+      builder: (context, state) => const SincronizacionScreen(),
     ),
     // Lo que el administrador ve del foro. Tras SoloAdministrador como los
     // niveles; la barrera de verdad es la policy de select de la tabla.
